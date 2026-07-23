@@ -47,8 +47,8 @@ while (destination.isRunning() && !tableQueue.isEmpty()) {
 
 `processQuerier()` 抽干 ResultSet 后调用 `resetAndRequeueHead(querier, false)`；因为 `resetOffset=false`，querier 被 **重新加回 `tableQueue`**，`lastUpdate` 更新为当前时间。于是下一轮等 `poll.interval.ms` 再整表重读。
 
-- `poll.interval.ms` 默认 **5000**（`POLL_INTERVAL_MS_DEFAULT = 5000`）。它**不是**「一次 poll 取多少」，而是「同一张表两轮全量扫描之间的间隔」。
-- `batch.max.rows` 默认 **1000**（`BATCH_MAX_ROWS_DEFAULT = 1000`），控制一次交给 Connect 框架的批大小，不影响是否重读。
+- `poll.interval.ms` 默认 **5000**（`POLL_INTERVAL_MS_DEFAULT = 5000`）。它**不是**「一次 poll 取多少」，而是「同一张表两轮全量扫描之间的间隔」。ConfigDef 里定义为 `Type.INT` 且**没有 Range 校验器**，所以可以合法地设到 `2147483647`（约 24.8 天）。
+- `batch.max.rows`：**源码 v10.9.6 是 1000**（`BATCH_MAX_ROWS_DEFAULT = 1000`），但 [Confluent 官方配置文档页](https://docs.confluent.io/kafka-connectors/jdbc/current/source-connector/source_config_options.html) 仍写着默认 100 —— **文档与源码不一致**。DBX 必须显式设置该值，不要依赖默认。它控制一次交给 Connect 框架的批大小，不影响是否重读。
 - 来源：`TableQuerierProcessor.java`、`TableQuerier.java`、`JdbcSourceConnectorConfig.java` @ v10.9.6。
 
 **对 DBX 的含义**：把 `poll.interval.ms` 设成一个很大的值（如 `2147483647`，约 24.8 天）可以让「第二轮全量」实际上永不发生，从而把 bulk 变成事实上的一次性全量。这是社区常用做法，但**不是官方保证的语义**，只是拖延而非终止。平台仍必须主动删 connector。
@@ -327,7 +327,8 @@ DELETE /connectors/{name}             # 再删掉
 | `offset.flush.interval.ms` | 60000 | 5000 | 否则 source offset 信号最慢 60s 才可见 |
 | `poll.interval.ms`（connector 级） | 5000 | 很大值（如 86400000） | bulk 模式下避免第二轮全量重读 |
 | `table.poll.interval.ms` | 60000 | 很大值 | 避免迁移中途表变更触发 task 重配置 |
-| `batch.max.rows` | 1000 | 按行宽调大 | 吞吐 |
+| `batch.max.rows` | 1000（文档写 100，不一致） | 显式设置，按行宽调大 | 吞吐；且不能信默认值 |
+| `validate.non.null` | true | 保持 true | incrementing 模式下提前暴露主键可空问题 |
 
 ---
 
