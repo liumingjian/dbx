@@ -151,3 +151,85 @@ private DoubleColumn(final String data, int byteSize) {
 2. **少一次序列化跳板。** DataX 是 JDBC→内存→JDBC；DBX 是 JDBC→Connect Schema→Avro→Kafka→Avro→Connect Schema→JDBC。每一跳都是一次潜在的类型收窄点。保真度的优势只有在**每一跳都用对逻辑类型**时才兑现，否则可能反而更差。
 
 **结论一句话**：DBX 的类型保真度上限明显更高（有逻辑类型层、有元数据随行、有降级通道），但**不是自动兑现的**；必须显式做三件事——高精度时间用微秒级逻辑类型或字符串直通、DECIMAL 的 precision/scale 取自源库 `information_schema` 而非推断、未知类型定义带标注的降级通道。做不到这三条，DBX 的实际保真度可能只是和 DataX 打平。
+
+---
+
+## 3. 大字段（BLOB/CLOB）：DataX 的内存模型与真实上限
+
+### 3.1 读写方式
+
+- 读：`CommonRdbmsReader.Task#buildRecord` —— CLOB/NCLOB → `rs.getString(i)`；BLOB/LONGVARBINARY/VARBINARY/BINARY → `rs.getBytes(i)`。**没有任何流式读取**。
+- 写：`CommonRdbmsWriter.Task#fillPreparedStatementColumnType` —— CLOB/NCLOB 与 CHAR/VARCHAR 合并处理，统一 `preparedStatement.setString(idx, column.asString())`；BLOB 走 `setBytes`。同样无流式。
+
+### 3.2 内存模型：不落盘，但也不是"只占一行"
+
+数据路径：`reader 线程 → BufferedRecordExchanger → MemoryChannel(ArrayBlockingQueue) → BufferedRecordExchanger → writer 线程 → writeBuffer`。全部在**同一个 JVM 进程的堆上**，没有磁盘、没有网络中转。峰值堆占用大致是：
+
+```
+并发 task 数 × ( exchanger bufferSize(默认32条) ×2 + channel capacity(默认512条) + writer batchSize(默认1024条) ) × 单行字节数
+```
+
+配置来源 `core/src/main/conf/core.json`（[链接](https://github.com/alibaba/DataX/blob/master/core/src/main/conf/core.json)）：
+`transport.exchanger.bufferSize=32`、`transport.channel.capacity=512`、`transport.channel.byteCapacity=67108864`（64MB）、`container.taskGroup.channel=5`、`entry.jvm="-Xms1G -Xmx1G"`。
+postgresqlwriter 默认 `batchSize=1024`，其文档自己警告：*"该值设置过大可能会造成 DataX 运行进程 OOM 情况"*（[postgresqlwriter.md](https://github.com/alibaba/DataX/blob/master/postgresqlwriter/doc/postgresqlwriter.md)）。
+
+**默认堆只有 1GB**。粗算：5 并发 × (512+1024) 行 × 平均 1MB 的 BLOB ≈ 7.5GB —— 远超默认堆。所以实践中带大 BLOB 的表必须手工把 `channel`、`batchSize`、`byteCapacity` 一起调小并调大 `-Xmx`，这个调参负担全部落在使用者身上。
+
+### 3.3 实际上限：有一个隐式硬上限，而且失败方式很糟
+
+`BufferedRecordExchanger#sendToWriter`（[源码](https://github.com/alibaba/DataX/blob/master/core/src/main/java/com/alibaba/datax/core/transport/exchanger/BufferedRecordExchanger.java)）：
+
+```java
+if (record.getMemorySize() > this.byteCapacity) {
+    this.pluginCollector.collectDirtyRecord(record,
+        new Exception(String.format("单条记录超过大小限制，当前限制为:%s", this.byteCapacity)));
+    return;   // <-- 直接丢弃，继续跑
+}
+```
+
+三个结论：
+1. **DataX 的单行上限 = `core.transport.channel.byteCapacity`，默认 64MB**（代码里的 fallback 常量是 8MB，配置文件覆盖为 64MB）。这一点几乎没有文档提及。
+2. 超限的行**不是报错，是被计入脏数据后丢弃**。如果 `errorLimit` 没配（默认不限），一张有几十行超大 BLOB 的表会**静默少数据**，作业依然显示成功。这是 DataX 在大字段场景最危险的行为。
+3. `getMemorySize()` 是 `ClassSize.DefaultRecordHead + Σ(ClassSize.ColumnHead + column.getByteSize())` 的**估算值**（`DefaultRecord#incrByteSize`），不是精确字节数；`StringColumn` 的 `byteSize` 用的是字符串长度而非 UTF-8 字节数，多字节字符会低估。所以这个上限本身也是模糊的。
+
+### 3.4 与 DBX "过 Kafka + 20MB 上限"的对比
+
+| 维度 | DataX（直连不落盘） | DBX（过 Kafka，20MB 上限） |
+| --- | --- | --- |
+| 单行上限 | 64MB（隐式、可调、估算） | 20MB（显式、由 broker `message.max.bytes` 等强制） |
+| 超限行为 | **静默丢弃 + 计入脏数据**，作业可能仍然成功 | 生产端 `RecordTooLargeException`，**显式失败**，可分类上报 |
+| 端到端延迟 | 低（一跳） | 高（多一次序列化 + 落盘 + 反序列化） |
+| 吞吐上的额外成本 | 无 | 大字段要写一遍 Kafka 磁盘，等于额外一次全量 I/O |
+| 失败恢复 | 进程挂 = 从头重跑（无断点） | Kafka 是持久缓冲，writer 侧可从 offset 续跑；reader 与 writer 可解耦重启 |
+| 内存压力 | 全在一个 JVM，并发 × 缓冲 × 行大小，易 OOM | 生产端/消费端各自有界，反压由 Kafka 承担 |
+| 调参负担 | 高（channel/batchSize/byteCapacity/-Xmx 四处联动） | 中（主要是 batch 与 fetch 大小） |
+
+**判断**：DBX 的 20MB 比 DataX 的 64MB 更严格，看上去是劣势，但**失败语义好得多**——这是更重要的属性。真正需要补的不是把上限提高，而是：
+1. **超限行必须显式可见**：预检阶段用 `SELECT MAX(OCTET_LENGTH(col))` 之类的方式扫出会超限的列/行，在迁移开始前就告知用户，而不是运行到一半才炸。
+2. **为超大 LOB 留一条旁路**：若确有 >20MB 的行，考虑不走 Kafka（外部存储 + 引用，或 writer 侧直连补写），而不是抬高 Kafka 上限——抬上限会让整个 topic 的内存与 GC 特性劣化。
+3. 无论如何都**不要抄 DataX 的静默丢弃**。
+
+---
+
+## 4. 批量 / 整库迁移："不够灵活"的具体含义
+
+### 4.1 是配置粒度问题（已在 §1.3 判定），具体表现为四点
+
+1. **一 job 一 JSON，且实质单 content。** 表数量一多就是"生成 N 份 JSON + 外部调度"的手工活。
+2. **多表共享同一份 `column`/`where`/`splitPk`。** `ReaderSplitUtil.doSplit` 中 `splitPk` 从 `originalSliceConfig` 取，是 job 级的；这意味着 `connection[].table[]` 里的表必须**同构且主键同名**，否则只能拆 job。
+3. **并发预算按表数平摊，不看表大小。** `eachTableShouldSplittedNumber = ceil(adviceNumber / tableNumber)` —— 一张 10 亿行的表和一张 100 行的表分到同样的并发。大小表混排时长尾极其严重。
+4. **没有作业间的依赖/顺序表达。** 外键顺序、先建表后灌数、失败后从第 K 张表续跑，全部需要外部编排。
+
+### 4.2 调度层反而是强项（不要误伤）
+
+`JobContainer#split` → `adjustChannelNumber()`（按 `byte`/`record` 全局限速与 `channel` 数推导并发）→ `doReaderSplit(needChannelNumber)` → `doWriterSplit(taskNumber)` → `TaskGroupContainer` 按 taskGroup 分组执行，并带 `LOAD_BALANCE_RESOURCE_MARK`（从 jdbcUrl 抽 IP 打标，让 core 做有意义的 shuffle，避免同一台库实例的 task 挤在同一个 taskGroup）。这套东西是成熟的。
+
+### 4.3 衍生项目如何缓解
+
+| 项目 | 做法 | 缓解了什么 / 没缓解什么 |
+| --- | --- | --- |
+| [WeiYe-Jing/datax-web](https://github.com/WeiYe-Jing/datax-web) | 可视化"JSON 构建"：选数据源 → 读元数据 → 生成字段映射 → 套任务模板 → **批量创建 RDBMS 同步任务**；集成 xxl-job 做分布式调度、增量字段自动取区间、实时日志、KILL 进程 | 缓解了 §4.1 的第 1 点（批量出 JSON）和第 4 点（调度/续跑）。**没有**解决自动建表——README 把"表结构同步"明确列在*后续规划*里 |
+| [wgzhao/Addax](https://github.com/wgzhao/Addax) | DataX 的现代化重构分支：升级 JDK/依赖、大量新增插件、`rdbmswriter` 通用化、文档化 | 缓解的是插件覆盖面和工程质量。检索 `autoCreateTable`/`createTable` 命中 **0**，**没有**自动建表 |
+| 阿里云 DataWorks 数据集成（商业版） | "整库迁移 / 一键全增量"解决方案：目标库自动建表 + 自动建离线与实时任务 + 自动启动 + 全流程监控与分步重试（[官方文档](https://help.aliyun.com/zh/dataworks/datax)） | 这是唯一真正把 §4.1 四点全解决的实现，**且不开源** |
+
+**结论**：DataX 生态里，"批量/整库"这层要么靠 datax-web 这类外挂编排（解决配置生成与调度，不解决建表），要么就是闭源的 DataWorks。DBX 把"整库迁移 + 自动建表"作为产品内建能力，在开源侧确实是空白点。
