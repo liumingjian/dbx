@@ -131,3 +131,70 @@ consumer.fetch.max.bytes = 52428800  # 默认
 - Kafka broker：见 §5 的估算公式，**这是唯一随迁移数据量线性增长的磁盘需求**。
 - Connect worker / Schema Registry：官方 *"50 GB of disk space per worker is sufficient"*，纯粹是程序 + 日志。DBX 单机可给 **10GB**（容器镜像 + 日志轮转），但要给 worker 日志配轮转，否则大消息的 `errors.log.include.messages=true` 会瞬间写爆磁盘（见 §6）。
 
+---
+
+## 4. connector 生命周期开销
+
+装箱调度会**频繁创建和删除 connector**，所以这一节决定了「一次迁移能开多少箱、换箱要等多久」。
+
+### 4.1 standalone vs distributed
+
+| 维度 | standalone | distributed |
+|---|---|---|
+| connector 配置来源 | 启动时命令行传 `.properties` 文件 | REST API 提交，存 `config.storage.topic` |
+| source offset 存储 | 本地文件 `offset.storage.file.filename` | Kafka topic（`connect-offsets`） |
+| 状态存储 | 无（进程内） | `status.storage.topic`，`GET /status` 从这里读 |
+| 增删 connector 是否 rebalance | **否**（没有 group，直接起停 task 线程） | **是**（每次都走 group coordination） |
+| REST API | 现代版本也有，但配置改动不通过它落盘 | 唯一入口 |
+| 容错 | 无 | worker 挂了任务会重分配 |
+
+**DBX 该选哪个？** 表面看 standalone 更贴合「单机、频繁增删、不需要容错」，且**没有 rebalance 开销**。但：
+
+1. **`DELETE /connectors/{name}/offsets` 这类 offset 管理 REST 端点只在 distributed 下有意义**（standalone 的 offset 在本地文件里）。#3 的重跑流程 `PUT /stop` → `DELETE /offsets` → `DELETE /connectors` 依赖它。
+2. standalone 不支持通过 REST 动态新增 connector 并持久化 —— 装箱调度器要动态开箱，就得重启 worker。
+3. 对接客户已有 Connect 集群时，客户几乎必然是 distributed。
+
+**结论：用 distributed（单节点）**，并接受 rebalance 成本 —— 下面说明这个成本其实很小。
+
+> `group.id`、`config.storage.topic`、`offset.storage.topic`、`status.storage.topic` 在单节点下的副本因子必须设成 **1**，否则 worker 启动时会因「副本数不足」建 topic 失败。这是单机部署最常见的启动失败原因。
+
+### 4.2 单节点 distributed 下增删 connector 会 rebalance 吗？会。代价多大？
+
+官方明确：*"When a connector is first submitted to the cluster, a rebalance is triggered between the Connect workers... This same rebalancing procedure is also used when connectors increase or decrease the number of tasks they require, when a connector's configuration is changed, or when a worker is added or removed from the group."*（[Connect Administration](https://kafka.apache.org/42/kafka-connect/administration/)）
+
+**即使只有一个 worker 也会走 group coordination 路径**——它仍然是一个只有一个成员的 consumer group。
+
+**但 KIP-415 的增量协作式 rebalance 把代价压到很低**：自 **AK 2.3.0** 起，*"a protocol that performs incremental cooperative rebalancing that incrementally balances the connectors and tasks across the Connect workers, **affecting only tasks that are new, to be removed, or need to move from one worker to another**"*。也就是说，新增第 N+1 个 connector **不会**停掉已经在跑的前 N 个 connector 的 task —— 这正是「装箱调度边跑边开新箱」可行的技术前提。
+
+对比：`connect.protocol=eager`（2.3.0 之前的唯一行为）下，每次提交 connector **所有 connector 和 task 全部停掉再重分配**（stop-the-world）。**DBX 必须确保不用 eager。** 默认值有版本差异：Connect 配置参考里 `connect.protocol` 的 **Default 为 `sessioned`**（协议版本 2，含 KIP-507 内部请求签名，rebalance 行为与 cooperative 相同）；较早文档写的是默认 `compatible`（同时支持 eager 与 cooperative，优先 cooperative）。两者都走增量协作路径，**只有显式设成 `eager` 才会退化**。
+
+**耗时量级**：官方没有给出 rebalance 耗时的数字。以下是基于协议配置默认值的**估计**，标明依据：
+
+- rebalance 的**下界**是一次 JoinGroup + SyncGroup 往返，单机本地网络是 **毫秒级**。
+- 上界由 `rebalance.timeout.ms`（默认 **60000ms**）兜底 —— 这是「worker 加入组的最大允许时间」，不是常态耗时。
+- 停 task 时 worker 等 `task.shutdown.graceful.timeout.ms`（默认 **5000ms**，*"This is the total amount of time, not per task"*）。若 task 卡在写 PostgreSQL，删 connector 最多多花 5 秒。
+- **实际预期：单节点、connector/task 数在两位数量级时，一次 rebalance 在 100ms ~ 数秒**。主导项不是协议往返，而是「新 task 的 `start()`（建 JDBC 连接、拉 schema）」和「旧 task 的 graceful shutdown」。
+- **`scheduled.rebalance.max.delay.ms`（默认 300000ms / 5 分钟）在这里不适用** —— 它只在 **worker 离开组**时生效，用来等待 worker 回来。DBX 单 worker 场景下，只要 worker 不重启就永远不会触发。但反过来说：**worker 一旦重启，所有 task 会空转最多 5 分钟才被重新分配**，这在「迁移中途重启 Connect」时表现为「任务卡住不动」。如果 DBX 要支持快速重启恢复，建议把它调低到 `30000`（30 秒）甚至 `0`。
+
+**副作用**：rebalance 期间 REST 有一致性窗口 —— *"If you try to restart a task while a rebalance is taking place, Connect will return a **409 (Conflict)** status code."* **装箱调度器必须对 409 做退避重试**，尤其在连续创建多个箱时。这是一条明确的实现要求。
+
+### 4.3 单 worker 能承载多少 connector / task？瓶颈在哪
+
+官方**没有给出硬上限**。可依据的官方数字只有两条（[cluster sizing](https://docs.confluent.io/platform/current/connect/references/connect-cluster-sizing.html)）：
+
+- 经验法则 **"two tasks per CPU core"**；
+- 堆 **0.5–4 GB**、RAM 8–32GB、**4–8 CPU cores**。
+
+DBX 单机（假设 4–8 核、Connect 堆 4GB）由此推出的**工作上限**：
+
+| 瓶颈 | 计算 | 得到的上限 |
+|---|---|---|
+| CPU（官方经验法则） | 2 tasks × 4~8 核 | **8–16 个并发 task** |
+| 堆（大字段箱） | 4GB / (20MB × 4 份拷贝 + 50MB fetch buffer) ≈ 4096/130 | **~30 个 task**，但要留 GC 余量 → 实际 **≤16** |
+| 每 connector 的固定开销 | 每个 connector 有独立 producer/consumer + 若干后台线程；100+ connector 会让 rebalance 计算与 `status.storage.topic` 写入变重 | 建议 **同时存活的 connector ≤ 20**（10 箱 × source+sink） |
+| topic 数 | 每表一个 topic，见 §5 | 由 broker 侧分区总数限制，不是 Connect 瓶颈 |
+
+**装箱调度器的推荐规格：同时存活 ≤ 10 个箱（≤20 个 connector），并发 task 总数 ≤ 2×CPU 核数。** 主瓶颈是 **Connect worker 堆**（大字段场景）和 **CPU 核数**（普通场景），不是 connector 数量本身。
+
+**注意 `tasks.max` 与「每表一个 topic」的关系**：JDBC source connector 的 `tasks.max` 上限实际是「箱内表数」——一个表不会被拆到多个 task（bulk 模式下一个表就是一次全表查询）。所以**箱内表数 = 该箱可用的最大并行度**，装箱时不应该把箱做得太小。
+
