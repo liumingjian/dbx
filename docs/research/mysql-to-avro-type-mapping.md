@@ -290,3 +290,66 @@ return i.longValue();
 2. 前端对 `BIGINT UNSIGNED` 列显式告警，PG 落点建议 `numeric(20,0)`。
 3. 若想彻底规避，可在 Source 的 `query` 模式里对该列写 `CAST(col AS CHAR)`，
    走 STRING → PG `numeric`（Sink 会以 `setString` 绑定，PG 侧隐式转换）。
+
+### 3.4 日期时间的时区语义
+
+**三层时区，缺一层就整体平移：**
+
+1. **MySQL 侧语义**（手册 13.2.2）：`TIMESTAMP` 写入时从 session `time_zone` 转成 UTC 存储、
+   读取时转回 session `time_zone`；`DATETIME`/`DATE`/`TIME` **原样存取，无任何时区转换**。
+2. **Connector/J 侧**（[datetime 属性文档](https://dev.mysql.com/doc/connector-j/en/connector-j-connp-props-datetime-types-processing.html)）：
+   - `connectionTimeZone`（默认 `LOCAL`，8.0 起取代旧名 `serverTimezone`）——
+     Connector/J 用于「JVM 默认时区 ↔ 连接时区」换算的目标时区。可填地理名、UTC 偏移、
+     或逻辑值 `LOCAL`/`SERVER`。**它默认不会去改服务器 session 的 `time_zone`**。
+   - `forceConnectionTimeZoneToSession`（默认 `false`，8.0.23+）—— 置 true 才会把
+     `connectionTimeZone` 写进 session `time_zone`，从而消除中间换算。
+   - `preserveInstants`（默认 `true`，8.0.23+）—— 对 `java.sql.Timestamp` 这类
+     instant 对象保留时间线上的瞬时（做时区换算）而非保留「视觉形状」；
+     `connectionTimeZone=LOCAL` 时无效。
+3. **Connect 侧**：`db.timezone`（`JdbcSourceConnectorConfig.DB_TIMEZONE_CONFIG`，默认 `"UTC"`）
+   被 `GenericDatabaseDialect` 转成 `zoneId`，用作
+   `rs.getTimestamp(col, DateTimeUtils.getZoneIdCalendar(zoneId))` 和
+   `rs.getTime(col, ...)` 的日历。`DATE` 另用 `dateTimeZoneId`，Source 端**硬编码为
+   `ZoneOffset.UTC`**（源码注释："dateTimeZone is used for handling DATE conversion and
+   should be equal to UTC for source"）。
+
+**致命点：`DATETIME` 和 `TIMESTAMP` 在 Connect 层是同一个类型**
+（都是 `Types.TIMESTAMP` → `org.apache.kafka.connect.data.Timestamp` → epoch millis）。
+下游无法区分「本地墙钟时间」和「绝对瞬时」，必须靠 DBX 自己从 `information_schema` 记住原类型。
+
+**v1 推荐基线（全链路 UTC，唯一自洽的选择）：**
+
+| 环节 | 设定 |
+|---|---|
+| MySQL 连接串 | `connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&preserveInstants=true` |
+| JDBC Source | `db.timezone=UTC` |
+| Connect worker JVM | `-Duser.timezone=UTC`（消除 JVM 默认时区带来的隐式换算） |
+| PG 会话 | `TimeZone=UTC` |
+
+**PG 落点选择：**
+
+- MySQL `TIMESTAMP` → PG **`timestamptz`**。两者语义同构（内部 UTC，按会话时区呈现），
+  链路传的 epoch millis 天然对齐；PG 15 手册 8.5.1.3。
+- MySQL `DATETIME` → PG **`timestamp without time zone`**。语义同构（无时区墙钟）。
+  但**必须保证 Source 用 `db.timezone=UTC` 且 Sink 写入时也按 UTC 解释**，
+  否则墙钟值会平移。Sink 的 `PreparedStatementBinder` 对 Connect `Timestamp`
+  用 `stmt.setTimestamp(i, value, DateTimeUtils.getTimeZoneCalendar(timeZone))`，
+  时区来自 Sink 的 `db.timezone`（默认 `UTC`）→ **Source 和 Sink 的 `db.timezone` 必须一致。**
+- MySQL `DATE` → PG `date`；MySQL `TIME` → PG `time`（注意 §2.3 的值域告警）；
+  MySQL `YEAR` → PG `date`（默认）或改 `yearIsDateType=false` 后仍是 `Date` 逻辑类型
+  （因为 `MysqlType.YEAR` 固定报 `Types.DATE`）→ 想要 `smallint` 必须走 `query` 模式 `CAST`。
+
+### 3.5 utf8mb4 下的 `VARCHAR(n)` 长度语义
+
+- MySQL `VARCHAR(M)`：M 计**字符**，行内最大 65,535 字节 → utf8mb4 下 M 实际上限
+  约 16,383（手册 11.3.2）。`information_schema.columns` 里
+  `character_maximum_length` 是字符数、`character_octet_length` 是字节数。
+- PG 15 `varchar(n)` / `char(n)`：n 计**字符**，与数据库编码无关（手册 8.3）；
+  `text` 无长度限制，超长不截断。
+- **结论：`VARCHAR(n) → varchar(n)` 一一对应，utf8mb4 不产生截断风险。**
+  DDL 生成器请用 `character_maximum_length`，**不要**用 `character_octet_length`
+  （那会把 `VARCHAR(255)` 建成 `varchar(1020)`，虽不出错但审核界面失真）。
+- 例外：MySQL 的 utf8mb4 可存 4 字节的补充平面字符（emoji），PG 的 UTF8 编码同样支持
+  → 无字符集损失。若源库用 `utf8`（即 utf8mb3），迁到 PG UTF8 是**放宽**，安全。
+- 注意 PG `varchar(n)` 超长直接报错 `22001 value too long`（不像 MySQL 非严格模式会截断）
+  → 若源库运行在非严格 SQL 模式且存在超长历史数据，建议目标端一律用 `text`。
