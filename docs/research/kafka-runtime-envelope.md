@@ -85,3 +85,49 @@ CONNECT_CONSUMER_MAX_POLL_RECORDS: 1
 - **内存放大才是实际风险**：Avro 序列化 `bytes` 时通常经历「JDBC 读出 byte[] → Avro 对象持有 → 序列化到输出流 → producer 的 batch buffer」，一条 20MB 记录在 Connect worker 堆里同时存在 **2~4 份拷贝**是常态。这直接决定了 §3 的堆大小和 `max.poll.records` 取值。
 - Schema Registry 的 REST 有请求体上限（Jetty 层），但我们只发 schema 文本，不发数据，无影响。
 
+---
+
+## 3. 单机资源包络
+
+### 3.1 官方数字 vs DBX 单机形态
+
+官方给的是**生产集群**数字，不能照抄到「随用随起的单机迁移工具」。下表左列是官方原话，右列是 DBX 的取值与理由。
+
+| 组件 | Confluent 官方生产建议 | DBX 单机取值 | 说明 |
+|---|---|---|---|
+| Kafka broker（KRaft combined） | 堆：*"Kafka uses heap space very carefully and does not require setting heap sizes more than 6 GB"*，示例 `-Xms6g -Xmx6g`；RAM 64GB；24 核；12×1TB RAID10（[deployment](https://docs.confluent.io/platform/current/kafka/deployment.html)） | 堆 **2GB**（`-Xms2g -Xmx2g`），最小 1GB | Kafka 的堆几乎不随数据量增长（数据走 page cache + 零拷贝），**堆主要被在途的 produce/fetch 请求缓冲占用**。20MB 消息 + 少量并发 → 2GB 绰绰有余。留给宿主机的空闲内存越多，page cache 越大，写入越不落盘等待 |
+| KRaft controller | 4GB RAM / 64GB SSD / 4 核 / 3–5 节点 | 与 broker **合并进程**（`process.roles=broker,controller`），不额外分配 | 单机只能 1 个 controller，`KAFKA_PROCESS_ROLES: broker,controller` + `KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093` |
+| Connect worker | 堆 **0.5–4 GB**；RAM 8–32GB；4–8 核；磁盘 *"50 GB of disk space per worker is sufficient"*（仅装程序和日志）（[cluster sizing](https://docs.confluent.io/platform/current/connect/references/connect-cluster-sizing.html)） | 堆 **4GB**（取官方区间上限），最小 2GB | **这是整套里最吃堆的组件**，因为 20MB 记录完全驻留在堆里。官方明确 *"Memory requirements depend on the connector type and workload, especially for connectors that buffer large transactions or handle large messages"* |
+| Schema Registry | 官方系统需求页未给具体堆数字，只说明用 `SCHEMA_REGISTRY_HEAP_OPTS` 设置 | 堆 **512MB** | SR 只存 schema 文本 + 一个 `_schemas` topic 的内存索引，负载与表数量成正比而非数据量。几百张表 → 几 MB 级 |
+| 合计 | — | **约 8GB 内存起步，推荐 12–16GB 宿主机**；4 核起步 | 8GB = 2（Kafka 堆）+4（Connect 堆）+0.5（SR 堆）+ JVM 非堆/元空间/线程栈（每个 JVM 再加 0.3–0.7GB）+ 平台自身 + 留给 page cache |
+
+### 3.2 20MB 消息对 Connect worker 堆的具体压力
+
+这是必须算清楚的一笔账，否则默认配置**必然 OOM**。
+
+**Sink 侧（消费端）——最危险**：
+`max.poll.records` 默认 **500**。一次 `poll()` 返回 500 条 × 20MB = **10 GB**，任何合理堆都直接 `OutOfMemoryError: Java heap space`，而且是在 worker 层挂掉（不只是 task 挂）。
+且这些记录在堆中会被放大：consumer fetch buffer（原始字节）→ Avro 反序列化对象 → Connect `SinkRecord` → JDBC sink 的 batch。**同一条记录同时存在 2–4 份拷贝**是常态。
+
+推荐取值：
+```
+consumer.max.poll.records = 1        # 大字段表所在的箱
+consumer.max.partition.fetch.bytes = 26214400
+consumer.fetch.max.bytes = 52428800  # 默认
+```
+`max.poll.records=1` 时，单 task 峰值 ≈ 1 × 20MB × 4 ≈ 80MB；worker 上 8 个 task 并发 ≈ 640MB，加上 fetch buffer（每个 task 最多缓存 `fetch.max.bytes` = 50MB → 8×50MB=400MB），合计 ~1GB，4GB 堆有足够安全边际。
+
+> **装箱调度的直接推论**：`max.poll.records` 是 **consumer 级**配置，通过 `consumer.override.max.poll.records` 逐 connector 下发。所以**不必**让所有箱都退化到 1 ——「含大字段的表」和「全是小行的表」应当分箱，前者 `max.poll.records=1`，后者可以保留 100~500，吞吐差一个数量级。**这是装箱策略的一条硬约束，建议写进装箱调度器规格。**
+
+**Source 侧（生产端）**：
+- `batch.size` 默认 16384（16KB）。单条 20MB 远大于它，producer 会让该条**自成一批**发送 —— 这正是我们要的。**不要调大 `batch.size`**：调到比如 1MB 也不会让 20MB 消息合批（一批只能装下一条），只是白白多占堆。
+- `buffer.memory` 建议 128MB（§1.2）。producer 堆内还有压缩缓冲区（zstd 需要与消息同量级的临时空间）。
+- `max.in.flight.requests.per.connection` 默认 5 → 最多 5 × 25MB = 125MB 在途未确认数据滞留堆中。若堆吃紧可降到 **1**（同时也保证单分区严格有序，见 §5.4）。
+
+**副作用警告**：`max.poll.records=1` + 单条处理慢时，要留意 `max.poll.interval.ms`（默认 300000 = 5 分钟）。若 JDBC sink 写一条 20MB 记录到 PostgreSQL 超过 5 分钟，consumer 会被踢出组触发 rebalance，表现为「任务反复重启且没有明显错误」。DBX 建议显式设 `consumer.override.max.poll.interval.ms=900000`（15 分钟）。
+
+### 3.3 磁盘
+
+- Kafka broker：见 §5 的估算公式，**这是唯一随迁移数据量线性增长的磁盘需求**。
+- Connect worker / Schema Registry：官方 *"50 GB of disk space per worker is sufficient"*，纯粹是程序 + 日志。DBX 单机可给 **10GB**（容器镜像 + 日志轮转），但要给 worker 日志配轮转，否则大消息的 `errors.log.include.messages=true` 会瞬间写爆磁盘（见 §6）。
+
