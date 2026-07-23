@@ -198,3 +198,82 @@ DBX 单机（假设 4–8 核、Connect 堆 4GB）由此推出的**工作上限*
 
 **注意 `tasks.max` 与「每表一个 topic」的关系**：JDBC source connector 的 `tasks.max` 上限实际是「箱内表数」——一个表不会被拆到多个 task（bulk 模式下一个表就是一次全表查询）。所以**箱内表数 = 该箱可用的最大并行度**，装箱时不应该把箱做得太小。
 
+---
+
+## 5. topic 与磁盘管理
+
+### 5.1 删 topic 的代价与风险
+
+- **`delete.topic.enable` 默认 `true`**（*"When set to true, topics can be deleted by the admin client. When set to false, deletion requests will be explicitly rejected by the broker."*）。**但仍要在 Compose 里显式写上**：客户自有集群常有人把它关掉，DBX 的清理流程会静默失败并留下垃圾 topic。这是一条应当在预检阶段探测的能力项。
+- **删除是异步的、由 controller 驱动的多阶段过程**，磁盘空间和元数据的回收**滞后于 API 返回**。副本经历 `OfflineReplica` → `ReplicaDeletionStarted` → 各 broker 清数据 → `ReplicaDeletionSuccessful` → 清元数据。再叠加 topic 级 `file.delete.delay.ms`（默认 **60000ms**，*"The time to wait before deleting a file from the filesystem"*）。**推论：`DELETE /topics` 返回成功不等于磁盘已释放，DBX 的「清理后再重跑」流程不能立刻假设空间可用**，需要轮询磁盘或至少等待 1–2 分钟。
+- **controller 负载与分区数成正比，不是与 topic 数成正比。** [KIP-599](https://cwiki.apache.org/confluence/display/KAFKA/KIP-599:+Throttle+Create+Topic,+Create+Partition+and+Delete+Topic+Operations) 明确：create/delete topic 是「heavy operations with a direct impact on the overall load in the Kafka Controller」，其配额单位是 **partition mutations per second**，因为「controller load is highly correlated to the number of created or deleted partitions」。删一个 1000 分区的 topic 是 1000 次 mutation。
+  **对 DBX 的直接推论：单表单 topic 用少量分区（见 §5.4），一次迁移 500 张表 = 500 topic × 1 分区 = 500 次 mutation，单机 controller 可以承受；但如果每个 topic 给 12 个分区，就变成 6000 次 mutation，建 topic 和删 topic 都会明显变慢，甚至触发配额限流（客户集群若配了 `controller_mutation_rate` 配额）。**
+- **风险**：分区数**只能增不能减**（[KIP-694](https://cwiki.apache.org/confluence/display/KAFKA/KIP-694:+Support+Reducing+Partitions+for+Topics) 未合入主线）。选错了只能删 topic 重建。
+- **风险**：删 topic 时若还有 consumer/producer 在连，客户端会看到 `UNKNOWN_TOPIC_OR_PARTITION` 并不断重试刷日志。**正确顺序是先 `PUT /connectors/{n}/stop` 停掉 connector、`DELETE /connectors/{n}` 删掉，再删 topic**（与 #3 的重跑流程一致）。
+
+### 5.2 短保留期能让磁盘可控吗？能，但有个坑
+
+`retention.ms` / `retention.bytes` 的删除**以 segment 文件为单位**，官方原话：*"Retention and cleaning is always done a file at a time so a larger segment size means fewer files but less granular control over retention."*
+
+**坑在于：活跃 segment（正在写入的那个）永远不会被删。** 默认 `segment.bytes=1073741824`（1 GiB）、`segment.ms=604800000`（7 天）。也就是说，即使你把 `retention.ms` 设成 60000（1 分钟），只要该 topic 还没写满 1GiB 也没过 7 天，segment 不会 roll，**磁盘一个字节都不会释放**。这是「我设了短保留期为什么磁盘还在涨」的标准答案。
+
+**DBX 的正确配置**（建 topic 时逐 topic 下发）：
+
+```
+retention.ms      = 3600000     # 1 小时；离线迁移不需要长期保留
+retention.bytes   = 5368709120  # 单分区 5GiB 硬上限，兜底防撑爆
+segment.bytes     = 268435456   # 256MiB —— 关键：让 segment 频繁 roll，retention 才能真正回收
+segment.ms        = 300000      # 5 分钟强制 roll，兜底低流量表
+max.message.bytes = 26214400
+cleanup.policy    = delete
+```
+
+> `segment.bytes` 必须 **≥ `max.message.bytes`**，否则一条 20MB 消息装不进一个 segment。256MiB 有 10 倍余量。
+>
+> **不要**把 `segment.bytes` 设得过小（比如 32MiB）：500 张表 × 大量小 segment 会产生成千上万个文件句柄，触发 broker 的 `Too many open files`。256MiB 是文件数与回收粒度的折中。
+
+**但要清醒：短保留期不能替代磁盘容量规划。** 见下节。
+
+### 5.3 离线迁移的磁盘需求：估算与向用户表述
+
+DBX 是**离线全量迁移**：数据必须先落 Kafka 再出去。关键问题是「Sink 消费的速度是否跟得上 Source 生产的速度」。
+
+**保守估算公式（向用户表述用）**：
+
+```
+Kafka 磁盘需求 ≈ 单箱内最大表的数据量 × 复制因子(1) × Avro 膨胀系数 ÷ 压缩率 × 安全系数
+```
+
+- **Avro 膨胀系数**：Avro binary 通常比行式原始数据**小**（无字段名、变长整数），对宽表约 **0.6–0.9**；但 `bytes`/`blob` 字段是 1:1 原样。含大字段的表按 **1.0** 算。
+- **压缩率**：`zstd` 对文本/JSON 列常见 **3–5x**；对已压缩的二进制 blob **≈1x（无收益）**。含大字段的表按 **1.0** 算。
+- **安全系数**：`1.5`（覆盖 segment 未回收的滞留、`file.delete.delay.ms` 的延迟、以及 sink 短暂落后）。
+
+**三档表述（建议直接写进方案书）**：
+
+| 场景 | 磁盘需求 | 说明 |
+|---|---|---|
+| **理想（sink 跟得上）** | ≈ 单箱内最大表大小 × 1.5 | retention 持续回收，稳态占用只是「在途窗口」 |
+| **推荐规划值** | ≈ **一次迁移中最大单表数据量 × 2**，且不少于 **50GB** | 给用户的默认建议 |
+| **最坏（sink 完全阻塞）** | = 该箱全部表数据量之和 | 此时 `retention.bytes` 会开始丢数据 —— **对离线迁移是数据丢失，不是背压** |
+
+> ⚠️ **必须向用户讲清的风险**：`retention.bytes` / `retention.ms` 在 sink 落后时会**静默删除尚未消费的数据**，导致目标库缺行。DBX 应当：
+> 1. 把 `retention.ms` 设得足够长（≥1 小时）而不是极短；
+> 2. **监控 consumer lag 与 topic 最早 offset**，一旦发现 sink 的 committed offset < topic 的 log start offset，立即判定该表迁移失败并要求重跑（而不是让它悄悄少数据）；
+> 3. 预检阶段就用上面的公式估算并与实际可用磁盘比较，**磁盘不足时直接拒绝开工**，而不是跑到一半炸。
+>
+> 更安全的替代方案是**用装箱的箱大小来控制磁盘**：让「单箱内表数据量之和 ≤ 可用磁盘 × 0.6」，这样即使 sink 完全不动也不会丢数据。**建议把这条写进装箱调度器规格作为硬约束。**
+
+### 5.4 单表单 topic 用几个分区？
+
+**推荐：1 个分区（含大字段表/需要严格顺序的表必须为 1），普通表可用 2–4。**
+
+依据与权衡：
+
+- **顺序**：官方 *"Messages within a partition are always delivered in order to the consumer."* —— **顺序保证只在分区内成立**。多分区 + 多 task 并行写 PostgreSQL 时，同一张表的行到达顺序不确定。对 bulk 全量迁移（无主键更新、只有 INSERT）通常无害；但若目标表有自增依赖、触发器、或 sink 用 upsert 模式，多分区会引入难以复现的顺序问题。
+- **并行度**：官方 *"you can have up to one consumer instance per partition (within a consumer group); any more will be idle."* —— **分区数是 Sink 侧并行度的硬上限**。1 分区 = 该表只能有 1 个 sink task 在写。
+- **DBX 的并行度已经在别处拿到了**：一次迁移有几百张表、每表一个 topic，**跨表并行**已经足够压满单机；再靠**表内分区**并行的边际收益很小，却要付出顺序风险和 controller mutation 开销（§5.1）。
+- **分区不可缩减**（KIP-694 未合入），所以「先给 1，不够再加」比「先给 12」安全 —— 加分区是支持的操作。
+- **例外**：某张单表数据量占整次迁移的绝大部分（长尾大表）时，可给它 4–8 个分区以提高 sink 并行度，前提是确认该表可以乱序写入。**这应当是装箱调度器的一个显式决策点，而不是全局默认值。**
+
+> Source 侧要点：分区数 > 1 时，JDBC source 若不指定消息 key，记录会被轮询分发到各分区，顺序即被打散。若要保留顺序又想多分区，必须**按主键做 key**，这样同一主键的记录仍落同一分区（前提是分区数不再变化）。
+
