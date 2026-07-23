@@ -121,7 +121,7 @@
 - **原子性**：`JdbcDbWriter.write()` 在 `onConnect` 里 `setAutoCommit(false)`，任何异常都 `connection.rollback()`。一次 `put()` 里**所有表**的写入共享一个事务——一张表失败，同 batch 内其它表的写入也会回滚。
 - **`max.retries`（默认 10）/ `retry.backoff.ms`（默认 3000）**：`JdbcSinkTask.put()` 捕获 `SQLException` 后重建 writer 并抛 `RetriableException`，由 Connect 框架重投**整批**。结构性错误（F4~F8）重试必然再失败，**结果是 10 × 3s ≈ 30 秒的无谓延迟后任务才 FAILED**。DBX 应把 `max.retries` 调小（如 1~3），让结构错误快速失败。
 - **`errors.tolerance` / DLQ**：`JdbcSinkTask.start()` 取 `context.errantRecordReporter()`。
-  - `reporter == null`（`errors.tolerance=none`，或 Connect < 2.6）→ 重试耗尽后 `throw new ConnectException(sqlAllMessagesException)`，**任务 FAILED**。异常消息是 `getAllMessagesException()` 拼出的 `"Exception chain:\n" + 每个 SQLException 的 toString()`。
+  - `reporter == null`（AK javadoc：*"the reporter; null if no error reporter has been configured for the connector"*，实践中即 `errors.tolerance=none`；Connect < 2.6 则抛 `NoSuchMethodError` 被吞掉）→ 重试耗尽后 `throw new ConnectException(sqlAllMessagesException)`，**任务 FAILED**。异常消息是 `getAllMessagesException()` 拼出的 `"Exception chain:\n" + 每个 SQLException 的 toString()`。
   - `reporter != null`（`errors.tolerance=all` + DLQ）→ 走 `unrollAndRetry()`：**逐条**重新 `writer.write(singletonList(record))`，失败的那条被 `reporter.report(record, e)` 送进 DLQ，其余继续。**这是唯一能把失败定位到"哪一行"的机制**，代价是错误批次退化为逐行写入。
 - **对"失败要能定位到表"的影响**：`TableAlterOrCreateException`（F1~F3）文本里**自带 `TableId`**，可直接解析出表名。PG 的 `PSQLException`（F4~F8）**只有 PG 自己的 `relation "..."` / `column "..."` 措辞**，没有 connector 层的表名——错误翻译层需要（a）解析 PG 错误文本里的 `relation`/`column`/`constraint`，或（b）依赖"一个 connector 只对一张表"的部署形态（每表一个 connector）来消除歧义。**推荐 (b)：v1 一表一 connector，用 connector name 反查表，最省事也最可靠。**
 
@@ -237,4 +237,5 @@ errors.deadletterqueue.context.headers.enable=true
 - `GenericDatabaseDialect.java`：<https://github.com/confluentinc/kafka-connect-jdbc/blob/v10.9.6/src/main/java/io/confluent/connect/jdbc/dialect/GenericDatabaseDialect.java>
 - `PostgreSqlDatabaseDialect.java`：<https://github.com/confluentinc/kafka-connect-jdbc/blob/v10.9.6/src/main/java/io/confluent/connect/jdbc/dialect/PostgreSqlDatabaseDialect.java>
 - PostgreSQL 错误码表（SQLState）：<https://www.postgresql.org/docs/15/errcodes-appendix.html>
-- pgjdbc 连接参数 `stringtype`：<https://jdbc.postgresql.org/documentation/use/#connection-parameters>
+- pgjdbc 连接参数 `stringtype`（默认 `VARCHAR`：`setString` 的参数按 varchar 类型发送到服务端；`unspecified` 则发送无类型值由服务端推断）：<https://jdbc.postgresql.org/documentation/use/>
+- `SinkTaskContext.errantRecordReporter()` javadoc：<https://kafka.apache.org/40/javadoc/org/apache/kafka/connect/sink/SinkTaskContext.html>
