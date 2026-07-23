@@ -19,7 +19,10 @@
 2. **无符号整型会自动升宽**，因为 `addFieldToSchema()` 对 TINYINT/SMALLINT/INTEGER
    检查 `columnDefn.isSignedNumber()`。`TINYINT UNSIGNED`→INT16、`SMALLINT UNSIGNED`→INT32、
    `INT UNSIGNED`→INT64。**唯独 `BIGINT UNSIGNED` 没有升宽分支**（`case Types.BIGINT`
-   无条件 INT64）→ 值 > 2^63-1 时静默溢出成负数。**这是 v1 必须拦截的头号安静失败。**
+   无条件 INT64）。值 > 2^63-1 时：默认 `jdbcCompliantTruncation=true` 下
+   `LongValueFactory.createFromBigInteger()` 抛 `NumberOutOfRange`（任务红）；
+   若有人把它关掉，就变成 `i.longValue()` **静默回绕成负数**。
+   **v1 必须显式保持 `jdbcCompliantTruncation=true`，并在前端对 `BIGINT UNSIGNED` 告警。**
 3. **`TINYINT(1)` 默认变成 Connect INT8，不是 BOOLEAN。** Connector/J 默认
    `tinyInt1isBit=true` 把 `TINYINT(1)` 报成 `BIT`（`Types.BIT`），
    而 `addFieldToSchema()` 的 `case Types.BIT` 建的是 **INT8**（注释：`// ints <= 8 bits`），
@@ -64,7 +67,45 @@
 | Avro 规范 | [Avro 1.11 Logical Types](https://avro.apache.org/docs/1.11.1/specification/#logical-types) | `decimal` 附 `precision`/`scale` |
 | Connect Schema → PG DDL（若用 auto.create） | `PostgreSqlDatabaseDialect.getSqlType()` | 能力弱于 DBX 自研映射，见 #4 §3 |
 
+> 说明：下文「PG 落点」是 DBX **自己生成 DDL** 时的推荐值，不是 `auto.create` 的产物。
+> Sink 不校验类型（#4 结论 1），列名必须与 Connect 字段名逐字符相等（#4 结论 2）。
+
 `MySqlDatabaseDialect` 只覆写了 `buildAuthenticationProperties`、
 `initializePreparedStatement`、`getSqlType(SinkRecordField)`、`buildUpsertQueryStatement`、
 `sanitizedUrl`、`resolveSynonym` —— 全部是 **Sink 侧**能力，Source 侧行为 100% 由
 `GenericDatabaseDialect` 决定。
+
+---
+
+## 2. 映射大表
+
+图例：`optional` = 列可空时 Connect schema 为 optional，Avro 为 `["null", T]` 且 default null。
+下表 Avro 列只写非 null 分支。**Connect schema 不携带任何长度/精度信息**（DECIMAL 除外）。
+
+### 2.1 整数与浮点
+
+| MySQL 类型 | Connector/J JDBC 类型 | Connect Schema | Avro | 推荐 PG 15 落点 | 有损风险 | 影响参数 | 来源 |
+|---|---|---|---|---|---|---|---|
+| `TINYINT` / `TINYINT(M≠1)` | `Types.TINYINT`（signed） | `INT8` | `int` | `smallint` | 无 | — | `MysqlType.TINYINT`；`addFieldToSchema` `case Types.TINYINT` |
+| `TINYINT(1)`（默认） | `Types.BIT`（`tinyInt1isBit=true`, `transformedBitIsBoolean=false`） | **`INT8`**（非 boolean！） | `int` | `smallint` 或 `boolean`（需自行确保 0/1） | 语义丢失：布尔列变整数 | `tinyInt1isBit`, `transformedBitIsBoolean` | Connector/J 类型转换表；`case Types.BIT` |
+| `TINYINT(1)` + `transformedBitIsBoolean=true` | `Types.BOOLEAN` | `BOOLEAN` | `boolean` | `boolean` | 无 | 同上 | 同上 |
+| `TINYINT(M)` + `tinyInt1isBit=false` | `Types.TINYINT` | `INT8` | `int` | `smallint` | 无 | `tinyInt1isBit=false` | 同上 |
+| `TINYINT UNSIGNED` | `Types.TINYINT`（unsigned） | `INT16` | `int` | `smallint` | 无 | — | `isSignedNumber()` 分支 |
+| `SMALLINT` | `Types.SMALLINT` | `INT16` | `int` | `smallint` | 无 | — | `MysqlType.SMALLINT` |
+| `SMALLINT UNSIGNED` | `Types.SMALLINT`（unsigned） | `INT32` | `int` | `integer` | 无 | — | 同上 |
+| `MEDIUMINT` | `Types.INTEGER` | `INT32` | `int` | `integer` | 无 | — | `MysqlType.MEDIUMINT` |
+| `MEDIUMINT UNSIGNED` | `Types.INTEGER`（unsigned） | `INT64` | `long` | `integer`（值域安全）或 `bigint` | 无 | — | 同上 |
+| `INT` / `INTEGER` | `Types.INTEGER` | `INT32` | `int` | `integer` | 无 | — | `MysqlType.INT` |
+| `INT UNSIGNED` | `Types.INTEGER`（unsigned） | **`INT64`** | `long` | `bigint` | 无（升宽安全） | — | `case Types.INTEGER` 的 `isSignedNumber()` |
+| `BIGINT` | `Types.BIGINT` | `INT64` | `long` | `bigint` | 无 | — | `MysqlType.BIGINT` |
+| `BIGINT UNSIGNED` | `Types.BIGINT`（unsigned，`getColumnClassName`=`BigInteger`） | **`INT64`（无升宽）** | `long` | `numeric(20,0)` | **值 > 2^63-1 时溢出**；默认抛 `NumberOutOfRange`，`jdbcCompliantTruncation=false` 时静默回绕 | `jdbcCompliantTruncation` | `case Types.BIGINT` 无 signed 分支；`LongValueFactory.createFromBigInteger()` |
+| `FLOAT` / `FLOAT UNSIGNED` | `Types.REAL` | `FLOAT32` | `float` | `real` | 二进制浮点固有 | — | `MysqlType.FLOAT`；`case Types.REAL` |
+| `FLOAT(M,D)` | `Types.REAL` | `FLOAT32` | `float` | `real` | D 位小数约束丢失 | — | 同上 |
+| `DOUBLE` / `REAL` / `DOUBLE UNSIGNED` | `Types.DOUBLE` | `FLOAT64` | `double` | `double precision` | 二进制浮点固有 | — | `MysqlType.DOUBLE` |
+| `DECIMAL(p,s)` / `NUMERIC(p,s)` | **`Types.DECIMAL`**（非 NUMERIC） | `Decimal`（`bytes`+`scale=s`+参数 `connect.decimal.precision=p`） | `bytes`，`logicalType=decimal`，`precision=p`,`scale=s` | `numeric(p,s)` | 无（前提：PG 侧 p,s 与源一致） | `numeric.mapping` **无效**（见 §3） | `MysqlType.DECIMAL`；`addFieldToSchema` `case Types.DECIMAL` |
+| `DECIMAL` 无显式 (p,s) | `Types.DECIMAL` | `Decimal(scale=0)`，precision=10 | 同上 | `numeric(10,0)` | MySQL 默认即 `DECIMAL(10,0)` | — | MySQL 8.0 手册 11.1.3 |
+| `DECIMAL(p,s) UNSIGNED` | `Types.DECIMAL` | 同 signed | 同上 | `numeric(p,s)`（+`CHECK (col >= 0)`） | 无符号约束丢失 | — | `MysqlType.DECIMAL_UNSIGNED` |
+| `BOOL` / `BOOLEAN` | 同 `TINYINT(1)` | 同 `TINYINT(1)` | 同上 | 同上 | 同上 | 同上 | MySQL 8.0 手册：`BOOL` 是 `TINYINT(1)` 的同义词 |
+| `BIT(1)` | `Types.BIT` | `INT8` | `int` | `boolean` 或 `smallint` | 语义丢失 | — | `MysqlType.BIT`；`case Types.BIT` |
+| `BIT(n)` 2≤n≤8 | `Types.BIT` | `INT8` | `int` | `smallint` | **值 128–255 静默变负数**（`(byte)` 截断） | `jdbcCompliantTruncation` | `ByteValueFactory.createFromBit()` |
+| `BIT(n)` n>8 | `Types.BIT` | `INT8` | `int` | — **v1 不支持** | 值 ≥256 抛 `NumberOutOfRange`（默认） | 同上 | 同上 |
