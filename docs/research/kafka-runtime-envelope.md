@@ -49,3 +49,39 @@
 | Connect | `errors.deadletterqueue.topic.name` 对应的 DLQ topic | — | DLQ topic 也要设 `max.message.bytes=26214400` | **易漏**：主 topic 配好了，坏消息往 DLQ 写时被 broker 拒，sink task 反而以 `RecordTooLargeException` 失败——本来只是想「跳过一条坏数据」，结果整个 task 挂掉 |
 | Connect | 内部 topic（`connect-offsets` / `connect-configs` / `connect-status`） | `1048588` | 保持默认 | bulk 模式不写 source offset（见 #3），offset 记录本身很小，无需放大 |
 
+### 1.3 Connect worker 怎么把这些下发给 connector 的客户端
+
+有两个作用域，DBX 两个都要用：
+
+**A. worker 级（兜底，作用于该 worker 上所有 connector）**
+worker 配置里以 `producer.` / `consumer.` 为前缀的键，会传给 worker 为 source connector 创建的 producer 和为 sink connector 创建的 consumer。Docker 镜像（`confluentinc/cp-kafka-connect`）的环境变量映射规则是 `CONNECT_` + 全大写 + `.`→`_`，即：
+
+```
+CONNECT_PRODUCER_MAX_REQUEST_SIZE: 26214400
+CONNECT_PRODUCER_BUFFER_MEMORY: 134217728
+CONNECT_PRODUCER_COMPRESSION_TYPE: zstd
+CONNECT_CONSUMER_MAX_PARTITION_FETCH_BYTES: 26214400
+CONNECT_CONSUMER_MAX_POLL_RECORDS: 1
+```
+
+**B. connector 级（每个 connector 单独覆盖）**
+自 AK 2.3.0（[KIP-458](https://cwiki.apache.org/confluence/display/KAFKA/KIP-458:+Connector+Client+Config+Override+Policy)）起，connector 配置里可用 `producer.override.*`（source）、`consumer.override.*`（sink）、`admin.override.*` 覆盖 worker 派生出来的客户端配置。是否允许由 worker 配置 `connector.client.config.override.policy` 控制，取值 `All` / `Principal` / `None` 或自定义类全名。
+
+**默认值有版本分水岭**：KIP-458 引入时默认 `None`（不允许任何覆盖）；[KIP-722](https://cwiki.apache.org/confluence/display/KAFKA/KIP-722:+Enable+connector+client+overrides+by+default) 在 **AK 3.0.0** 把默认改成 `All`。我们基线是 3.6.0，默认已是 `All`。但**对接客户已有 Connect 集群时不能假设**——客户可能显式设成 `None`。
+
+> 落地建议：DBX 建 connector 时**同时**写 `producer.override.max.request.size` 等；如果客户 worker 是 `None`，REST 创建/校验阶段就会因策略违规**拒绝启动 connector**（policy 在配置 client 前被调用，也在 `PUT /connectors/{name}/config/validate` 时被调用）。这是一个可以在预检阶段主动探测的失败点：先 `validate` 一次，看是否报 policy 违规，再决定是「靠 worker 级兜底」还是「报错让客户改 worker 配置」。
+>
+> 另一个坑：Connect 框架**不允许把 producer/consumer 配置项 unset 或设为 null**，只能覆盖成新值。
+
+**admin client 也要管**：source connector 启用自动建 topic 时、sink connector 启用 DLQ 时会用 admin client（对应 `admin.override.*`）。DBX 自己显式建 topic（可控地带上 `max.message.bytes`），因此建议 **关闭 Connect 的自动建 topic**，避免 topic 用 broker 默认的 1MB 上限被创建出来——这正是「主 topic 配置漏了」最常见的成因。
+
+---
+
+## 2. Avro / Schema Registry 的额外上限
+
+- **Schema Registry 不对消息大小设限，只对 schema 文本设限。** 自建 Confluent Platform 上「there are no such limits on schemas」；Confluent Cloud 才有 1MB 的**单个 schema 文档**大小上限（可用 schema references 规避）。DBX 一张表的 Avro schema 是几十列的字段声明，KB 量级，远够。
+- **大 `bytes` 字段本身没有 Avro 层上限。** Avro binary 编码 `bytes` = zigzag varint 长度 + 原始字节，20MB 只多几个字节的长度前缀。真正的天花板全部来自 Kafka（§1）与 JVM 堆（§3）。
+- **每条消息 +5 字节**：Confluent wire format（magic byte + 4 字节 schema ID）。
+- **内存放大才是实际风险**：Avro 序列化 `bytes` 时通常经历「JDBC 读出 byte[] → Avro 对象持有 → 序列化到输出流 → producer 的 batch buffer」，一条 20MB 记录在 Connect worker 堆里同时存在 **2~4 份拷贝**是常态。这直接决定了 §3 的堆大小和 `max.poll.records` 取值。
+- Schema Registry 的 REST 有请求体上限（Jetty 层），但我们只发 schema 文本，不发数据，无影响。
+
