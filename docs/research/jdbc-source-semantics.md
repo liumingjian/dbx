@@ -90,8 +90,24 @@ SELECT * FROM <table> WHERE <incCol> > ? ORDER BY <incCol> ASC
 - 列必须严格递增。MySQL `AUTO_INCREMENT` 主键满足；**UUID/字符串主键、联合主键不满足** → 这类表只能退回 bulk。
 - `timestamp` 模式还多一层 `timestamp.delay.interval.ms` 与时区语义，离线全量场景没必要引入；不推荐。
 
+WHERE 子句的确切生成代码在 `TimestampIncrementingCriteria.incrementingWhereClause()`：
+
+```java
+protected void incrementingWhereClause(ExpressionBuilder builder) {
+  builder.append(" WHERE ");
+  builder.append(incrementingColumn);
+  builder.append(" > ?");
+  builder.append(" ORDER BY ");
+  builder.append(incrementingColumn);
+  builder.append(" ASC");
+}
+```
+
+注意 **没有上界**（`timestamp` 模式才有 `< ?` 上界）。所以「终点」必须由平台在外部用 `MAX(pk)` 界定，连接器自己不会停。
+
 来源：
 - <https://github.com/confluentinc/kafka-connect-jdbc/blob/v10.9.6/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java>
+- <https://github.com/confluentinc/kafka-connect-jdbc/blob/v10.9.6/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingCriteria.java>
 - <https://docs.confluent.io/kafka-connectors/jdbc/current/source-connector/source_config_options.html>
 
 ---
@@ -173,8 +189,9 @@ case QUERY:
 ## 6. 删除 connector 时正在进行的读取如何终止
 
 **平台侧动作**：`DELETE /connectors/{name}`。
-- REST 语义：删除 connector、停止所有 task、删除其配置。返回 204。
-- 文档：<https://docs.confluent.io/platform/current/connect/references/restapi.html#delete--connectors-(string-name)> / <https://kafka.apache.org/documentation/#connect_rest>
+- Apache Kafka 官方 Connect 用户指南原文：
+  > `DELETE /connectors/{name}` - delete a connector, halting all tasks and deleting its configuration
+- 文档：<https://kafka.apache.org/40/kafka-connect/user-guide/> / <https://docs.confluent.io/platform/current/connect/references/restapi.html>
 
 **连接器侧发生了什么**（v10.9.6）：
 
@@ -190,11 +207,21 @@ case QUERY:
 |---|---|---|
 | MySQL 源库 | 否 | 只读事务被 commit 释放；连接池被关闭。极端情况下（进程被 kill -9）连接由 MySQL `wait_timeout` 回收 |
 | Kafka topic | **是（部分数据）** | 已产出的记录不会回滚。中途删除后重跑必须先删 topic 或换新 topic，否则 Sink 侧重复写入 |
-| Connect offset topic | bulk：无记录；incrementing：**保留** | offset 以 connector 名为 key。同名重建 connector 会**继承旧 offset**，导致「以为重跑实际上续跑」。DBX 必须在重跑前用 `DELETE /connectors/{name}/offsets`（KIP-875，Kafka 3.6+）或换 connector 名 |
+| Connect offset topic | bulk：无记录；incrementing：**保留** | offset 以 connector 名为 key。同名重建 connector 会**继承旧 offset**，导致「以为重跑实际上续跑」。DBX 必须在重跑前用 `DELETE /connectors/{name}/offsets` 或换 connector 名 |
 | Connect config topic | 否 | DELETE 会清掉配置 |
 
-- KIP-875（offsets REST API：`GET/PATCH/DELETE /connectors/{name}/offsets`，Kafka 3.6 起）：<https://cwiki.apache.org/confluence/display/KAFKA/KIP-875%3A+First-class+offsets+support+in+Kafka+Connect>
-- 注意：`DELETE /connectors/{name}/offsets` **要求 connector 处于 STOPPED 状态**（KIP-875 引入的 `PUT /connectors/{name}/stop`），不能对 RUNNING 的 connector 调用。
+**重跑前清 offset 的正确顺序**（Kafka 官方用户指南原文：*"the offsets for a connector can be only modified via the offsets management endpoints if it is in the stopped state"*）：
+
+```
+PUT    /connectors/{name}/stop        # 进入 STOPPED（不是 PAUSED）
+DELETE /connectors/{name}/offsets     # 必须是 STOPPED，否则 400
+DELETE /connectors/{name}             # 再删掉
+```
+
+**注意 `pause` 与 `stop` 的区别**：`PUT /connectors/{name}/pause` 保留 task 占用的资源（JDBC 连接不释放），`PUT /connectors/{name}/stop` 才会关闭 task 并释放资源。**DBX 若要「暂停一箱」应该用 `stop` 而不是 `pause`**，否则源库连接会一直被占着。
+
+- KIP-875：<https://cwiki.apache.org/confluence/display/KAFKA/KIP-875%3A+First-class+offsets+support+in+Kafka+Connect>
+- 官方端点说明：<https://kafka.apache.org/40/kafka-connect/user-guide/>
 
 ---
 
@@ -226,11 +253,11 @@ case QUERY:
 
 | 项 | 内容 |
 |---|---|
-| 取得方式 | `GET /connectors/{name}/offsets`（Kafka 3.6+ / CP 7.5+，KIP-875）。返回 `{"offsets":[{"partition":{"table":"users"},"offset":{"incrementing":12345}}]}` |
+| 取得方式 | `GET /connectors/{name}/offsets`（**Kafka 3.5.0 起**，KIP-875 Part 1）。返回 `{"offsets":[{"partition":{"table":"users"},"offset":{"incrementing":12345}}]}` |
 | 可靠性 | **bulk 模式：完全不可用**（`BulkTableQuerier` 传 `null` offset，源码确证）。**incrementing/timestamp 模式：高** |
-| 延迟 | 受 `offset.flush.interval.ms`（worker 级，默认 60000ms）影响 —— **默认最慢 60 秒**。DBX 应把它调到 5000~10000ms |
+| 延迟 | 受 `offset.flush.interval.ms`（worker 级，Kafka 官方文档 **默认 60000 (1 minute)**）影响 —— **默认最慢 60 秒**。DBX 应把它调到 5000~10000ms |
 | 判定 | offset 的 `incrementing` 值 >= 迁移前抓取的 `MAX(pk)` |
-| 失效场景 | bulk 模式；offset flush 未触发（task 刚起）；旧版 Kafka（< 3.6）没有该端点，只能自己去读 `connect-offsets` topic |
+| 失效场景 | bulk 模式；offset flush 未触发（task 刚起）；旧版 Kafka（< 3.5）没有该端点，只能自己去读 `connect-offsets` topic |
 | 来源 | <https://cwiki.apache.org/confluence/display/KAFKA/KIP-875%3A+First-class+offsets+support+in+Kafka+Connect> |
 
 ### 信号 D：connector / task 状态（`GET /connectors/{name}/status`）
@@ -247,12 +274,15 @@ case QUERY:
 
 | 项 | 内容 |
 |---|---|
-| 取得方式 | MBean `kafka.connect:type=source-task-metrics,connector=<name>,task=<id>`，属性 `source-record-poll-total`、`source-record-write-total`、`source-record-poll-rate`、`source-record-write-rate`、`poll-batch-avg-time-ms`。源码：`AbstractWorkerSourceTask.SourceTaskMetricsGroup`（`sourceRecordPoll` / `sourceRecordWrite` sensor） |
-| 判定 | `source-record-write-rate` 归零持续 N 秒 → 疑似跑完；`source-record-write-total` 与预期行数比对 |
-| 可靠性 | 中。`*-total` 是 **CumulativeSum，task 重启后归零**，不能当累计计数用于跨重启比对。速率归零同样有慢查询假阳性 |
-| 延迟 | 指标窗口（默认 30s，`metrics.sample.window.ms`）→ **速率类指标有最长 30s 的滞后** |
+| 取得方式 | MBean 组 `source-task-metrics`（`ConnectMetricsRegistry.SOURCE_TASK_GROUP_NAME = "source-task-metrics"`），tag 为 `connector` + `task`，即 `kafka.connect:type=source-task-metrics,connector=<name>,task=<id>` |
+| 关键属性 | `source-record-poll-total`（"The total number of records produced/polled (before transformation) by this task"）、`source-record-write-total`（"...written to Kafka **since the task was last restarted**"）、`source-record-poll-rate`、`source-record-write-rate`、`source-record-active-count`（"records that have been produced by this task but not yet completely written to Kafka"）、`poll-batch-avg-time-ms` |
+| 判定 | `source-record-write-rate` 归零持续 N 秒 **且** `source-record-active-count == 0`（说明没有在途未落 Kafka 的记录）→ 疑似跑完 |
+| 可靠性 | 中。`*-total` 在 `AbstractWorkerSourceTask.SourceTaskMetricsGroup` 里注册为 `new CumulativeSum()`，**task 重启后归零**，不能跨重启做累计比对。速率归零同样有慢查询假阳性 |
+| 延迟 | 指标窗口 `metrics.sample.window.ms`，Kafka 官方文档 **默认 30000 (30 seconds)** → **速率类指标最长有 30s 滞后** |
 | 失效场景 | 需要 Connect 进程开 JMX 端口（DBX 部署时要显式配 `JMX_PORT` / `KAFKA_JMX_OPTS`），离线客户环境可能不允许；多 task 时要按 task 聚合 |
-| 来源 | <https://kafka.apache.org/documentation/#connect_monitoring> / `AbstractWorkerSourceTask.java` @ Apache Kafka |
+| 来源 | <https://github.com/apache/kafka/blob/4.0/connect/runtime/src/main/java/org/apache/kafka/connect/runtime/ConnectMetricsRegistry.java> / `AbstractWorkerSourceTask.java` / <https://kafka.apache.org/documentation/#connect_monitoring> |
+
+`source-record-active-count` 值得单独强调：它是 DBX 唯一能拿到的「在途记录数」指标，判「Source 真的排空了」时应作为必要条件之一。
 
 ### 信号 F：Sink 侧目标表行数（PostgreSQL `COUNT(*)`）
 
@@ -309,9 +339,19 @@ case QUERY:
 | **v10.7.x 及更早** | `JdbcSourceTask.poll()` 自己跑 `while` 循环执行查询并组装批次，没有后台线程。**外部可观测行为（bulk 循环、offset 语义、topic 命名、task 分配）与 10.9.x 一致** |
 | 全版本一致 | `BulkTableQuerier` 传 `null` offset；`topicPrefix + tableName`；query 模式单 task 且与白名单互斥；`groupPartitions` 不相交切表 |
 
-关于 Kafka 侧：`GET/DELETE /connectors/{name}/offsets` 与 `PUT /connectors/{name}/stop` 是 **Kafka 3.6 / CP 7.5+** 才有的（KIP-875 + KIP-980）。若 DBX 要兼容更老的 Connect，信号 C 与「重跑前清 offset」都要改为直接操作 `connect-offsets` topic —— 强烈建议直接把 Kafka 版本下限定在 3.6。
+关于 Kafka 侧（KIP-875 分两批落地，DBX 的 Kafka 版本下限由此确定）：
 
-- Connect REST API 全量端点：<https://kafka.apache.org/documentation/#connect_rest>
+| 能力 | 最低 Kafka 版本 |
+|---|---|
+| `GET /connectors/{name}/offsets`、`PUT /connectors/{name}/stop`、STOPPED 状态 | **3.5.0** |
+| `PATCH /connectors/{name}/offsets`、`DELETE /connectors/{name}/offsets` | **3.6.0** |
+| `POST /connectors` 带 `initial_state`（STOPPED/PAUSED/RUNNING）| 3.6.0（KIP-980）|
+
+**建议 DBX 把 Kafka 版本下限定在 3.6.0**：低于此则「重跑前清 offset」只能直接往 `connect-offsets` topic 写 tombstone，脆弱且需要绕过 Connect 的内部协议。
+
+- Kafka 3.6.0 发布公告：<https://kafka.apache.org/blog/2023/10/10/apache-kafka-3.6.0-release-announcement/>
+- KIP-980（以 STOPPED 状态创建 connector）：<https://cwiki.apache.org/confluence/display/KAFKA/KIP-980%3A+Allow+creating+connectors+in+a+stopped+state>
+- Connect REST API 全量端点（Apache）：<https://kafka.apache.org/40/kafka-connect/user-guide/>
 - Confluent 版 REST API 参考：<https://docs.confluent.io/platform/current/connect/references/restapi.html>
 - JDBC Source 配置项官方文档：<https://docs.confluent.io/kafka-connectors/jdbc/current/source-connector/source_config_options.html>
 
