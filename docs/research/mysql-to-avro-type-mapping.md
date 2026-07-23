@@ -184,3 +184,109 @@ but we drop this from the schema conversion since only fixed byte arrays can hav
 **「静默丢列」是本链路最危险的失败模式**：类型不支持时 connector **不报错**，只在 log
 打一条 WARN，字段直接不出现在 Avro schema 里；Sink 侧因为只按列名匹配、缺字段就不写
 （#4 结论 1），最终表现是「任务全绿，PG 表该列全是 NULL 或默认值」。
+
+---
+
+## 3. 高风险项详解
+
+### 3.1 `DECIMAL(p,s)` 与 `numeric.mapping` 的四种取值
+
+`numeric.mapping` 的四个分支全部位于 `GenericDatabaseDialect.addFieldToSchema()`
+的 `case Types.NUMERIC:` 内，末尾无 `break`，靠 `// fallthrough` 落入 `case Types.DECIMAL:`。
+常量：`MAX_INTEGER_TYPE_PRECISION = 18`，`NUMERIC_TYPE_SCALE_LOW = -84`；
+`integerSchema(optional, precision)` 在 `precision > 9` 时给 INT64，否则 INT32。
+
+| 取值 | 触发条件（仅 `Types.NUMERIC`） | 结果 Connect 类型 |
+|---|---|---|
+| `none`（默认） | 不进入任何分支 | 一律 `Decimal(scale)` |
+| `precision_only` | `scale == 0 && precision <= 18` | `INT32`(p≤9) / `INT64`(p>9)；其余 → `Decimal` |
+| `best_fit` | `precision <= 18` 且 `-84 <= scale < 1` → 整数；`precision <= 18` 且 `scale > 0` → **`FLOAT64`** | 其余 → `Decimal` |
+| `best_fit_eager_double` | `-84 <= scale < 1 && precision <= 18` → 整数；**`scale > 0` 时无论 precision 多大一律 `FLOAT64`** | 其余 → `Decimal` |
+
+**对 MySQL 的实际结论：以上四种取值全部无效。**
+Connector/J 的 `MysqlType.DECIMAL` 和 `DECIMAL_UNSIGNED` 都声明 `Types.DECIMAL`；
+`MysqlType` 枚举中**没有任何常量声明 `Types.NUMERIC`**（MySQL 的 `NUMERIC` 是 `DECIMAL`
+的同义词，见 MySQL 8.0 手册 11.1.1）。因此 MySQL 的所有定点列都直接命中 `case Types.DECIMAL`，
+无条件产出 `Decimal` 逻辑类型。
+配置文档：<https://docs.confluent.io/kafka-connectors/jdbc/current/source-connector/source_config_options.html>
+
+**scale 的携带方式**（`case Types.DECIMAL` 分支）：
+
+```java
+scale = decimalScale(columnDefn);                    // 见下
+SchemaBuilder fieldBuilder = Decimal.builder(scale); // 参数 "scale"
+fieldBuilder.parameter(PRECISION_FIELD, Integer.toString(precision)); // "connect.decimal.precision"
+```
+
+`decimalScale()`：`defn.scale() == NUMERIC_TYPE_SCALE_UNSET ? NUMERIC_TYPE_SCALE_HIGH : defn.scale()`
+—— MySQL 总会报出真实 scale，所以走 `defn.scale()`。
+取值时 `columnConverterFor()` 用 `rs.getBigDecimal(col, scale)`，**按列定义的 scale 做定标**。
+
+**Avro 侧**（`AvroData.fromConnectSchema()`）：Connect `Decimal` → Avro `bytes`，
+`org.apache.avro.LogicalTypes.decimal(precision, scale).addToSchema(baseSchema)`；
+`precision` 取 schema 参数 `connect.decimal.precision`，缺失时用默认值
+（`CONNECT_AVRO_DECIMAL_PRECISION_DEFAULT`，即 64）。
+若 `scale < 0 || scale > precision` 则退回 legacy 编码（只写 `logicalType`/`scale`/`precision` 属性）。
+Avro 规范：decimal 用 `bytes` 存二进制补码的 unscaled 值，
+<https://avro.apache.org/docs/1.11.1/specification/#decimal>。
+
+**DDL 生成规则**：`DECIMAL(p,s)` → `numeric(p,s)`，p、s 必须从
+`information_schema.columns.numeric_precision/numeric_scale` 原样带过来。
+MySQL DECIMAL 上限 `p<=65, s<=30`（手册 11.1.3），PG `numeric` 上限 `p<=1000`（手册 8.1.2）→ 无溢出风险。
+**不要**为了性能把 `DECIMAL` 落成 `double precision`：金额类字段会静默失真。
+
+### 3.2 `TINYINT(1)` 与 `tinyInt1isBit` / `transformedBitIsBoolean`
+
+Connector/J 官方类型转换表对 `TINYINT(1) SIGNED, BOOLEAN` 一行的原文规则：
+
+| `tinyInt1isBit` | `transformedBitIsBoolean` | `getColumnTypeName` | JDBC 类型 | Connect Schema |
+|---|---|---|---|---|
+| `true`（默认） | `false`（默认） | `BIT` | `Types.BIT` | **`INT8`** |
+| `true` | `true` | `BOOLEAN` | `Types.BOOLEAN` | `BOOLEAN` |
+| `false` | 任意 | `TINYINT` | `Types.TINYINT` | `INT8` |
+
+注意 `case Types.BIT` 在 `addFieldToSchema()` 里落在 `// ints <= 8 bits` 注释下，
+建的是 `Schema.INT8_SCHEMA`，**不是** boolean；取值用 `rs.getByte(col)`。
+所以「默认配置下 MySQL 布尔列到 Kafka 是 0/1 的 int8」。
+
+**DBX 的取舍**：
+- 若目标是「PG 侧得到真 `boolean`」→ 必须显式加 `transformedBitIsBoolean=true`。
+  代价：该库**所有** `TINYINT(1)` 列都变 boolean，包括那些其实存 0..9 的列（值 >1 会被读成 `true`，**静默失真**）。
+- 若目标是「零风险」→ 显式设 `tinyInt1isBit=false`，全部按 `TINYINT` 处理，PG 落 `smallint`。
+- **v1 建议：`tinyInt1isBit=false` 作为全局默认**（安全），在表级映射里允许用户把特定列
+  手工指定为 PG `boolean`（DDL 写 `boolean`，Sink 侧 int8 → PG boolean 会因类型不兼容失败，
+  故该列需在 DDL 用 `smallint` + 视图，或整库切 `transformedBitIsBoolean=true`）。
+  这是一张**需要在类型映射矩阵决策票里拍板的取舍**。
+
+### 3.3 `INT UNSIGNED` / `BIGINT UNSIGNED` 溢出
+
+`addFieldToSchema()` 对 TINYINT/SMALLINT/INTEGER 三档都写了
+`if (columnDefn.isSignedNumber()) {...} else {升一档}`；`isSignedNumber()` 来自
+`ResultSetMetaData.isSigned()`。所以：
+
+- `TINYINT UNSIGNED`(0..255) → INT16 ✅
+- `SMALLINT UNSIGNED`(0..65535) → INT32 ✅
+- `MEDIUMINT UNSIGNED`(0..16777215) → INT64 ✅（过度升宽但安全）
+- `INT UNSIGNED`(0..4294967295) → INT64 ✅
+- **`BIGINT UNSIGNED`(0..18446744073709551615) → INT64 ❌**，`case Types.BIGINT` 没有
+  `isSignedNumber()` 分支，转换器是 `rs.getLong(col)`。
+
+Connector/J 的 `LongValueFactory.createFromBigInteger()`：
+
+```java
+if (this.jdbcCompliantTruncationForReads
+        && (i.compareTo(Constants.BIG_INTEGER_MIN_LONG_VALUE) < 0
+         || i.compareTo(Constants.BIG_INTEGER_MAX_LONG_VALUE) > 0)) {
+    throw new NumberOutOfRange(...);
+}
+return i.longValue();
+```
+
+`jdbcCompliantTruncationForReads` 由连接参数 `jdbcCompliantTruncation`（默认 `true`）决定。
+→ **默认行为是抛异常（响亮失败）；一旦有人关掉就变成静默回绕成负数。**
+
+**v1 规则**：
+1. 显式设 `jdbcCompliantTruncation=true`，禁止用户覆盖。
+2. 前端对 `BIGINT UNSIGNED` 列显式告警，PG 落点建议 `numeric(20,0)`。
+3. 若想彻底规避，可在 Source 的 `query` 模式里对该列写 `CAST(col AS CHAR)`，
+   走 STRING → PG `numeric`（Sink 会以 `setString` 绑定，PG 侧隐式转换）。
