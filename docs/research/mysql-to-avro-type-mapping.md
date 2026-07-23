@@ -143,3 +143,25 @@ but we drop this from the schema conversion since only fixed byte arrays can hav
 - 但 **`CHAR(M) BINARY` / `VARCHAR(M) BINARY`（即 binary collation）会被 Connector/J
   报成 `BINARY`/`VARBINARY`** → Connect `BYTES` 而非 `STRING`。DDL 生成器必须读
   `information_schema.columns.character_set_name`：为 `binary` 时落 `bytea`，不能落 `text`。
+
+### 2.3 日期与时间
+
+`timestamp.granularity` 默认 `connect_logical`；其余取值见
+`JdbcSourceConnectorConfig.TimestampGranularity` 枚举，直接改变 `Types.TIMESTAMP`
+的 Connect schema 类型。
+
+| MySQL 类型 | Connector/J JDBC 类型 | Connect Schema | Avro | 推荐 PG 15 落点 | 有损风险 | 影响参数 | 来源 |
+|---|---|---|---|---|---|---|---|
+| `DATE` | `Types.DATE`（`java.sql.Date`） | `org.apache.kafka.connect.data.Date`（INT32，天数） | `int`, `logicalType=date` | `date` | `0000-00-00` 触发 `zeroDateTimeBehavior` | `zeroDateTimeBehavior`, `db.timezone` | `MysqlType.DATE`；`case Types.DATE` |
+| `DATETIME` / `DATETIME(0)` | `Types.TIMESTAMP`（`LocalDateTime`） | `Timestamp`（INT64，epoch millis） | `long`, `logicalType=timestamp-millis` | `timestamp(0) without time zone` | **无时区语义被强行赋予时区**：按 `db.timezone` 解释成瞬时 | `db.timezone`, `connectionTimeZone`, `timestamp.granularity` | `MysqlType.DATETIME`；`case Types.TIMESTAMP` |
+| `DATETIME(1..3)` | 同上 | 同上 | 同上 | `timestamp(3)` | 无 | 同上 | 同上 |
+| `DATETIME(4..6)` | 同上 | 同上（**毫秒**） | `timestamp-millis` | `timestamp(6)` | **微秒静默截断**（`AvroData` 只有 `timestampMillis()`） | `timestamp.granularity=micros_long` 可保 | `AvroData.fromConnectSchema()` |
+| `TIMESTAMP` / `TIMESTAMP(0)` | `Types.TIMESTAMP`（`java.sql.Timestamp`） | `Timestamp`（INT64，epoch millis） | `long`, `logicalType=timestamp-millis` | **`timestamptz(0)`** | 与 `DATETIME` **在 Connect 层无法区分**；错配时区会整体平移 | `connectionTimeZone`, `preserveInstants`, `forceConnectionTimeZoneToSession`, `db.timezone` | `MysqlType.TIMESTAMP` |
+| `TIMESTAMP(4..6)` | 同上 | 同上 | 同上 | `timestamptz(6)` | 微秒静默截断 | `timestamp.granularity` | 同上 |
+| `TIME` / `TIME(0..6)` | `Types.TIME`（`java.sql.Time`） | `org.apache.kafka.connect.data.Time`（INT32，当日毫秒） | `int`, `logicalType=time-millis` | `time(0..6) without time zone` | ① 微秒截断；② **MySQL `TIME` 值域是 `-838:59:59`～`838:59:59`，PG `time` 只有 `00:00:00`～`24:00:00`**，超范围值必然出错；③ 负值无法用 `time-millis` 表示 | `db.timezone`, `sendFractionalSecondsForTime` | `MysqlType.TIME`；`case Types.TIME`；MySQL 8.0 手册 11.2.3；PG 15 手册 8.5 |
+| `YEAR`（默认） | `Types.DATE`（`yearIsDateType=true` → `java.sql.Date`） | `Date`（INT32 天数） | `int`, `logicalType=date` | `date`（值为 `YYYY-01-01`）；或改配置后落 `smallint` | 语义膨胀成整年首日 | `yearIsDateType` | `MysqlType.YEAR`；Connector/J 类型转换表 |
+| `YEAR` + `yearIsDateType=false` | `Types.DATE`（JDBC 类型不变，只是取值类为 `Short`） | 仍是 `Date` | 同上 | 同上 | 同上 | 同上 | 同上（**注意：JDBC 类型由 `MysqlType.YEAR` 固定为 `Types.DATE`，故 Connect schema 不受此参数影响**） |
+
+**`TIME` 是 v1 最容易翻车的日期类型**：`case Types.TIME` 的转换器是
+`rs.getTime(col, DateTimeUtils.getZoneIdCalendar(zoneId))`，把「一段时长」当「当日时刻」处理。
+建议 DDL 生成器对 `TIME` 列在前端标黄，并提供「落 `interval`（走 STRING 中转）」的备选。
