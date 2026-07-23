@@ -78,7 +78,16 @@ case Types.BLOB:   case Types.LONGVARBINARY:
 
 ### 1.3 批量迁移不够灵活 —— 属实，且根因是配置粒度而非调度
 
-**是配置粒度问题。** 一个 DataX job 的 JSON 结构是：`job.content[]` → 每个元素一对 `reader`/`writer`。虽然 `content` 是数组，但 `JobContainer` 与调度实现上长期只支持**单个 content 元素**（社区共识与 [#304 类问题](https://github.com/WeiYe-Jing/datax-web/issues/304) 报的 `Code:[Framework-03] 引擎配置错误`同源）。多表的唯一表达方式是：
+**是配置粒度问题，且有硬证据。** 一个 DataX job 的 JSON 结构是 `job.content[]`，每个元素一对 `reader`/`writer`。看起来是数组，但 `core/.../util/container/CoreConstant.java`（[链接](https://github.com/alibaba/DataX/blob/master/core/src/main/java/com/alibaba/datax/core/util/container/CoreConstant.java)）把下标**写死为 0**：
+
+```java
+public static final String DATAX_JOB_CONTENT_READER_NAME  = "job.content[0].reader.name";
+public static final String DATAX_JOB_CONTENT_READER_PARAMETER = "job.content[0].reader.parameter";
+public static final String DATAX_JOB_CONTENT_WRITER_NAME  = "job.content[0].writer.name";
+public static final String DATAX_JOB_CONTENT_TRANSFORMER  = "job.content[0].transformer";
+```
+
+`job.content` 数组在 `JobContainer#split` 之后被**复用为切分出来的 task 列表**（`configuration.set(DATAX_JOB_CONTENT, contentConfig)`）。所以：**一个 DataX 作业实际上只能有一对 reader/writer，`content` 数组不是给多表用的。** 多表的唯一表达方式是：
 
 ```json
 "connection": [{ "table": ["t1","t2","t3"], "jdbcUrl": ["..."] }]
