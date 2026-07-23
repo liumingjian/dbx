@@ -91,3 +91,63 @@ case Types.BLOB:   case Types.LONGVARBINARY:
 **不是调度问题。** DataX 的调度层（`JobContainer` → `doReaderSplit(needChannelNumber)` → `TaskGroupContainer` → channel 并发 + 全局限速）反而设计得相当好，是本次调研里最值得抄的部分。所以"不够灵活"的准确表述是：**DataX 是"单同步任务的执行引擎"，不是"迁移编排器"**；整库迁移需要在它之上再写一层生成 N 份 JSON 并调度的东西——这正是 datax-web 和 DataWorks 在做的事。
 
 > **对 DBX 的含义**：成立，但要注意这条理由不能推出"DataX 的调度差"。DBX 如果只是把"生成 N 份配置 + 编排"这层做出来，本质上是在重做 datax-web 的定位；DBX 的差异化必须落在**自动建表 + 类型保真**上（§2、§6）。
+
+---
+
+## 2. 类型系统对比：DataX 六型 vs DBX 的 Connect Schema / Avro
+
+### 2.1 "六种内部类型"这个说法：证实，但要加一条重要修正
+
+源码位置：`common/src/main/java/com/alibaba/datax/common/element/Column.java`（[链接](https://github.com/alibaba/DataX/blob/master/common/src/main/java/com/alibaba/datax/common/element/Column.java)）
+
+```java
+public enum Type {
+    BAD, NULL, INT, LONG, DOUBLE, STRING, BOOL, DATE, BYTES
+}
+```
+
+枚举有 9 个成员，但 `BAD`/`NULL` 是哨兵、`INT` 没有对应的具体子类（同目录下只有 `LongColumn`、`DoubleColumn`、`StringColumn`、`BytesColumn`、`DateColumn`、`BoolColumn` 六个 `Column` 实现）。**所以"归约为 Long/Double/String/Bytes/Date/Bool 六种"属实。**
+
+**必须加的修正 —— `DOUBLE` 不是 double。** `DoubleColumn` 的 `rawData` 实际是 `String`：
+
+```java
+public DoubleColumn(final BigDecimal data) {
+    this(null == data ? (String) null : data.toPlainString());   // 存字符串
+}
+private DoubleColumn(final String data, int byteSize) {
+    super(data, Column.Type.DOUBLE, byteSize);
+}
+```
+
+注释里写得很直白：`Double无法表示准确的小数数据，我们不推荐使用该方法保存Double数据，建议使用String作为构造入参`。同理 `LongColumn` 内部是 `BigInteger` 而不是 `long`。
+
+### 2.2 MySQL → PostgreSQL 具体会丢什么
+
+按 `CommonRdbmsReader.Task#buildRecord` 与 `CommonRdbmsWriter.Task#fillPreparedStatementColumnType` 的实际代码逐项核对：
+
+| 关注点 | DataX 实际行为 | 判定 |
+| --- | --- | --- |
+| **DECIMAL(38,10) 精度** | reader：`case Types.NUMERIC/DECIMAL: new DoubleColumn(rs.getString(i))` —— 走 `getString`，字符串进；writer：`case Types.NUMERIC/DECIMAL: preparedStatement.setString(idx, column.asString())` —— 字符串出。**全程不经过 IEEE754。** | **不丢**（推翻常见说法） |
+| **无符号整型 `BIGINT UNSIGNED`** | reader：`case Types.BIGINT: new LongColumn(rs.getString(i))`，`LongColumn(String)` 内部 `NumberUtils.createBigDecimal(data).toBigInteger()` → `BigInteger`；writer 对 `BIGINT` 也走 `setString`。18446744073709551615 能原样过。 | **不丢**（但目标端 PG 无 unsigned，需要 `numeric(20,0)`——这是**建表**问题，不是传输问题） |
+| **`DATETIME(6)` / `TIMESTAMP(6)` 微秒** | reader：`new DateColumn(rs.getTimestamp(i))` → `DateColumn` 的 `rawData` 是 `Long` 毫秒（`DateColumn(Long stamp)`：*"实际存储有date改为long的ms，节省存储"*），`nanos` 字段在这条路径上**从未被赋值**；writer：`new java.sql.Timestamp(utilDate.getTime())`。 | **丢**：亚毫秒精度被静默截断。实测反馈见 [#2359「timestamp(6) 类型字段精度丢失」](https://github.com/alibaba/DataX/issues/2359)、[#1544「datetime64 精度丢失」](https://github.com/alibaba/DataX/issues/1544) |
+| **时区** | 时间在 Record 里是"绝对毫秒"，reader `rs.getTimestamp(i)`（不带 `Calendar`）按 **JVM 默认时区**解释，writer 又按 JVM 默认时区写回。`core/src/main/conf/core.json` 里 `common.column.timeZone` 硬编码 **`"GMT+8"`**。 | **易错**：单进程内自洽，但源/目标库 session 时区不同、或用了 `timeZone` 配置转字符串时会偏移。反馈见 [#106「部分 date 类型字段值在目标表中发生变化」](https://github.com/alibaba/DataX/issues/106) |
+| **`JSON` 类型** | MySQL Connector/J 把 JSON 报成 `LONGVARCHAR`，因此**能过**，但落到 PG 端是 `text` 语义——DataX 不知道它是 JSON，PG 侧若目标列是 `jsonb`，writer 的 `resultSetMetaData` 拿到的是 `Types.OTHER`，落入 `default` 分支 → `UNSUPPORTED_TYPE` 抛错。对照 [#1001 postgresqlreader 不支持 json](https://github.com/alibaba/DataX/issues/1001) | **丢语义 / 常直接失败** |
+| **`ENUM` / `SET`** | 报成 `CHAR`/`VARCHAR`，值能过，但"这是枚举、取值域是这些"的信息完全丢失，目标端只能建成 `varchar`。 | **丢语义** |
+| **`BIT(n)`** | `bit(1)`→`Types.BIT`→`BoolColumn`；`bit(>1)`→`Types.VARBINARY`→`BytesColumn`。mysqlreader 文档自述 ``bit DataX属于未定义行为``；实测报错见 [#1782](https://github.com/alibaba/DataX/issues/1782) | **未定义行为** |
+| **`YEAR`** | 特判：`metaData.getColumnTypeName(i).equalsIgnoreCase("year")` → `LongColumn`（绕 [MySQL bug#35115](http://bugs.mysql.com/bug.php?id=35115)）。文档表格却写 `year → String`，**文档与代码不一致**。 | 行为正确但文档误导 |
+| **`GEOMETRY` / 数组 / `MEDIUMINT`外的自定义类型** | `default:` → `throw DataXException(UNSUPPORTED_TYPE)` | **直接失败** |
+
+### 2.3 保真度判断：**DBX 经 Connect Schema / Avro 的路径更高，但优势的来源和直觉不同**
+
+明确判断：**DBX 的路径保真度更高。** 但要说清楚优势到底在哪，否则会拿错论据说服自己。
+
+**DataX 输在哪：**
+1. **时间精度天花板是毫秒**，写死在 `DateColumn` 的存储形态里，无配置可绕。Connect 的 `org.apache.kafka.connect.data.Timestamp` 逻辑类型同样是毫秒基底 —— 所以这一条 **Connect Schema 默认路径并不比 DataX 强**；DBX 想赢必须显式用 Avro `timestamp-micros` / Connect `Decimal` 之类的逻辑类型，或对高精度时间列走字符串直通。**这是一条必须落到 DBX 设计里的行动项，不是白捡的优势。**
+2. **没有"逻辑类型"层。** DataX 的 6 型是纯物理表示，Record 上不携带"这是 DECIMAL(38,10)/这是 JSON/这是 ENUM"。Connect Schema 有 `name` + `parameters`（`Decimal` 带 `scale`、`Date`/`Time`/`Timestamp`、以及 Debezium/JDBC connector 自定义的 `io.debezium.data.Json` 等），Avro 有 `logicalType`。**这是 DBX 真正的结构性优势**：类型元数据能随数据一起流到写入端，写入端因此有条件做正确的目标端类型决策——也正好是自动建表所需要的同一份信息。
+3. **未知类型即失败，没有降级通道。** DataX `default: throw`。Connect/Avro 至少可以退化成带 `name` 标注的 `string`/`bytes`，保留"我原本是什么"。
+
+**DataX 赢在哪（别忽略）：**
+1. **DECIMAL 走 String 直通，反而比"经过一次 Avro `bytes+scale` 编解码"更不容易出错。** Avro `decimal` 是 `bytes` + `precision/scale`，如果 DBX 的建表阶段推断的 scale 与源库不一致，会在编码期就把数据截断——而 DataX 那种"字符串搬运"在同构精度下是无损的。**DBX 必须保证 scale 来自源库元数据而非采样推断。**
+2. **少一次序列化跳板。** DataX 是 JDBC→内存→JDBC；DBX 是 JDBC→Connect Schema→Avro→Kafka→Avro→Connect Schema→JDBC。每一跳都是一次潜在的类型收窄点。保真度的优势只有在**每一跳都用对逻辑类型**时才兑现，否则可能反而更差。
+
+**结论一句话**：DBX 的类型保真度上限明显更高（有逻辑类型层、有元数据随行、有降级通道），但**不是自动兑现的**；必须显式做三件事——高精度时间用微秒级逻辑类型或字符串直通、DECIMAL 的 precision/scale 取自源库 `information_schema` 而非推断、未知类型定义带标注的降级通道。做不到这三条，DBX 的实际保真度可能只是和 DataX 打平。
