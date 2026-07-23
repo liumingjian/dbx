@@ -233,3 +233,138 @@ if (record.getMemorySize() > this.byteCapacity) {
 | 阿里云 DataWorks 数据集成（商业版） | "整库迁移 / 一键全增量"解决方案：目标库自动建表 + 自动建离线与实时任务 + 自动启动 + 全流程监控与分步重试（[官方文档](https://help.aliyun.com/zh/dataworks/datax)） | 这是唯一真正把 §4.1 四点全解决的实现，**且不开源** |
 
 **结论**：DataX 生态里，"批量/整库"这层要么靠 datax-web 这类外挂编排（解决配置生成与调度，不解决建表），要么就是闭源的 DataWorks。DBX 把"整库迁移 + 自动建表"作为产品内建能力，在开源侧确实是空白点。
+
+---
+
+## 5. 值得搬进 DBX 的设计
+
+按"投入产出比"排序。
+
+### 5.1 `errorLimit`：条数与百分比双阈值 —— 优先级最高
+
+源码：`core/src/main/java/com/alibaba/datax/core/util/ErrorRecordChecker.java`（[链接](https://github.com/alibaba/DataX/blob/master/core/src/main/java/com/alibaba/datax/core/util/ErrorRecordChecker.java)）
+
+设计要点（三条都值得照抄）：
+1. **两种阈值语义不同、检查时机也不同**：`errorLimit.record`（绝对条数）在**运行中**持续检查，一超立刻失败；`errorLimit.percentage`（0.0~1.0）在**任务结束时**校验——因为比例在早期样本少时没有意义。
+2. **`record` 优先级高于 `percentage`**：两者都配时，构造函数直接把 `percentageLimit = null`。避免"两个阈值互相打架"的语义歧义。
+3. **`errorLimit.record = 0` 表示零容忍**，是可表达的（`recordLimit < errorNumber` 而非 `<=`）。
+
+配套的脏数据采样：`core.json` 里 `core.statistics.collector.plugin.maxDirtyNumber = 10`，`StdoutPluginCollector` 只打印前 N 条脏记录，避免脏数据风暴打爆日志。writer 侧另有独立的 `dumpRecordLimit`（`needToDumpRecord()`）。
+
+> **搬到 DBX**：迁移任务配置里加 `errorLimit: { record: N, percentage: P }`，语义与优先级照抄。脏数据落到独立的表/文件而不是日志，但**保留"只详细打印前 N 条"**这个防风暴设计。
+
+### 5.2 批量失败 → 逐条重试的降级写入
+
+`CommonRdbmsWriter.Task#doBatchInsert`（[链接](https://github.com/alibaba/DataX/blob/master/plugin-rdbms-util/src/main/java/com/alibaba/datax/plugin/rdbms/writer/CommonRdbmsWriter.java)）：
+
+```java
+try {
+    connection.setAutoCommit(false);
+    ... addBatch(); executeBatch(); connection.commit();
+} catch (SQLException e) {
+    LOG.warn("回滚此次写入, 采用每次写入一行方式提交. 因为:" + e.getMessage());
+    connection.rollback();
+    doOneInsert(connection, buffer);   // 逐条 autoCommit=true 重放，失败的那条进脏数据
+}
+```
+
+这是很聪明的一招：**批量写快，但批量失败无法定位是哪一行；回滚后逐条重放，就把"整批失败"降级成"精确到行的脏数据"**，其余行仍然写入。代价只有出错批次的一次重放。
+
+> **搬到 DBX**：JDBC Sink 端（无论是 Confluent JDBC Connector 还是自研 writer）遇到批量失败时，不要整批丢/整任务停，走同样的"回滚 → 逐条 → 定位脏行 → 计入 errorLimit"。**注意坑**：`doOneInsert` 里对每条都 `preparedStatement.clearParameters()` 放在 `finally`，漏了会串参数。
+
+### 5.3 任务结束的统计块 —— 直接作为 DBX 进度/校验展示的模板
+
+`JobContainer#logStatistics` 输出的字段（[源码](https://github.com/alibaba/DataX/blob/master/core/src/main/java/com/alibaba/datax/core/job/JobContainer.java)）：
+
+```
+任务启动时刻 / 任务结束时刻 / 任务总计耗时(s) / 任务平均流量(B/s)
+记录写入速度(rec/s) / 读出记录总数 / 读写失败总数
+```
+
+值得注意的两点：
+- 它给的是**"读出记录总数" + "读写失败总数"**，而不是"写入成功数"。这在校验上是不够的——用户真正想知道的是"源 N 行，目标 M 行，差多少"。DataX 这里是**反面教材**：作业成功但静默丢行（§3.3）时，"读出记录总数"看起来完全正常。
+- Transformer 的三个计数（成功/失败/过滤）只在非零时才打印，避免噪音。这个"零值不展示"的小习惯值得学。
+
+> **搬到 DBX**：至少输出 `源行数 / 已读 / 已写成功 / 脏数据数 / 跳过数 / 耗时 / 速率`，**且"已写成功"必须来自目标端确认而不是发送端计数**。这正是 DataX 缺的那一格，也是 DBX 校验功能的立足点。
+
+### 5.4 channel 并发模型
+
+`core/src/main/java/com/alibaba/datax/core/transport/channel/Channel.java` 类注释就一句话：*"统计和限速都在这里"*。设计上把三件事收敛进同一个抽象：
+
+| 能力 | 参数（`core.json`） | 默认 |
+| --- | --- | --- |
+| 并发度 | `core.container.taskGroup.channel` | 5 |
+| 队列深度（条） | `core.transport.channel.capacity` | 512 |
+| 队列深度（字节） | `core.transport.channel.byteCapacity` | 64MB |
+| 字节限速 | `core.transport.channel.speed.byte`（bps） | -1（关） |
+| 记录限速 | `core.transport.channel.speed.record`（tps） | -1（关） |
+| 限速采样间隔 | `core.transport.channel.flowControlInterval` | 20ms |
+
+关键设计：**并发度不是直接配的，而是由限速反推的**。`JobContainer#adjustChannelNumber()` 根据全局 `byte`/`record` 限速与单 channel 限速算出 `needChannelNumber`，再 `doReaderSplit(needChannelNumber)`。也就是说用户表达的是"我允许占多少带宽"，框架决定开几个并发——比让用户直接猜并发数好。
+
+限速在 channel 层做（`flowControlInterval` 周期性比较 `currentCommunication`/`lastCommunication` 并 sleep），**读写两侧共享同一个背压点**，不需要 reader/writer 各自实现限流。
+
+> **搬到 DBX**：Kafka 天然提供了缓冲和背压，所以 channel 的"队列"部分不用抄。值得抄的是**(a) 用"带宽/行速上限"表达意图、由系统反推并发**；**(b) 双维度限速（字节 + 行数）**——只限行数遇到宽表会打爆源库，只限字节遇到窄表会并发不足；**(c) 限速采样间隔要可配**（20ms 这种量级）。
+
+### 5.5 `splitPk` 单表分片读取 —— 重点：它怎么做的，以及有哪些坑
+
+源码：`plugin-rdbms-util/.../reader/util/SingleTableSplitUtil.java` 与 `ReaderSplitUtil.java`。
+
+**做法（四步）**：
+1. **算分片数**：`eachTableShouldSplittedNumber = ceil(channel数 / 表数)`；**单表时再乘 `splitFactor`（默认 5）**。注释解释了这个魔数的来历——早期是 `×2+1`，`+1` 导致长尾，后来改成 `×5` 并可通过 `splitFactor` 配置。即：**故意切得比并发数多，用小任务填平长尾**。
+2. **取范围**：`SELECT MIN(splitPk), MAX(splitPk) FROM table [WHERE ...]`（`genPKRangeSQL`）。
+3. **等分**：`RdbmsRangeSplitWrap.splitAndWrap(min, max, num, pkName)`，对整型用 `BigInteger` 均分成 `[a,b)` 区间；对字符串按字符序均分。
+4. **拼 SQL**：每个分片一条 `SELECT col FROM t WHERE (原where AND) pk >= a AND pk < b`，**额外再生成一条 `pk IS NULL` 的分片**兜住空值行。
+
+**坑（这些是 DBX 做 v2 单表分片时必须规避的）**：
+
+1. **只支持单列、整型或字符串。** 浮点/日期/复合主键直接抛 `ILLEGAL_SPLIT_PK`。mysqlreader 文档更严：``目前splitPk仅支持整形数据切分，不支持浮点、字符串、日期等其他类型``——**文档与代码不一致**（代码里 `isStringType` 分支是存在的），说明字符串切分是不被推荐的路径。
+2. **字符串切分几乎必然数据倾斜。** 按字符码点等分 `['a...','z...']` 与实际数据分布毫无关系（UUID 尚可，业务编码则灾难）。
+3. **假设 PK 均匀分布。** MIN/MAX 等分对**有空洞的自增主键**（大量删除过、或分库分表后 ID 段稀疏）会切出大量空分片和少数超大分片。DataX 没有任何采样或直方图矫正。
+4. **`SELECT MIN/MAX` 本身可能很贵。** 代码里专门为 OceanBase 写了绕过（*"OceanBase 对 `SELECT MIN(%s),MAX(%s)` 没有做查询改写，会进行全表扫描"*），说明这不是理论担忧。MySQL InnoDB 上单列索引的 MIN/MAX 很快，但**带 `where` 条件时优化器可能退化成全扫**。
+5. **`pk IS NULL` 分片是全表扫描。** 它无法走范围索引，且在主键上永远返回 0 行——纯粹的浪费。只有 `splitPk` 用了可空的非主键列时才有意义。
+6. **分片之间没有一致性快照。** 各分片是**独立的连接、独立的事务、不同的时刻**发起查询。源库在迁移期间有写入的话，分片之间会看到不一致的数据（丢行/重行都可能）。DataX 完全不处理这个问题——它默认场景是"离线、源库静止"。
+7. **切分数与最终 task 数不等。** 注释明写 *"最终切分份数不一定等于 eachTableShouldSplittedNumber"*、*"向上取整可能和 adviceNumber 没有比例关系了"*。做容量规划时不能假设 task 数 = channel 数。
+
+> **对 DBX v1 排除单表分片这个决定的评估**：**决定是对的**。上面 7 条里，第 6 条（跨分片一致性快照）是根本性的——要做对必须用 `REPEATABLE READ` + 单一事务/一致性快照点（MySQL 可用 `FLUSH TABLES WITH READ LOCK` 取 GTID/binlog 位点后各连接 `START TRANSACTION WITH CONSISTENT SNAPSHOT`），这是一个独立的、有分量的设计任务，不该塞进 v1。
+>
+> **v2 做的时候的规避清单**：(a) 只支持整型单列主键，字符串一律不做；(b) 用采样（如 `NTILE` 或按索引页采样）替代 MIN/MAX 等分，或至少用"按行数偏移取边界值"；(c) 一致性快照必须先于分片确定；(d) 分片数 = 并发数 × 小倍数（DataX 用 5，可作起点）且倍数可配；(e) 去掉无意义的 `IS NULL` 分片，改成"仅当 splitPk 可空时才生成"；(f) 分片边界与实际读到的行数要作为进度/校验元数据落库。
+
+---
+
+## 6. 自动建表：DataX 生态里有人解决过吗？
+
+**框架层：没有。** 结论及证据已在 §1.1 与 §4.3 给出，汇总一下：
+
+| 层次 | 实现 | 状态 |
+| --- | --- | --- |
+| DataX 本体 | 无 DDL 生成，writer 依赖目标表已存在（`calcWriteRecordSql` 读目标表 metadata） | 明确不做。[#1032](https://github.com/alibaba/DataX/issues/1032) 回复"不能" |
+| `preSql` workaround | 用户自己在 `preSql` 写 `CREATE TABLE IF NOT EXISTS` | 可行但需手写每张表的 DDL；且有 [#880 「preSql 不支持执行 DDL」](https://github.com/alibaba/DataX/issues/880) 这类坑 |
+| 社区自助方案 | [#972](https://github.com/alibaba/DataX/issues/972) 的官方式回答："自己写个 JDBC 查元数据表拿列名和类型，再替换建表语句模板" | 就是让用户自己造 DBX 要造的那个轮子 |
+| datax-web | README 把"表结构同步"列在**后续规划**；[PR #338](https://github.com/WeiYe-Jing/datax-web/pull/338) 只是批量构建时从 Hive 建表语句读字段信息填进 JSON——是**读源端 DDL 做字段映射**，不是**在目标端建表** | 未实现 |
+| Addax | 仓库检索 `autoCreateTable` / `createTable` 命中 0 | 未实现 |
+| DataWorks 数据集成（闭源） | "整库迁移/一键全增量"：目标库自动建表 + 自动建任务 + 自动启动 + 分步重试 | 已实现，**不开源** |
+
+**为什么没人在开源层做成**——两个结构性原因，DBX 必须正面回答：
+1. **自动建表需要"逻辑类型"信息，而 DataX 的 Record 只有 6 种物理类型。** 拿到一个 `DoubleColumn` 无法反推该建 `numeric(10,2)` 还是 `double precision`。DataX 的类型系统从根上就不支持这件事——这也解释了为什么它"按设计不做"。
+2. **建表还需要列以外的东西**：主键、唯一约束、索引、自增/序列、默认值、NOT NULL、注释、字符集/排序规则。这些都不在数据流里，必须走**独立的 schema 读取通道**（`information_schema`）。
+
+> **对 DBX 的含义（本票最有力的结论）**：DBX 选 Kafka + Connect 路线时，`ConnectSchema` 的 `name`/`parameters` 恰好提供了第 1 点缺的逻辑类型层；而"独立的 schema 读取 → 类型映射 → DDL 生成"这条通道是 DBX 的核心增量，DataX 生态在开源侧从未有人做出来。**这条路是真空地带，不是重复造轮子。**
+
+---
+
+## 7. 给 DBX 的行动项汇总
+
+| # | 行动项 | 来源 | 建议优先级 |
+| --- | --- | --- | --- |
+| 1 | `errorLimit` 双阈值（record 绝对数 + percentage，record 优先）+ 脏数据采样上限 | §5.1 | 高（v1） |
+| 2 | 统计输出必须区分"已读 / 已写成功（目标端确认）/ 脏数据 / 跳过"，不要抄 DataX 只报"读出总数" | §5.3 | 高（v1） |
+| 3 | 超 20MB 的行必须**显式失败并前置探测**，绝不静默丢弃 | §3.3/§3.4 | 高（v1） |
+| 4 | DECIMAL 的 precision/scale 取自 `information_schema`，禁止采样推断 | §2.3 | 高（v1） |
+| 5 | 高精度时间列用微秒级逻辑类型或字符串直通，不要落进毫秒基底 | §2.2/§2.3 | 高（v1） |
+| 6 | 未知/不可映射类型定义带标注的降级通道（不要 `default: throw`） | §2.3 | 中（v1） |
+| 7 | 批量写失败 → 回滚 → 逐条重放定位脏行 | §5.2 | 中（v1） |
+| 8 | 限速用"字节 + 行数"双维度表达，由系统反推并发度 | §5.4 | 中（v1/v2） |
+| 9 | 单表分片按 §5.5 的规避清单实现（一致性快照先行、只整型、采样切分、分片数 = 并发 × 倍数） | §5.5 | v2 |
+| 10 | 并发预算按表**大小**分配而非表数量平摊（DataX 的长尾问题） | §4.1 | v2 |
+
