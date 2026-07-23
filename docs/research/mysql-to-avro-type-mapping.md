@@ -109,3 +109,37 @@
 | `BIT(1)` | `Types.BIT` | `INT8` | `int` | `boolean` 或 `smallint` | 语义丢失 | — | `MysqlType.BIT`；`case Types.BIT` |
 | `BIT(n)` 2≤n≤8 | `Types.BIT` | `INT8` | `int` | `smallint` | **值 128–255 静默变负数**（`(byte)` 截断） | `jdbcCompliantTruncation` | `ByteValueFactory.createFromBit()` |
 | `BIT(n)` n>8 | `Types.BIT` | `INT8` | `int` | — **v1 不支持** | 值 ≥256 抛 `NumberOutOfRange`（默认） | 同上 | 同上 |
+
+### 2.2 字符与二进制
+
+`addFieldToSchema()` 把 CHAR/VARCHAR/LONGVARCHAR/NCHAR/NVARCHAR/LONGNVARCHAR/CLOB/NCLOB/
+DATALINK/SQLXML 合并到同一分支 → 一律 `STRING`；BINARY/BLOB/VARBINARY/LONGVARBINARY
+一律 `BYTES`。**长度被显式丢弃**（源码注释："Some of these types will have fixed size,
+but we drop this from the schema conversion since only fixed byte arrays can have a fixed size"）。
+
+| MySQL 类型 | Connector/J JDBC 类型 | Connect Schema | Avro | 推荐 PG 15 落点 | 有损风险 | 影响参数 | 来源 |
+|---|---|---|---|---|---|---|---|
+| `CHAR(M)` | `Types.CHAR` | `STRING` | `string` | `char(M)`（保尾部空格语义）或 `varchar(M)` | MySQL 检索 `CHAR` 会去尾部空格，PG `char(n)` 比较时忽略尾空格 —— 语义近似但不等价 | `padCharsWithSpace` | `MysqlType.CHAR` |
+| `VARCHAR(M)` | `Types.VARCHAR` | `STRING` | `string` | `varchar(M)` 或 `text` | 无（M 两边都按字符计） | `characterEncoding` | `MysqlType.VARCHAR`；MySQL 8.0 手册 11.3.2；PG 15 手册 8.3 |
+| `TINYTEXT` | `Types.VARCHAR` | `STRING` | `string` | `text` | 无 | — | `MysqlType.TINYTEXT` |
+| `TEXT` / `MEDIUMTEXT` / `LONGTEXT` | `Types.LONGVARCHAR` | `STRING` | `string` | `text` | `LONGTEXT` 最大 4 GiB，受 Kafka `max.request.size`/`message.max.bytes` 限制而非类型限制 | — | `MysqlType.TEXT/MEDIUMTEXT/LONGTEXT` |
+| `ENUM('a','b',…)` | `Types.CHAR`（`getColumnTypeName`=`CHAR`） | `STRING` | `string` | `text` + `CHECK (col IN (…))` | 取值集合约束丢失；**Avro 不是 `enum` 类型** | — | `MysqlType.ENUM`；Connector/J 类型转换表 |
+| `SET('a','b',…)` | `Types.CHAR` | `STRING` | `string` | `text`（值形如 `"a,b"`）+ `CHECK` | 集合语义丢失，退化成逗号分隔串 | — | `MysqlType.SET` |
+| `JSON` | **`Types.LONGVARCHAR`** | `STRING` | `string` | **`jsonb`**（Sink 自动 `?::jsonb`）或 `text` | JSON 有效性不再校验；`jsonb` 会重排 key、去重复 key、丢失空白（若需字节级保真用 `json` 或 `text`） | — | `MysqlType.JSON`；`PostgreSqlDatabaseDialect.valueTypeCast()`（见 #4 §结论 8） |
+| `BINARY(M)` | `Types.BINARY` | `BYTES` | `bytes` | `bytea` | MySQL `BINARY` 右侧补 `0x00` 到 M；PG `bytea` 不补 → 往返不等长 | — | `MysqlType.BINARY` |
+| `VARBINARY(M)` / `TINYBLOB` | `Types.VARBINARY` | `BYTES` | `bytes` | `bytea` | 无 | — | `MysqlType.VARBINARY/TINYBLOB` |
+| `BLOB` / `MEDIUMBLOB` / `LONGBLOB` | `Types.LONGVARBINARY` | `BYTES` | `bytes` | `bytea` | 大对象受 Kafka 消息大小限制；`columnConverterFor` 的 `case Types.BLOB` 对 >`Integer.MAX_VALUE` 抛 `IOException`（但 MySQL 走 LONGVARBINARY 分支 `rs.getBytes()`，整块入堆内存） | `useBlobToStoreUTF8OutsideBMP`, `blobsAreStrings`, `functionsNeverReturnBlobs` | `MysqlType.BLOB` 等 |
+| `GEOMETRY` 及子类型 | `Types.BINARY` | `BYTES` | `bytes` | **v1 不支持** | 值是 MySQL 内部格式（4 字节 SRID + WKB），直接落 `bytea` 无法被 PostGIS 识别 | — | `MysqlType.GEOMETRY` |
+| `VECTOR(M)`（8.4+） | `Types.LONGVARBINARY` | `BYTES` | `bytes` | **v1 不支持**（8.0 无此类型） | — | — | `MysqlType.VECTOR` |
+
+**utf8mb4 下的长度语义（关键澄清）**
+
+- MySQL：`VARCHAR(M)` 的 M 是**字符**数，最大 65,535 **字节**行内限制，
+  utf8mb4 下 M 上限约 16,383（[MySQL 8.0 手册 11.3.2 / 11.7](https://dev.mysql.com/doc/refman/8.0/en/char.html)）。
+- PostgreSQL 15：`varchar(n)` / `char(n)` 的 n 也是**字符**数，
+  且「不管字符集」（[PG 15 手册 8.3](https://www.postgresql.org/docs/15/datatype-character.html)）。
+- **结论：`VARCHAR(255)` → `varchar(255)` 是安全的，不会因 utf8mb4 字节膨胀而截断。**
+  唯一注意点是 PG 单行超过约 2 KB 会走 TOAST（性能而非正确性）。
+- 但 **`CHAR(M) BINARY` / `VARCHAR(M) BINARY`（即 binary collation）会被 Connector/J
+  报成 `BINARY`/`VARBINARY`** → Connect `BYTES` 而非 `STRING`。DDL 生成器必须读
+  `information_schema.columns.character_set_name`：为 `binary` 时落 `bytea`，不能落 `text`。
