@@ -4,8 +4,24 @@
 > 场景约束：DBX v1 单机 Docker Compose，MySQL 8.0 → PostgreSQL 15 离线迁移，单行/单字段上限 **20MB**，Avro + Schema Registry，装箱调度导致 connector 频繁创建/删除。
 > 版本基线：Apache Kafka ≥ 3.6.0（沿用 #3 的结论），配置默认值取自 Kafka 4.x / Confluent Platform current 官方参考。
 
+## 结论摘要
+
+1. **20MB 业务数据全链路统一按 `26214400`（25 MiB）配**：`message.max.bytes` 管的是**压缩后的 record batch**、还要吃掉 Avro wire format 的 5 字节和一行里的其它列，20MB 直接对齐必炸；25 MiB 留出约 1.25x 余量。
+2. **broker / topic / producer / consumer 四层必须同时配，漏一层的症状完全不同**：producer 侧漏配在客户端本地就抛 `RecordTooLargeException`（根本到不了 broker）；broker/topic 侧漏配返回 `MESSAGE_TOO_LARGE`；**consumer 侧漏配不报错，只是退化成一次 fetch 一条**，表现为「慢得离谱但没有错误」——这是最难诊断的一档。
+3. **topic 级 `max.message.bytes` 优先于 broker 级，是对接客户自有 Kafka 时的唯一保险**；因此必须关掉 Connect 的自动建 topic（`topic.creation.enable=false`），由 DBX 显式建 topic 并带上该配置。
+4. **单机资源底线：8GB 内存起步、推荐 16GB / 4 核。** 堆分配 Kafka 2GB + Connect **4GB** + Schema Registry 512MB。Connect worker 是最吃堆的组件（官方区间 0.5–4GB，我们取上限），因为 20MB 记录全程驻留堆内且有 2–4 份拷贝。
+5. **`consumer.max.poll.records` 默认 500 是单机形态下的必炸项**：500 × 20MB = 10GB，大字段箱必须降到 **1**。它是 connector 级配置，所以「含大字段的表」与「全是小行的表」应当分箱——**这是装箱调度器的一条硬约束**。
+6. **connector 增删在单节点 distributed 下仍会触发 rebalance，但代价很小**：KIP-415 增量协作式 rebalance（AK 2.3+，默认 `sessioned`/`compatible`）只影响新增/移除的 task，不会停掉在跑的箱。估计耗时 100ms–数秒，主导项是 task 的 `start()` / graceful shutdown（`task.shutdown.graceful.timeout.ms` 默认 5s），**只要不显式设 `connect.protocol=eager` 就不会 stop-the-world**。调度器必须对 REST 的 **409 Conflict** 做退避重试。
+7. **仍选 distributed 而非 standalone**：standalone 没有 rebalance 开销，但 #3 的重跑流程依赖 `DELETE /connectors/{n}/offsets` 这类只在 distributed 下有意义的端点。单节点下三个内部 topic 的副本因子必须全设为 1。
+8. **磁盘：推荐规划值 = 最大单表数据量 × 2，且不少于 50GB。** 短 `retention.ms` 想生效必须同时调小 `segment.bytes`（256MiB）与 `segment.ms`（5 分钟）——**活跃 segment 永远不会被删**，这是「设了短保留期磁盘还在涨」的标准答案。更安全的做法是用箱大小兜底：单箱表数据量之和 ≤ 可用磁盘 × 0.6。
+9. **`retention.bytes` 在 sink 落后时会静默删掉未消费数据 = 目标库缺行，不是背压**。必须监控「sink committed offset < topic log start offset」并判定迁移失败。
+10. **单表单 topic 用 1 个分区**：跨表并行已足够压满单机，表内分区并行边际收益小却引入乱序风险；且 controller 负载与**分区总数**而非 topic 数成正比（KIP-599），500 表 ×12 分区 = 6000 次 mutation 会让建删 topic 明显变慢。分区只能增不能减。
+11. **错误采集以 `GET /connectors/{name}/status` 的 `trace` 为主**（含完整 `Caused by:` 链，纯 REST 最易采集），但它拿不到出错记录的 topic/partition/offset、也看不到被 `errors.tolerance=all` 跳过的错误；这两项由 **DLQ header（`__connect.errors.*`）** 补齐。DLQ 仅对 sink 有效，且单机下必须设 `errors.deadletterqueue.topic.replication.factor=1`（默认 3 会建不出来）并预建带 25MiB 上限的 DLQ topic。
+12. **`errors.log.include.messages` 绝对不要打开**：一条 20MB 记录会整条写进日志，既撑爆磁盘又把客户业务数据明文落盘。
+
 ## 目录
 
+0. [结论摘要](#结论摘要)
 1. [20MB 大消息全链路配置清单](#1-20mb-大消息全链路配置清单)
 2. [Avro / Schema Registry 的额外上限](#2-avro--schema-registry-的额外上限)
 3. [单机资源包络](#3-单机资源包络)
