@@ -357,3 +357,107 @@ DBX 的「错误翻译层」有三个信息源，完整度依次递减/互补。
 
 **建议的 DBX 采集策略**：轮询 `GET /connectors/{n}/status` 作为主状态源 → 命中 FAILED 时用 `trace` 做错误翻译 → 若配了 DLQ，起一个 consumer 读 DLQ header 补齐「哪一行、哪一阶段」→ worker/broker 日志作为兜底人工排查入口（不做自动解析）。
 
+---
+
+## 7. 可直接抄的 Docker Compose 片段
+
+> 前六节结论的落地版本。宿主机建议 **≥16GB 内存、4 核**；`26214400` = 25 MiB（§1.1 的 20MB + 余量）。
+
+```yaml
+services:
+  kafka:
+    image: apache/kafka:3.9.0            # ≥3.6.0（#3 的版本下限结论）
+    environment:
+      # --- KRaft 单节点：broker 与 controller 合并进程 ---
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      # --- 单节点必须全部降到 1，否则内部 topic 创建失败（§4.1）---
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      # --- 20MB 大消息（§1.2）---
+      KAFKA_MESSAGE_MAX_BYTES: 26214400       # 默认 1048588，不改则 RecordTooLargeException（broker 侧）
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 26214400 # RF=1 时不生效，防御性设置，成本为零
+      KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600  # 默认值即够；调小会导致 broker 静默断连
+      # --- topic 管理（§5）---
+      KAFKA_DELETE_TOPIC_ENABLE: "true"       # 默认 true，显式写死；清理流程依赖它
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false" # 关键：禁止自动建 topic，否则会用 1MB 默认上限建出来
+      KAFKA_NUM_PARTITIONS: 1                 # 单表单 topic 默认 1 分区，保序（§5.4）
+      KAFKA_LOG_SEGMENT_BYTES: 268435456      # 256MiB，让 retention 能真正回收（§5.2）
+      # --- 堆：Kafka 数据走 page cache，堆几乎不随数据量增长（§3.1）---
+      KAFKA_HEAP_OPTS: "-Xms2g -Xmx2g"
+    volumes:
+      - kafka-data:/var/lib/kafka/data       # 容量按 §5.3 公式估算，不少于 50GB
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.9.0
+    depends_on: [kafka]
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1   # 单节点必须为 1
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      # SR 只存 schema 文本，负载与表数量成正比而非数据量（§3.1）
+      SCHEMA_REGISTRY_HEAP_OPTS: "-Xms256m -Xmx512m"
+
+  connect:
+    image: confluentinc/cp-kafka-connect:7.9.0
+    depends_on: [kafka, schema-registry]
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_GROUP_ID: dbx-connect
+      CONNECT_CONFIG_STORAGE_TOPIC: dbx-connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: dbx-connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: dbx-connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1   # 单节点：三个内部 topic 都必须为 1（§4.1）
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      # --- rebalance：绝不能用 eager，否则每次开箱会 stop-the-world（§4.2）---
+      CONNECT_CONNECT_PROTOCOL: sessioned
+      CONNECT_SCHEDULED_REBALANCE_MAX_DELAY_MS: 30000  # 默认 300000；单 worker 重启后不必空等 5 分钟
+      CONNECT_CONNECTOR_CLIENT_CONFIG_OVERRIDE_POLICY: All  # 3.0+ 默认即 All，显式写死（§1.3）
+      CONNECT_TOPIC_CREATION_ENABLE: "false"  # 由 DBX 自建 topic，保证带上 max.message.bytes
+      # --- worker 级兜底：所有 connector 的 producer/consumer 都吃这份（§1.3）---
+      CONNECT_PRODUCER_MAX_REQUEST_SIZE: 26214400      # 漏配 → 本地抛 RecordTooLargeException，根本到不了 broker
+      CONNECT_PRODUCER_BUFFER_MEMORY: 134217728        # 默认 32MiB 只够 1 条在途大消息
+      CONNECT_PRODUCER_COMPRESSION_TYPE: zstd          # 降磁盘/网络；对已压缩 blob 无收益
+      CONNECT_PRODUCER_MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION: 1  # 限制在途堆占用 + 单分区严格保序
+      CONNECT_CONSUMER_MAX_PARTITION_FETCH_BYTES: 26214400  # 漏配不报错，只是退化成一次一条（最难诊断）
+      CONNECT_CONSUMER_FETCH_MAX_BYTES: 52428800       # 默认值即够
+      CONNECT_CONSUMER_MAX_POLL_RECORDS: 1             # 默认 500 → 500×20MB = 10GB，必然 OOM（§3.2）
+      CONNECT_CONSUMER_MAX_POLL_INTERVAL_MS: 900000    # 单条 20MB 写 PG 可能超默认 5 分钟
+      # --- 全套里最吃堆的组件（§3.1，官方区间 0.5–4GB 取上限）---
+      KAFKA_HEAP_OPTS: "-Xms2g -Xmx4g"
+    logging:                                  # 防日志写爆磁盘（§6.2）
+      driver: json-file
+      options: { max-size: "100m", max-file: "3" }
+
+volumes:
+  kafka-data:
+```
+
+**建 topic 时必须逐 topic 下发的配置**（DBX 平台代码负责，不在 compose 里）：
+
+```
+max.message.bytes=26214400   # 必须；topic 级优先于 broker 级，对接客户自有 Kafka 时是唯一保险
+retention.ms=3600000         # 1 小时
+retention.bytes=5368709120   # 5GiB/分区 兜底
+segment.bytes=268435456      # 256MiB，必须 ≥ max.message.bytes
+segment.ms=300000            # 5 分钟强制 roll，低流量表也能回收
+cleanup.policy=delete
+```
+
+**DLQ topic 单独预建**（§6.3 的两个坑）：`max.message.bytes=26214400` + 单节点 sink connector 配 `errors.deadletterqueue.topic.replication.factor=1`、`errors.deadletterqueue.context.headers.enable=true`、`errors.tolerance=all`。
+
