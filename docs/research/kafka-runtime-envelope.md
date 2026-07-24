@@ -461,3 +461,30 @@ cleanup.policy=delete
 
 **DLQ topic 单独预建**（§6.3 的两个坑）：`max.message.bytes=26214400` + 单节点 sink connector 配 `errors.deadletterqueue.topic.replication.factor=1`、`errors.deadletterqueue.context.headers.enable=true`、`errors.tolerance=all`。
 
+---
+
+## 8. 待验证项
+
+本报告的**配置项名称、默认值、语义、错误文本**均来自一手文档（已附 URL）。以下结论属于**文档推断或工程估计**，必须在 **#9（本地实验床）** 与 **#10（端到端原型）** 中实测确认。
+
+| # | 待验证结论 | 出处小节 | 建议在哪验 | 验证方法 |
+|---|---|---|---|---|
+| V1 | **25 MiB（`26214400`）的余量是否足够** —— 20MB blob + 其余列 + Avro + batch 框架的实际总字节 | §1.1 | #9 | 造一张含 20MB `LONGBLOB` + 若干宽列的表，跑通后用 `kafka-log-dirs`/`kafka-dump-log` 量实际 record batch 字节数 |
+| V2 | **§1.2 表里每一条「漏配后的错误文本」** —— 逐项故意漏配、抓实际异常字符串 | §1.2 | #9 | 8 个负例场景各跑一次，把 `trace` 原文归档为错误翻译层的测试夹具。**这是错误翻译层最有价值的产出** |
+| V3 | Connect worker **4GB 堆能撑几个并发大字段 task** —— §3.2 的「4 份拷贝」是估计，不是实测 | §3.2 | #9 | 逐步加 task 数直到 OOM，记录 GC 日志与堆直方图 |
+| V4 | **单节点 rebalance 的实际耗时量级**（本报告估计 100ms–数秒，官方无数据） | §4.2 | #9 | 连续创建/删除 20 个 connector，从 worker 日志的 rebalance 起止时间戳量测 |
+| V5 | **409 Conflict 的实际触发频率与退避策略** —— 连续开箱时多久会撞上 | §4.2 | #10 | 装箱调度器压测：并发提交 10 个箱，统计 409 比例 |
+| V6 | **单 worker 承载上限 ≤20 connector / ≤2×核数 task** —— 由官方经验法则推出，非实测 | §4.3 | #9 | 递增 connector 数，观察 rebalance 耗时、`status.storage.topic` 写入量、堆占用的拐点 |
+| V7 | **`DELETE topic` 后磁盘多久真正释放** —— 推断为「异步 + `file.delete.delay.ms` 1 分钟」 | §5.1 | #9 | 删 topic 后按秒轮询 `du`，量测实际释放延迟 |
+| V8 | **磁盘估算公式的 Avro 膨胀系数与 zstd 压缩率** —— 0.6–0.9 / 3–5x 是通用经验值，非本场景实测 | §5.3 | #10 | 用真实业务表跑，比对源库数据量与 Kafka 磁盘占用，回填系数 |
+| V9 | **sink 落后导致 retention 静默丢数据的检测方案是否可靠** —— 「committed offset < log start offset」的判定 | §5.3 | #10 | 人为让 sink 阻塞并把 retention 调到极短，确认能被检出而非静默少行 |
+| V10 | **JDBC sink 是否实现了 `ErrantRecordReporter`** —— 决定 `put()` 阶段失败能否进 DLQ | §6.3 | #9 | 造一条会在 `put()` 失败的记录（如类型不兼容），看它是否出现在 DLQ |
+| V11 | **`connector.client.config.override.policy` 的预检探测方式** —— 用 `validate` 端点探测客户 worker 是否禁用覆盖 | §1.3 | #10 | 把 worker 设成 `None`，确认 `PUT /connectors/{n}/config/validate` 返回可识别的策略违规信息 |
+| V12 | **Schema Registry 512MB 堆在几百张表规模下是否够** —— 官方未给数字，本报告为估计 | §3.1 | #9 | 注册 500 张表的 schema，观察 SR 堆占用 |
+
+**未在本报告覆盖、但相邻的问题**（可能需要独立研究票）：
+
+- Avro `bytes` 与 PostgreSQL `bytea` / `TEXT` 的类型映射与 20MB 写入性能（属于「大字段端到端配置规格」票的范畴）。
+- Kafka Connect **exactly-once source support**（AK 3.3+）在 bulk 全量迁移下是否值得开启 —— 会引入事务性 producer，改变 §3.2 的堆估算。
+- 对接**客户已有 Kafka/Connect** 时的能力探测清单（broker `message.max.bytes` 是否够、`delete.topic.enable`、override policy、可用磁盘）——本报告已零散提到，建议汇总成一张预检表。
+
