@@ -277,3 +277,83 @@ Kafka 磁盘需求 ≈ 单箱内最大表的数据量 × 复制因子(1) × Avro
 
 > Source 侧要点：分区数 > 1 时，JDBC source 若不指定消息 key，记录会被轮询分发到各分区，顺序即被打散。若要保留顺序又想多分区，必须**按主键做 key**，这样同一主键的记录仍落同一分区（前提是分区数不再变化）。
 
+---
+
+## 6. 错误信息可取得的接口
+
+DBX 的「错误翻译层」有三个信息源，完整度依次递减/互补。
+
+### 6.1 `GET /connectors/{name}/status` 的 `trace` 字段
+
+官方对该端点的描述：*"current status of the connector, including if it is running, failed, paused, etc., which worker it is assigned to, **error information if it has failed**, and the state of all its tasks."*
+
+响应结构（`connector` 与每个 `tasks[]` 元素各有独立状态）：
+
+```json
+{
+  "name": "dbx-box-07-sink",
+  "connector": { "state": "RUNNING", "worker_id": "connect:8083" },
+  "tasks": [
+    {
+      "id": 0,
+      "state": "FAILED",
+      "worker_id": "connect:8083",
+      "trace": "org.apache.kafka.connect.errors.ConnectException: Exiting WorkerSinkTask due to unrecoverable exception.\n\tat org.apache.kafka.connect.runtime.WorkerSinkTask.deliverMessages(...)\n\t... Caused by: org.apache.kafka.common.errors.RecordTooLargeException: The request included a message larger than the max message size the server will accept."
+    }
+  ]
+}
+```
+
+**完整度评估（对错误翻译层最关键的一节）**：
+
+| 能拿到 | 拿不到 |
+|---|---|
+| ✅ **完整的 Java 堆栈**（`trace` 是 `Throwable` 的完整 stack trace 字符串，含 `Caused by:` 链）—— 根因异常类名和消息都在里面 | ❌ **只有导致 task 进入 FAILED 的那一个异常**。`errors.tolerance=all` 下被容忍跳过的错误**不出现在 `trace` 里**（task 还是 RUNNING） |
+| ✅ 区分 connector 级失败 vs task 级失败（例如配置错误 → connector FAILED；数据错误 → task FAILED） | ❌ 拿不到出错记录的 topic/partition/offset —— `trace` 里通常没有，得去日志或 DLQ 头 |
+| ✅ `worker_id`，多 worker 时用于定位日志 | ❌ 历史错误。task 重启后 `trace` 被覆盖，只保留最近一次 |
+| ✅ 无需读文件，纯 REST，容器化部署下最易采集 | ❌ 状态来自 `status.storage.topic`，有**秒级延迟**；rebalance 期间可能读到 `UNASSIGNED` |
+
+> **给错误翻译层的建议**：以 `trace` 为主输入，按「最内层 `Caused by:` 的异常全限定类名 + 消息前缀」做规则匹配。§1.2 表里的每条错误文本都可以直接做成一条翻译规则。
+>
+> **注意 409**：rebalance 期间调 status 相关端点可能返回 **409 Conflict**（官方明确指出 restart task 时会），需退避重试，不要把 409 当成「connector 不存在」。
+
+### 6.2 worker 日志
+
+- **唯一能拿到「被容忍跳过的错误」的地方**（在没配 DLQ 时）。开 `errors.log.enable=true`（默认 `false`）后会 *"log details of each error and problem record's topic, partition, and offset"* —— **这正是 `trace` 缺失的定位信息**。
+- `errors.log.include.messages` 默认 **`false`**，*"preventing record keys, values, and headers from being written to log files"*。
+  **⚠️ DBX 绝对不要打开它**：一条 20MB 的记录会被整条写进日志，几条就撑爆磁盘，而且会把客户的业务数据（可能含敏感信息）明文落盘。
+- 只有 worker 日志能看到：broker 连接问题、`InvalidReceiveException`（那条只在 **broker** 日志里）、rebalance 过程、插件加载失败、OOM。
+- **单机部署下建议**：Compose 里给 connect 服务配 `logging: driver: json-file, options: {max-size: "100m", max-file: "3"}`，并把 broker 日志也纳入采集 —— §1.2 里 `socket.request.max.bytes` 那一档错误**只在 broker 日志里**，REST 和 DLQ 都看不到。
+
+### 6.3 DLQ topic
+
+依据 [KIP-298](https://cwiki.apache.org/confluence/display/KAFKA/KIP-298:+Error+Handling+in+Connect) 与 Confluent 文档：
+
+- **只对 sink connector 有效**（*"Dead Letter Queues (DLQs) are only applicable for sink connectors."*）。**source 侧没有 DLQ**，source 的错误只能靠 §6.1 + §6.2。
+- 需要同时设 `errors.tolerance=all` 与 `errors.deadletterqueue.topic.name=<topic>`，否则不生效。
+- `errors.deadletterqueue.context.headers.enable` 默认 **`false`**，**必须显式打开**，否则 DLQ 里只有原始 key/value/headers，**没有任何错误原因**。打开后所有 error context header 以 `__connect.errors.` 前缀写入，值均为 UTF-8 字符串，且**只在原记录没有同名 header 时才写入**：
+
+  `__connect.errors.topic`、`__connect.errors.partition`、`__connect.errors.offset`、`__connect.errors.connector.name`、`__connect.errors.task.id`、`__connect.errors.stage`（如 `VALUE_CONVERTER`）、`__connect.errors.class.name`、`__connect.errors.exception.class.name`、`__connect.errors.exception.message`、`__connect.errors.exception.stacktrace`
+
+  **这是三个来源里唯一能同时给出「哪一条记录」+「哪一阶段」+「完整堆栈」的**，也是唯一可用于**定位到具体行并重放**的来源。
+- **单机部署的两个必坑**：
+  1. `errors.deadletterqueue.topic.replication.factor` **默认为 3**。单节点 Kafka 上 DLQ topic 会创建失败，sink task 直接 FAILED。**必须设 `errors.deadletterqueue.topic.replication.factor=1`。**
+  2. DLQ topic 若由 Connect 自动创建，会用 broker 默认的 `max.message.bytes`（1MB）。20MB 的坏记录写不进去 → sink task 以 `RecordTooLargeException` 失败（§1.2）。**DBX 应当预先自建 DLQ topic 并设好 `max.message.bytes=26214400`。**
+- `put()` 阶段的失败早期不进 DLQ（KIP-298 原始限制，因为 `put()` 批处理无法定位是哪条记录）；后来由 `ErrantRecordReporter` API 补齐，Connect 保证这类记录在 `SinkTask.preCommit()` 之前、即 offset 提交之前写入 error topic。**但是否使用取决于具体 sink connector 是否实现了该 API** —— 选型 JDBC sink 时需要验证。
+- **DLQ 会放大磁盘占用**：坏记录原样落一份 + 完整堆栈 header。对 20MB 大字段场景，DLQ topic 也要配 retention（同 §5.2）。
+
+### 6.4 三者对照
+
+| 需要回答的问题 | status `trace` | worker 日志 | DLQ |
+|---|:--:|:--:|:--:|
+| 为什么 task 挂了 | ✅ 最直接 | ✅ | ❌（挂了就没 DLQ） |
+| 完整堆栈 | ✅ | ✅ | ✅（header） |
+| 哪一条记录出错 | ❌ | ⚠️ 需开 `errors.log.enable` | ✅ topic/partition/offset |
+| 哪一阶段（converter/transform/put） | ⚠️ 从堆栈推断 | ⚠️ | ✅ `__connect.errors.stage` |
+| 被容忍跳过的错误 | ❌ | ✅ | ✅ |
+| source connector 的错误 | ✅ | ✅ | ❌ 不适用 |
+| broker 层连接/协议错误 | ❌ | ✅ 仅 broker 日志 | ❌ |
+| 可编程采集难度 | 最低（REST/JSON） | 高（需日志采集） | 中（需起 consumer） |
+
+**建议的 DBX 采集策略**：轮询 `GET /connectors/{n}/status` 作为主状态源 → 命中 FAILED 时用 `trace` 做错误翻译 → 若配了 DLQ，起一个 consumer 读 DLQ header 补齐「哪一行、哪一阶段」→ worker/broker 日志作为兜底人工排查入口（不做自动解析）。
+
