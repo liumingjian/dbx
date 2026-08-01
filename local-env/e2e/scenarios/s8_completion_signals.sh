@@ -16,15 +16,17 @@
 source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"
 init_scenario s8 "从创建到读完的完整信号序列"
 
-TABLE=t_types
-TOPIC="${TOPIC_PREFIX}${TABLE}"
-SRC=s8-src; SINK=s8-sink
+TABLE=t_types_s8
+TOPIC="dbx.s8.t_types"
+SRC=s8-src-v2; SINK=s8-sink-v2
 
 cleanup_link "$SRC" "$SINK" "$TOPIC" "$TABLE"
 create_topic "$TOPIC"
-psqlf < "$E2E_DIR/ddl/t_types.sql" >> "$(art)/run.log" 2>&1
+psqlq "CREATE TABLE $TABLE (
+         id integer PRIMARY KEY,
+         c_decimal numeric(38,10))" >> "$(art)/run.log" 2>&1
 
-SRC_COUNT=$(mysqlq "SELECT count(*) FROM $TABLE" | tr -d ' \r')
+SRC_COUNT=$(mysqlq "SELECT count(*) FROM t_types" | tr -d ' \r')
 finding "源表行数（判定的分母）：**$SRC_COUNT**"
 
 T0=$SECONDS
@@ -46,8 +48,8 @@ put_connector "$SRC" <<JSON
   "connection.url": "jdbc:mysql://mysql:3306/dbx_src?useSSL=false&allowPublicKeyRetrieval=true",
   "connection.user": "dbx", "connection.password": "dbx",
   "mode": "incrementing", "incrementing.column.name": "id",
-  "table.whitelist": "$TABLE",
-  "topic.prefix": "$TOPIC_PREFIX",
+  "query": "SELECT id, c_decimal FROM t_types",
+  "topic.prefix": "$TOPIC",
   "poll.interval.ms": 5000, "batch.max.rows": 100, "tasks.max": 1
 }
 JSON

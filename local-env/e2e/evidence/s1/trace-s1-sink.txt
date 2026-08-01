@@ -1,0 +1,41 @@
+org.apache.kafka.connect.errors.ConnectException: Exiting WorkerSinkTask due to unrecoverable exception.
+	at org.apache.kafka.connect.runtime.WorkerSinkTask.deliverMessages(WorkerSinkTask.java:636)
+	at org.apache.kafka.connect.runtime.WorkerSinkTask.poll(WorkerSinkTask.java:345)
+	at org.apache.kafka.connect.runtime.WorkerSinkTask.iteration(WorkerSinkTask.java:247)
+	at org.apache.kafka.connect.runtime.WorkerSinkTask.execute(WorkerSinkTask.java:216)
+	at org.apache.kafka.connect.runtime.WorkerTask.doRun(WorkerTask.java:226)
+	at org.apache.kafka.connect.runtime.WorkerTask.run(WorkerTask.java:281)
+	at org.apache.kafka.connect.runtime.isolation.Plugins.lambda$withClassLoader$1(Plugins.java:238)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source)
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: org.apache.kafka.connect.errors.ConnectException: java.sql.SQLException: Exception chain:
+java.sql.BatchUpdateException: Batch entry 0 INSERT INTO "dbx_target"."public"."t_types" ("id","c_decimal","c_tinyint1","c_bool","c_smallint_u","c_int_u","c_bigint","c_bigint_u","c_double","c_float","c_bit1","c_date","c_datetime6","c_timestamp6","c_time6","c_year","c_char","c_varchar","c_varbinary","c_enum","c_set","c_json","c_nullable") VALUES (('1'::int4),('123.4567890123'::numeric),('1'::int2),('1'::int2),('100'::int4),('100000'::int8),('100000'::int8),('100000'::int8),('3.141592653589793'::double precision),('3.14159'::real),('1'::int2),('2026-07-24 +00'),('2026-07-24 10:30:00.123+00'),('2026-07-24 10:30:00.123+00'),('12:34:56.789+00'),('2026-01-01 +00'),('abcdefghij'),('æ™®é€šä¸­æ–‡'),'\xdeadbeef'::bytea,('medium'),('a,b'),('{"k": "v", "n": 1}')::json,('not null')) was aborted: ERROR: column "c_bit1" is of type boolean but expression is of type smallint
+  Hint: You will need to rewrite or cast the expression.
+  Position: 335  Call getNextException to see other errors in the batch.
+org.postgresql.util.PSQLException: ERROR: column "c_bit1" is of type boolean but expression is of type smallint
+  Hint: You will need to rewrite or cast the expression.
+  Position: 335
+org.postgresql.util.PSQLException: ERROR: column "c_bit1" is of type boolean but expression is of type smallint
+  Hint: You will need to rewrite or cast the expression.
+  Position: 335
+
+	at io.confluent.connect.jdbc.sink.JdbcSinkTask.put(JdbcSinkTask.java:133)
+	at org.apache.kafka.connect.runtime.WorkerSinkTask.deliverMessages(WorkerSinkTask.java:606)
+	... 11 more
+Caused by: java.sql.SQLException: Exception chain:
+java.sql.BatchUpdateException: Batch entry 0 INSERT INTO "dbx_target"."public"."t_types" ("id","c_decimal","c_tinyint1","c_bool","c_smallint_u","c_int_u","c_bigint","c_bigint_u","c_double","c_float","c_bit1","c_date","c_datetime6","c_timestamp6","c_time6","c_year","c_char","c_varchar","c_varbinary","c_enum","c_set","c_json","c_nullable") VALUES (('1'::int4),('123.4567890123'::numeric),('1'::int2),('1'::int2),('100'::int4),('100000'::int8),('100000'::int8),('100000'::int8),('3.141592653589793'::double precision),('3.14159'::real),('1'::int2),('2026-07-24 +00'),('2026-07-24 10:30:00.123+00'),('2026-07-24 10:30:00.123+00'),('12:34:56.789+00'),('2026-01-01 +00'),('abcdefghij'),('æ™®é€šä¸­æ–‡'),'\xdeadbeef'::bytea,('medium'),('a,b'),('{"k": "v", "n": 1}')::json,('not null')) was aborted: ERROR: column "c_bit1" is of type boolean but expression is of type smallint
+  Hint: You will need to rewrite or cast the expression.
+  Position: 335  Call getNextException to see other errors in the batch.
+org.postgresql.util.PSQLException: ERROR: column "c_bit1" is of type boolean but expression is of type smallint
+  Hint: You will need to rewrite or cast the expression.
+  Position: 335
+org.postgresql.util.PSQLException: ERROR: column "c_bit1" is of type boolean but expression is of type smallint
+  Hint: You will need to rewrite or cast the expression.
+  Position: 335
+
+	at io.confluent.connect.jdbc.sink.JdbcSinkTask.getAllMessagesException(JdbcSinkTask.java:167)
+	at io.confluent.connect.jdbc.sink.JdbcSinkTask.put(JdbcSinkTask.java:112)
+	... 12 more

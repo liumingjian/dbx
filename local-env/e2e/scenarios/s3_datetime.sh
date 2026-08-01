@@ -20,7 +20,7 @@ for TZ in UTC Asia/Shanghai; do
   TAG="${TZ//\//-}"
   PREFIX="dbx.s3.${TAG}."
   TOPIC="${PREFIX}t_types"
-  TABLE="t_types_s3_${TAG//-/_}"
+  TABLE="t_types_s3_$(printf '%s' "$TAG" | tr '[:upper:]-' '[:lower:]_')"
   SRC="s3-src-$TAG"; SINK="s3-sink-$TAG"
 
   cleanup_link "$SRC" "$SINK" "$TOPIC" "$TABLE"

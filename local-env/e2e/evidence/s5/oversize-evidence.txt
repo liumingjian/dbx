@@ -1,0 +1,3 @@
+420:connect-1  | 	max.request.size = 26214400
+1404:connect-1  | org.apache.kafka.common.errors.RecordTooLargeException: The message is 26214526 bytes when serialized which is larger than 26214400, which is the value of the max.request.size configuration.
+1442:connect-1  | Caused by: org.apache.kafka.common.errors.RecordTooLargeException: The message is 26214526 bytes when serialized which is larger than 26214400, which is the value of the max.request.size configuration.

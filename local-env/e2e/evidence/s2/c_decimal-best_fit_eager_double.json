@@ -1,0 +1,1 @@
+{"name":"c_decimal","type":["null",{"type":"bytes","scale":10,"precision":38,"connect.version":1,"connect.parameters":{"scale":"10","connect.decimal.precision":"38"},"connect.name":"org.apache.kafka.connect.data.Decimal","logicalType":"decimal"}],"default":null}

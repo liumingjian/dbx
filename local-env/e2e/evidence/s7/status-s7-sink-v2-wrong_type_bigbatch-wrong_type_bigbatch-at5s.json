@@ -1,0 +1,1 @@
+{"name":"s7-sink-v2-wrong_type_bigbatch","connector":{"state":"RUNNING","worker_id":"connect:8083"},"tasks":[{"id":0,"state":"RUNNING","worker_id":"connect:8083"}],"type":"sink"}

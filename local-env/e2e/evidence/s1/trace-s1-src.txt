@@ -1,0 +1,47 @@
+org.apache.kafka.connect.errors.ConnectException: Error while polling for records
+	at io.confluent.connect.jdbc.util.RecordQueue.poll(RecordQueue.java:381)
+	at io.confluent.connect.jdbc.source.JdbcSourceTask.poll(JdbcSourceTask.java:557)
+	at org.apache.kafka.connect.runtime.AbstractWorkerSourceTask.poll(AbstractWorkerSourceTask.java:466)
+	at org.apache.kafka.connect.runtime.AbstractWorkerSourceTask.execute(AbstractWorkerSourceTask.java:354)
+	at org.apache.kafka.connect.runtime.WorkerTask.doRun(WorkerTask.java:226)
+	at org.apache.kafka.connect.runtime.WorkerTask.run(WorkerTask.java:281)
+	at org.apache.kafka.connect.runtime.AbstractWorkerSourceTask.run(AbstractWorkerSourceTask.java:79)
+	at org.apache.kafka.connect.runtime.isolation.Plugins.lambda$withClassLoader$1(Plugins.java:238)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source)
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: org.apache.kafka.connect.errors.ConnectException: Error while processing table querier
+	at io.confluent.connect.jdbc.source.TableQuerierProcessor.handleThrowable(TableQuerierProcessor.java:194)
+	at io.confluent.connect.jdbc.source.TableQuerierProcessor.process(TableQuerierProcessor.java:89)
+	at io.confluent.connect.jdbc.util.RecordQueue.lambda$createLoggingSupplier$0(RecordQueue.java:474)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncSupply.run(Unknown Source)
+	... 3 more
+Caused by: org.apache.kafka.connect.errors.DataException: java.sql.SQLDataException: Value '18,446,744,073,709,551,615' is outside of valid range for type java.lang.Long
+	at io.confluent.connect.jdbc.source.TimestampIncrementingTableQuerier.extractRecord(TimestampIncrementingTableQuerier.java:247)
+	at io.confluent.connect.jdbc.source.TableQuerierProcessor.processQuerier(TableQuerierProcessor.java:112)
+	at io.confluent.connect.jdbc.source.TableQuerierProcessor.process(TableQuerierProcessor.java:76)
+	... 5 more
+Caused by: java.sql.SQLDataException: Value '18,446,744,073,709,551,615' is outside of valid range for type java.lang.Long
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:106)
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:89)
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:81)
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:55)
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:65)
+	at com.mysql.cj.jdbc.exceptions.SQLExceptionsMapping.translateException(SQLExceptionsMapping.java:84)
+	at com.mysql.cj.jdbc.result.ResultSetImpl.getObject(ResultSetImpl.java:1403)
+	at com.mysql.cj.jdbc.result.ResultSetImpl.getLong(ResultSetImpl.java:878)
+	at io.confluent.connect.jdbc.dialect.GenericDatabaseDialect.lambda$columnConverterFor$9(GenericDatabaseDialect.java:1454)
+	at io.confluent.connect.jdbc.source.SchemaMapping$FieldSetter.setField(SchemaMapping.java:159)
+	at io.confluent.connect.jdbc.source.TimestampIncrementingTableQuerier.extractRecord(TimestampIncrementingTableQuerier.java:241)
+	... 7 more
+Caused by: com.mysql.cj.exceptions.NumberOutOfRange: Value '18,446,744,073,709,551,615' is outside of valid range for type java.lang.Long
+	at com.mysql.cj.result.LongValueFactory.createFromBigInteger(LongValueFactory.java:45)
+	at com.mysql.cj.result.LongValueFactory.createFromBigInteger(LongValueFactory.java:35)
+	at com.mysql.cj.protocol.a.MysqlTextValueDecoder.decodeUInt8(MysqlTextValueDecoder.java:125)
+	at com.mysql.cj.protocol.result.AbstractResultsetRow.decodeAndCreateReturnValue(AbstractResultsetRow.java:105)
+	at com.mysql.cj.protocol.result.AbstractResultsetRow.getValueFromBytes(AbstractResultsetRow.java:235)
+	at com.mysql.cj.protocol.a.result.TextBufferRow.getValue(TextBufferRow.java:122)
+	at com.mysql.cj.jdbc.result.ResultSetImpl.getObject(ResultSetImpl.java:1311)
+	... 11 more

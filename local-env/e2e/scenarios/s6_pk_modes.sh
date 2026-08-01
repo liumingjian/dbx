@@ -96,7 +96,20 @@ snapshot_status "$SRC" cpk; snapshot_status "$SINK" cpk
 finding "复合主键表 \`insert.mode=upsert\` + \`pk.mode=record_value\`：落库 **$N / 4** 行"
 psqlq "SELECT tenant_id, order_no, amount FROM $TABLE ORDER BY 1,2" > "$(art)/cpk-rows.txt"
 finding "落库内容：$(tr '\n' ' | ' < "$(art)/cpk-rows.txt")"
-finding "重跑幂等性判定：upsert 在 bulk 重复投递下应保持 4 行不增长 —— 这正是 #13 「重跑前是否必须清空目标表」的分水岭"
+
+# 显式重启 bulk Source 触发第二次整表投递；upsert 应吸收重复记录，目标仍保持 4 行。
+BEFORE_END=$(topic_end_offset "$TOPIC")
+curl -sS -X POST "$CONNECT/connectors/$SRC/restart?includeTasks=true&onlyFailed=false" >/dev/null
+for _ in $(seq 1 30); do
+  AFTER_END=$(topic_end_offset "$TOPIC")
+  [ "$AFTER_END" -ge $((BEFORE_END + 4)) ] && break
+  sleep 1
+done
+sleep 5
+AFTER_ROWS=$(psqlq "SELECT count(*) FROM $TABLE" | tr -d ' ')
+printf 'before_topic_end=%s\nafter_topic_end=%s\nafter_pg_rows=%s\n' \
+  "$BEFORE_END" "${AFTER_END:-$BEFORE_END}" "$AFTER_ROWS" > "$(art)/cpk-replay.txt"
+finding "显式重启 bulk Source 后 topic offset ${BEFORE_END} → ${AFTER_END:-$BEFORE_END}，upsert 目标表保持 **$AFTER_ROWS** 行"
 
 capture_connect_log s6
 log "S6 完成，产物见 $(art)"

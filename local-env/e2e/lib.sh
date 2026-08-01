@@ -48,8 +48,17 @@ create_topic() {
 }
 
 delete_topic() {
+  local topic="$1"
   dc exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 \
-    --delete --topic "$1" >/dev/null 2>&1 || true
+    --delete --topic "$topic" >/dev/null 2>&1 || true
+  for _ in $(seq 1 30); do
+    if ! dc exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 \
+      --describe --topic "$topic" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
 }
 
 # topic 末端 offset。完成判定的主信号之一（#3），S8 靠它画时间线
@@ -68,7 +77,14 @@ put_connector() {
   log "PUT connector $name -> $(jq -r '.error_code // "created"' < "$(art)/put-$name.json")"
 }
 
-delete_connector() { curl -sS -X DELETE "$CONNECT/connectors/$1" >/dev/null 2>&1 || true; }
+delete_connector() {
+  local name="$1"
+  if curl -fsS "$CONNECT/connectors/$name/status" >/dev/null 2>&1; then
+    curl -sS -X PUT "$CONNECT/connectors/$name/stop" >/dev/null 2>&1 || true
+    curl -sS -X DELETE "$CONNECT/connectors/$name/offsets" >/dev/null 2>&1 || true
+    curl -sS -X DELETE "$CONNECT/connectors/$name" >/dev/null 2>&1 || true
+  fi
+}
 
 status_json() { curl -sS "$CONNECT/connectors/$1/status"; }
 

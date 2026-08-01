@@ -1,0 +1,3 @@
+before_topic_end=4
+after_topic_end=8
+after_pg_rows=4

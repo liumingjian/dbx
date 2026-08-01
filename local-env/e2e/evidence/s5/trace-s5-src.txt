@@ -1,0 +1,14 @@
+org.apache.kafka.connect.errors.ConnectException: Unrecoverable exception from producer send callback
+	at org.apache.kafka.connect.runtime.WorkerSourceTask.maybeThrowProducerSendException(WorkerSourceTask.java:343)
+	at org.apache.kafka.connect.runtime.WorkerSourceTask.prepareToPollTask(WorkerSourceTask.java:122)
+	at org.apache.kafka.connect.runtime.AbstractWorkerSourceTask.execute(AbstractWorkerSourceTask.java:350)
+	at org.apache.kafka.connect.runtime.WorkerTask.doRun(WorkerTask.java:226)
+	at org.apache.kafka.connect.runtime.WorkerTask.run(WorkerTask.java:281)
+	at org.apache.kafka.connect.runtime.AbstractWorkerSourceTask.run(AbstractWorkerSourceTask.java:79)
+	at org.apache.kafka.connect.runtime.isolation.Plugins.lambda$withClassLoader$1(Plugins.java:238)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source)
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: org.apache.kafka.common.errors.RecordTooLargeException: The message is 26214526 bytes when serialized which is larger than 26214400, which is the value of the max.request.size configuration.

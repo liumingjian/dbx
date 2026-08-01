@@ -13,9 +13,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"
 init_scenario s2 "numeric.mapping 四种取值对 DECIMAL(38,10) 的影响"
 
 for MODE in none best_fit best_fit_eager_double precision_only; do
-  PREFIX="dbx.s2.${MODE}."
+  PREFIX="dbx.s2v3.${MODE}."
   TOPIC="${PREFIX}t_types"
-  SRC="s2-src-${MODE//_/-}"
+  SRC="s2-src-v3-${MODE//_/-}"
 
   delete_connector "$SRC"; sleep 1; delete_topic "$TOPIC"
   create_topic "$TOPIC"
@@ -26,16 +26,23 @@ for MODE in none best_fit best_fit_eager_double precision_only; do
   "connection.url": "jdbc:mysql://mysql:3306/dbx_src?useSSL=false&allowPublicKeyRetrieval=true",
   "connection.user": "dbx", "connection.password": "dbx",
   "mode": "incrementing", "incrementing.column.name": "id",
-  "table.whitelist": "t_types",
-  "topic.prefix": "$PREFIX",
+  "query": "SELECT id, c_decimal FROM t_types",
+  "topic.prefix": "$TOPIC",
   "numeric.mapping": "$MODE",
   "poll.interval.ms": 1000, "batch.max.rows": 100, "tasks.max": 1
 }
 JSON
 
   wait_task_state "$SRC" RUNNING 60 || snapshot_status "$SRC" "$MODE"
-  # 等 topic 里真出现 4 条
-  for _ in $(seq 1 30); do [ "$(topic_end_offset "$TOPIC")" -ge 4 ] && break; sleep 2; done
+  # 等 topic 里真出现 4 条；未达标就保留状态并跳过陈旧 schema。
+  END=0
+  for _ in $(seq 1 30); do END="$(topic_end_offset "$TOPIC")"; [ "$END" -ge 4 ] && break; sleep 2; done
+  if [ "$END" -lt 4 ]; then
+    snapshot_status "$SRC" "$MODE"
+    finding "**numeric.mapping=$MODE 未产出完整 topic：end offset=$END / 4**"
+    delete_connector "$SRC"
+    continue
+  fi
 
   capture_avro_schema "$TOPIC"
   jq -c '.fields[] | select(.name=="c_decimal")' < "$(art)/avro-$TOPIC.json" \
@@ -47,10 +54,40 @@ JSON
     --bootstrap-server kafka:9092 --topic "$TOPIC" --from-beginning \
     --property schema.registry.url=http://schema-registry:8081 \
     --consumer-property max.partition.fetch.bytes=$MAX_MSG \
-    --max-messages 2 > "$(art)/records-$MODE.json" 2>>"$(art)/run.log" || true
+    --timeout-ms 10000 --max-messages 2 > "$(art)/records-$MODE.json" 2>>"$(art)/run.log" || true
 
   delete_connector "$SRC"
 done
+
+# 用 none 变体的新鲜 topic 接一次真实 Sink，逐值验证 DECIMAL(38,10) 端到端精度。
+TABLE=t_decimal_e2e
+TOPIC=dbx.s2v3.none.t_types
+SINK=s2-sink-decimal
+cleanup_link unused "$SINK" unused "$TABLE"
+psqlq "CREATE TABLE $TABLE (id integer PRIMARY KEY, c_decimal numeric(38,10))" >> "$(art)/run.log" 2>&1
+put_connector "$SINK" <<JSON
+{
+  "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+  "connection.url": "jdbc:postgresql://postgres:5432/dbx_target",
+  "connection.user": "dbx", "connection.password": "dbx",
+  "topics": "$TOPIC", "table.name.format": "$TABLE",
+  "auto.create": "false", "auto.evolve": "false",
+  "insert.mode": "insert", "pk.mode": "none",
+  "batch.size": "1", "errors.tolerance": "none"
+}
+JSON
+N=$(wait_rows "$TABLE" 4 60)
+psqlq "SELECT id || '|' || COALESCE(c_decimal::text, 'NULL') FROM $TABLE ORDER BY id" > "$(art)/pg-decimal.txt"
+mysqlq "SELECT CONCAT(id, '|', IFNULL(c_decimal, 'NULL')) FROM t_types ORDER BY id" > "$(art)/mysql-decimal.txt"
+if [ "$N" -eq 4 ] && diff -q "$(art)/mysql-decimal.txt" "$(art)/pg-decimal.txt" >/dev/null; then
+  finding "DECIMAL(38,10) 经 Source → Avro → Sink → PostgreSQL **4/4 逐值一致**"
+else
+  finding "**DECIMAL(38,10) 端到端值不一致**；落库 $N / 4，见 decimal.diff"
+  diff "$(art)/mysql-decimal.txt" "$(art)/pg-decimal.txt" > "$(art)/decimal.diff" || true
+fi
+snapshot_status "$SINK" decimal
+
+delete_connector "$SINK"
 
 # 四份 schema 是否逐字节相同 → #5 结论成立与否
 if [ "$(md5sum "$(art)"/c_decimal-*.json | awk '{print $1}' | sort -u | wc -l)" -eq 1 ]; then

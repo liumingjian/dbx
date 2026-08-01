@@ -1,0 +1,21 @@
+org.apache.kafka.connect.errors.ConnectException: Exiting WorkerSinkTask due to unrecoverable exception.
+	at org.apache.kafka.connect.runtime.WorkerSinkTask.deliverMessages(WorkerSinkTask.java:636)
+	at org.apache.kafka.connect.runtime.WorkerSinkTask.poll(WorkerSinkTask.java:345)
+	at org.apache.kafka.connect.runtime.WorkerSinkTask.iteration(WorkerSinkTask.java:247)
+	at org.apache.kafka.connect.runtime.WorkerSinkTask.execute(WorkerSinkTask.java:216)
+	at org.apache.kafka.connect.runtime.WorkerTask.doRun(WorkerTask.java:226)
+	at org.apache.kafka.connect.runtime.WorkerTask.run(WorkerTask.java:281)
+	at org.apache.kafka.connect.runtime.isolation.Plugins.lambda$withClassLoader$1(Plugins.java:238)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source)
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: io.confluent.connect.jdbc.sink.TableAlterOrCreateException: Table "dbx_target"."public"."t_large_text_missing_col" is missing fields ([SinkRecordField{schema=Schema{STRING}, name='c_text', isPrimaryKey=false}]) and auto-evolution is disabled
+	at io.confluent.connect.jdbc.sink.DbStructure.amendIfNecessary(DbStructure.java:193)
+	at io.confluent.connect.jdbc.sink.DbStructure.createOrAmendIfNecessary(DbStructure.java:83)
+	at io.confluent.connect.jdbc.sink.BufferedRecords.add(BufferedRecords.java:123)
+	at io.confluent.connect.jdbc.sink.JdbcDbWriter.write(JdbcDbWriter.java:78)
+	at io.confluent.connect.jdbc.sink.JdbcSinkTask.put(JdbcSinkTask.java:90)
+	at org.apache.kafka.connect.runtime.WorkerSinkTask.deliverMessages(WorkerSinkTask.java:606)
+	... 11 more

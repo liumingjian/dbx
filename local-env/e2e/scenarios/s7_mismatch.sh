@@ -7,7 +7,7 @@
 #
 # 三个变体，同一张 t_large_text：
 #  A. 目标表少建一列 c_text
-#  B. 目标表把 c_longtext 建成 integer
+#  B. 目标表把 c_text 建成 integer
 #  C. 与 B 相同但 batch.size 用默认值 → 观察报错时机是否被推迟
 #
 # 抓到的 trace 原文全部归档：它们是错误翻译层（#19）规则表的第一批条目。
@@ -19,7 +19,7 @@ run_variant() {
   local tag="$1" ddl="$2" batch="$3" desc="$4"
   local table="t_large_text_$tag"
   local topic="dbx.s7.$tag.t_large_text"
-  local src="s7-src-$tag" sink="s7-sink-$tag"
+  local src="s7-src-v2-$tag" sink="s7-sink-v2-$tag"
 
   cleanup_link "$src" "$sink" "$topic" "$table"
   create_topic "$topic"
@@ -81,13 +81,13 @@ run_variant missing_col \
 run_variant wrong_type \
   "DROP TABLE IF EXISTS t_large_text_wrong_type;
    CREATE TABLE t_large_text_wrong_type (
-     id integer PRIMARY KEY, label varchar(64) NOT NULL, c_text text, c_longtext integer)" \
-  1 "目标表列类型建错（c_longtext 建成 integer）"
+     id integer PRIMARY KEY, label varchar(64) NOT NULL, c_text integer, c_longtext text)" \
+  1 "目标表列类型建错（c_text 建成 integer）"
 
 run_variant wrong_type_bigbatch \
   "DROP TABLE IF EXISTS t_large_text_wrong_type_bigbatch;
    CREATE TABLE t_large_text_wrong_type_bigbatch (
-     id integer PRIMARY KEY, label varchar(64) NOT NULL, c_text text, c_longtext integer)" \
+     id integer PRIMARY KEY, label varchar(64) NOT NULL, c_text integer, c_longtext text)" \
   3000 "同上但 batch.size 用默认 3000（验 #4 的「攒够 batch 才炸」）"
 
 capture_connect_log s7 1500
