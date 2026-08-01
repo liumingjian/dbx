@@ -4,10 +4,8 @@
 
 一套 Docker Compose，起 **MySQL 8.0 + PostgreSQL 15 + Kafka(KRaft 单节点) + Kafka Connect + Schema Registry**，外加一份专门用来踩坑的 MySQL 种子数据。**这里不放产品代码**，只是后续原型票（[#10](https://github.com/liumingjian/dbx/issues/10) 起）的实验床。
 
-> ⚠️ **本文件中的配置、脚本与命令尚未在真实环境跑过一次。**
-> 编写它的机器没有 Docker（961MB 内存 / 1 核 / 4.8GB 磁盘）。
-> 配置值全部来自研究票 [#2](https://github.com/liumingjian/dbx/issues/2)–[#8](https://github.com/liumingjian/dbx/issues/8) 的一手结论，插件 URL 与校验和是实际下载核对过的，但**启动流程本身没有被验证**。
-> 第一位在够格机器上跑通的人，请把文末「待回填的实测数据」补上，并把踩到的坑写进「已知坑」——那才是这张票真正的交付物。
+> ✅ **2026-08-01 已在真实环境跑通。**
+> 验证环境：Apple Silicon，宿主机 16GB / 8 核，Docker Desktop 虚拟机 7.65GiB；五个服务冷启动、19MiB 长文本迁移、命名卷持久化均已实测。结果见 §7，实际踩坑见 §8。
 
 ---
 
@@ -213,20 +211,25 @@ docker compose exec postgres psql -U dbx -d dbx_target -c 'TRUNCATE t_large_text
 
 Connect **完全没有「跑完即停」语义**（[#3](https://github.com/liumingjian/dbx/issues/3)）—— 全量读完后 connector 会一直挂着轮询，必须由外部判定完成并主动 DELETE。这正是 [#13](https://github.com/liumingjian/dbx/issues/13) 要定的规格。
 
-## 7. 待回填的实测数据
+## 7. 实测数据
 
-票 [#9](https://github.com/liumingjian/dbx/issues/9) 要求记录以下几项。**第一位跑通的人请补进这张表，并更新到 issue 的 resolution 评论里。**
+实测时间：2026-08-01。宿主机 Apple Silicon，16GB / 8 核；Docker Desktop 虚拟机实际分配 7.65GiB / 8 核，低于推荐的 16GB，但高于 8GB 下限。
 
 | 项 | 值 |
 |---|---|
-| 各镜像 digest | 已从 registry 取到（下表），跑通后确认与 `docker images --digests` 一致 |
-| JDBC Connector 版本 | 10.9.6（已核对，见 §4） |
-| 首次 `up -d` 到全部 healthy 的耗时 | 待填（其中种子数据生成占多少？） |
-| 空载内存占用（`docker stats`，逐容器） | 待填 |
-| 镜像总体积 / 数据卷初始体积 | 待填 |
-| 遇到的坑 | 待填 |
+| 各镜像 digest | `docker image inspect` 确认与下表完全一致 |
+| JDBC Connector / JDBC 驱动 | Connector 10.9.6；MySQL 9.1.0；PostgreSQL 42.7.11 |
+| 全新命名卷下 `up -d` 到 5/5 healthy | **40 秒**；MySQL 初始化约 15 秒，其中大字段种子 SQL 约 3 秒 |
+| 保留命名卷的热启动 | **39 秒** |
+| 19MiB 长文本端到端迁移 | **10 秒**；4/4 行落库，最大值 `octet_length=19922944` |
+| 空载内存（迁移前） | Connect 1.68GiB；Kafka 398MiB；MySQL 438MiB；Schema Registry 276MiB；PostgreSQL 32MiB；合计约 **2.80GiB** |
+| 迁移后内存 | Connect 2.12GiB；Kafka 447MiB；MySQL 486MiB；Schema Registry 290MiB；PostgreSQL 72MiB；合计约 **3.41GiB** |
+| 镜像总体积 | 五个上游镜像按 Docker 展示尺寸合计约 **6.27GB**；Connect 派生镜像 2.16GB，但与基础镜像共享 2.13GB，仅新增约 31MB |
+| 全新数据卷初始体积 | Kafka **1.76GB**；MySQL **359.8MB**；PostgreSQL **64.6MB**（迁移后约 86.6MB）；合计约 **2.18GB** |
+| 运行态容器可写层 | 修复 Kafka 挂载后约 **348KiB**；数据不再写进容器层 |
+| 遇到的坑 | Kafka 默认数据目录与原命名卷挂载不一致；Source offset REST 返回空；详见 §8 |
 
-镜像 digest（撰写时从 Docker Hub registry 取的 manifest index digest，五个 tag 均已确认存在）：
+镜像 digest（实测由 `docker image inspect` 的 `RepoDigests` 确认）：
 
 ```
 library/mysql:8.0.40                     sha256:d58ac93387f644e4e040c636b8f50494e78e5afc27ca0a87348b2f577da2b7ff
@@ -240,11 +243,12 @@ confluentinc/cp-kafka-connect:7.9.0      sha256:535b1751f64af95bee4bf15ad2ab6b1c
 
 ## 8. 已知坑
 
-> 目前只有「预判」，没有「实测」。跑过之后请把实际踩到的坑追加进来，并把预判条目标成已确认或已证伪。
-
-- **[预判] `docker compose build connect` 前必须先跑 `./fetch-plugins.sh`**，否则 `COPY plugins/` 会因目录不存在直接失败。
-- **[预判] 首次启动 MySQL 慢**：种子脚本要拼约 66MiB 的高熵随机数据（25+19+19+1+…），CPU 弱的机器可能要几分钟。healthcheck `start_period=300s` 是按此设的；若仍超时，先看 `docker compose logs mysql` 是不是还在跑 initdb。
-- **[预判] `RANDOM_BYTES()` 单次上限 1024 字节**，所以种子脚本是双层循环拼的；别"优化"成一次调用。
-- **[预判] `max_allowed_packet` 必须调大**（compose 里设了 256MiB）。25MiB 的用户变量与 `TO_BASE64` 的中间结果都受它约束。
-- **[预判] 忘了带 `--config max.message.bytes` 建 topic**，症状是 19MiB 那行报 `MESSAGE_TOO_LARGE`，而小行一切正常 —— 部分成功最难查。
-- **[预判] consumer 侧漏配 `max.partition.fetch.bytes` 不报错**，只是退化成一次 fetch 一条，表现为「慢得离谱但没有错误」（[#6](https://github.com/liumingjian/dbx/issues/6) §1.2）。worker 级已配好，但用 console consumer 手工消费时要自己带上。
+- **[已确认并修复] Kafka 命名卷必须对齐 `log.dirs`。** `apache/kafka:3.9.0` 默认写 `/tmp/kraft-combined-logs`，原 Compose 却把卷挂到 `/var/lib/kafka/data`，导致命名卷 0B、容器可写层约 1.78GB，普通 `docker compose down` 就会丢 topic。现已显式设置 `KAFKA_LOG_DIRS=/var/lib/kafka/data`；实测普通 `down/up` 后 topic 仍存在，容器可写层降到约 348KiB。
+- **[已确认] Source offset REST 端点在本实验床返回空数组。** `mode=incrementing` 的 Source 成功读取到 id=4、4 行全部落库且 connector/task 均为 `RUNNING`，但 `GET /connectors/src-t-large-text/offsets` 在迁移后 10 秒仍返回 `{"offsets":[]}`。这与研究结论预期不符，完成判定不能只依赖此端点；应由 [#13](https://github.com/liumingjian/dbx/issues/13) 继续定位。
+- **[已确认] topic 名同时含 `.` 与 `_` 会触发 Kafka 指标名碰撞警告。** 创建 `dbx.dbx_src.t_large_text` 时 Kafka CLI 明确警告两种字符可能碰撞。数据路径不受影响，但产品 topic 命名规则应只选其中一种分隔符，或接受指标歧义。
+- **[已确认] `docker compose build connect` 前必须先跑 `./fetch-plugins.sh`**，否则 `COPY plugins/` 会因目录不存在直接失败。
+- **[已证伪：本机不慢] 首次启动 MySQL。** 在 8 核 Apple Silicon Docker 虚拟机里，种子 SQL 约 3 秒、MySQL 初始化约 15 秒，五个服务 40 秒全部 healthy。慢机器仍可用 300 秒 `start_period` 兜底。
+- **[已确认] `RANDOM_BYTES()` 单次上限 1024 字节**，种子脚本的双层循环不能合并成一次调用。
+- **[已确认] `max_allowed_packet` 必须调大**（compose 里设为 256MiB），25MiB 用户变量与 `TO_BASE64` 中间结果都受它约束。
+- **[配置已验证，故障形态待 #19 采集] 忘带 topic 级 `max.message.bytes`** 会使 19MiB 行超过默认约 1MiB 上限；本次成功路径确认动态 topic 配置为 `26214400`。
+- **[配置已验证，退化形态待性能票采集] consumer 侧 `max.partition.fetch.bytes`** 已在 worker 级设为 25MiB；console consumer 仍需手工携带。

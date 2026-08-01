@@ -78,6 +78,7 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false" # 关键：否则会用 1MB 默认上限自动建出 topic
       KAFKA_NUM_PARTITIONS: 1                  # 单表单 topic，1 分区保序
       KAFKA_LOG_SEGMENT_BYTES: 268435456       # 256MiB，让 retention 能真正回收（活跃 segment 永不删）
+      KAFKA_LOG_DIRS: /var/lib/kafka/data      # apache/kafka 默认写 /tmp；必须对齐下方命名卷
       # --- 堆：Kafka 数据走 page cache，堆几乎不随数据量增长 ---
       KAFKA_HEAP_OPTS: "-Xms2g -Xmx2g"
     ports:
