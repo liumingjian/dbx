@@ -16,6 +16,14 @@ _Avoid_: Retry in place, connector run, resumed run
 The durable, independently observable migration record for one source table and its corresponding target table within one migration run, including phase, outcome, baseline, progress, validation result, and errors. A rerun creates a new table migration unit rather than changing the old unit's result.
 _Avoid_: Table task, connector table
 
+**Database connection**:
+A reusable database endpoint and identity whose structured access semantics are versioned independently from migration tasks. A migration run freezes the database, schema, effective connection semantics, database-instance identity, and credential versions it uses.
+_Avoid_: JDBC URL, datasource
+
+**Credential version**:
+An immutable version of secret authentication material referenced by connections and runs. A run retains its initial version and any explicitly adopted recovery replacement as audited bindings; historical use remains auditable after the recoverable secret is destroyed.
+_Avoid_: Password field, current password
+
 **Table write contract**:
 The immutable, single-table write intent that DBX must prove before starting a Sink, derived from approved source metadata, preflight findings, and mapping exceptions. DDL is one rendering of this contract, not an independent configuration.
 _Avoid_: Editable DDL, sink schema
@@ -53,8 +61,8 @@ The immutable boundary of a migration run, captured while source writes are froz
 _Avoid_: Estimated row count, snapshot
 
 **Write freeze**:
-The externally enforced period in which source data covered by a migration run does not change. A confirmed write freeze is required before DBX captures the source baseline and starts migration.
-_Avoid_: Maintenance mode, pause
+The externally enforced, time-bounded operational commitment that source data covered by a migration run does not change. It has an accountable operator and expiry; it must remain valid from source-baseline capture until every selected table reaches a validation terminal state or execution stops.
+_Avoid_: Maintenance mode, pause, permanent checkbox
 
 **Read complete**:
 The boundary at which every topic in a box contains the source baseline row count, production has remained stable for two polling intervals, and the healthy Source connector can be removed.
@@ -77,8 +85,12 @@ A user-requested terminal stop of a migration run that preserves topics, target 
 _Avoid_: Discard, delete, rollback
 
 **Discard**:
-A separately confirmed destructive operation that removes a stopped run's target data and requests deletion of its topics while retaining its audit record.
-_Avoid_: Cancel, retry, cleanup
+A separately confirmed destructive operation that removes only a stopped run's resources that the run can still prove it exclusively owns, while retaining its audit record and original technical outcomes. A later run's target data is never discardable by an earlier run.
+_Avoid_: Cancel, retry, cleanup, rollback
+
+**Target generation**:
+The exclusive write epoch created when DBX first creates or deliberately clears a target table for a migration run. It prevents an earlier run from discarding target data after a later run has taken ownership.
+_Avoid_: Table version, run number
 
 **Error occurrence**:
 An immutable fact that DBX observed at a phase and scope, retaining the evidence and correlation needed to explain what happened. It is not itself a workflow outcome.
