@@ -33,8 +33,12 @@ Starting the next eligible waiting box whenever task, connection, box-count, and
 _Avoid_: Batch execution, strict waves
 
 **Large record table**:
-A table whose preflight finds a field or conservatively estimated row larger than 1 MiB, requiring an isolated box and large-record connector settings. A field or row above 20 MB is unsupported in v1.
+A table whose preflight finds an individual source value or conservatively measured source row larger than 1 MiB (1,048,576 bytes), requiring an isolated box and large-record connector settings.
 _Avoid_: LOB table, big table
+
+**Large-record envelope**:
+The v1 support boundary requiring every individual source value and the total pre-serialization payload of every source row to be at most 20 MiB (20,971,520 bytes). Kafka transports that payload through a separate 25 MiB technical envelope for encoding and protocol overhead.
+_Avoid_: 20 MB message limit, Kafka limit, field-size limit
 
 **Source baseline**:
 The immutable boundary of a migration run, captured while source writes are frozen. It includes an exact row count for every selected table and, where applicable, the terminal value of its monotonic primary key.
