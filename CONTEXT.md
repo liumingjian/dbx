@@ -79,3 +79,27 @@ _Avoid_: Discard, delete, rollback
 **Discard**:
 A separately confirmed destructive operation that removes a stopped run's target data and requests deletion of its topics while retaining its audit record.
 _Avoid_: Cancel, retry, cleanup
+
+**Error occurrence**:
+An immutable fact that DBX observed at a phase and scope, retaining the evidence and correlation needed to explain what happened. It is not itself a workflow outcome.
+_Avoid_: Translated error, failure message
+
+**Diagnosis**:
+A versioned interpretation of an error occurrence, identified by a stable diagnosis code and classified by phase, root-cause domain, and trusted scope. An unknown or conflicting diagnosis must not invent a cause.
+_Avoid_: Error status, blame
+
+**Diagnosis rule**:
+A maintained evidence pattern that maps one or more external failure signatures to one operator-facing diagnosis, description, and action. The v1 first-release set contains 20 external-translation rule families; platform-structured diagnoses do not count toward that set.
+_Avoid_: Exception mapping, regex error
+
+**Root-cause domain**:
+The single primary domain assigned to a diagnosis: user input, source database, target database, Kafka Connect, Kafka, runtime environment, or platform. It describes diagnostic evidence, not a person to blame.
+_Avoid_: Responsible party
+
+**Routing snapshot**:
+The immutable run-local mapping from topic and connector coordinates to boxes, table migration units, source/target objects, and approved field mappings. It is the authority for table and field location; topic names and exception text are only corroborating evidence.
+_Avoid_: Topic parsing, inferred table
+
+**Diagnostic package**:
+A local, bounded, redacted export of run context, timeline, rule evidence, configuration fingerprints, versions, and raw failure details for support. It never includes credentials, record values, or automatic external upload.
+_Avoid_: Log bundle, data dump
