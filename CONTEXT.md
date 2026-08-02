@@ -13,8 +13,16 @@ One immutable execution attempt over all or part of a migration task, with its o
 _Avoid_: Retry in place, connector run, resumed run
 
 **Table migration unit**:
-The durable, independently observable migration record for one source table and its corresponding target table, including state, baseline, progress, validation result, and errors.
+The durable, independently observable migration record for one source table and its corresponding target table within one migration run, including phase, outcome, baseline, progress, validation result, and errors. A rerun creates a new table migration unit rather than changing the old unit's result.
 _Avoid_: Table task, connector table
+
+**Table write contract**:
+The immutable, single-table write intent that DBX must prove before starting a Sink, derived from approved source metadata, preflight findings, and mapping exceptions. DDL is one rendering of this contract, not an independent configuration.
+_Avoid_: Editable DDL, sink schema
+
+**Validation disposition**:
+An operator's audited decision about a failed or inconclusive validation result. Accepting risk may close the workflow but never changes the technical validation result to passed.
+_Avoid_: Manual pass, overridden result
 
 **Box**:
 A run-local, disposable scheduling group of table migration units that share one Source connector and one Sink connector. It is not user-selected, has no independent business lifecycle, and never owns a table's durable result.
