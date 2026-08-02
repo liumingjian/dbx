@@ -1,24 +1,40 @@
 # DBX Migration
 
-DBX describes an offline, one-time full migration of a source database into a target database. This glossary fixes the language used across the product and technical specifications.
+DBX describes offline, one-time full migrations as independently observable table migrations while treating connector groupings as disposable scheduling artifacts. This glossary fixes the language used across the product and technical specifications.
 
 ## Language
 
 **Migration task**:
-A user-defined migration of one source database into one target schema, comprising a set of table migration units.
+A user-approved migration of one source MySQL database into one PostgreSQL schema, composed of table migration units.
 _Avoid_: Job, connector
 
 **Migration run**:
-One execution attempt of all or part of a migration task, with its own immutable run identifier, source baseline, connectors, and topics.
-_Avoid_: Retry, connector run
+One immutable execution attempt over all or part of a migration task, with its own run identifier, source baseline, scheduling plan, connectors, and topics. A rerun is a new migration run.
+_Avoid_: Retry in place, connector run, resumed run
 
 **Table migration unit**:
-The smallest independently tracked migration unit: one source table and its corresponding target table, state, progress, validation result, and errors.
-_Avoid_: Table task, connector task
+The durable, independently observable migration record for one source table and its corresponding target table, including state, baseline, progress, validation result, and errors.
+_Avoid_: Table task, connector table
 
 **Box**:
-A disposable scheduling group of table migration units that share one Source connector and one Sink connector during a migration run. It has no independent business lifecycle.
-_Avoid_: Batch, task group
+A run-local, disposable scheduling group of table migration units that share one Source connector and one Sink connector. It is not user-selected, has no independent business lifecycle, and never owns a table's durable result.
+_Avoid_: Batch, task group, shard
+
+**Execution signature**:
+The connector-level configuration identity that determines whether tables may share a box. Only tables with identical execution signatures may be packed together.
+_Avoid_: Table profile, connector type
+
+**Scheduling plan**:
+The immutable assignment and ordering of boxes within a migration run. Resource availability may delay admission but never repacks an existing run.
+_Avoid_: Queue snapshot, live packing
+
+**Rolling admission**:
+Starting the next eligible waiting box whenever task, connection, box-count, and disk budgets permit, without a wave-level completion barrier.
+_Avoid_: Batch execution, strict waves
+
+**Large record table**:
+A table whose preflight finds a field or conservatively estimated row larger than 1 MiB, requiring an isolated box and large-record connector settings. A field or row above 20 MB is unsupported in v1.
+_Avoid_: LOB table, big table
 
 **Source baseline**:
 The immutable boundary of a migration run, captured while source writes are frozen. It includes an exact row count for every selected table and, where applicable, the terminal value of its monotonic primary key.
