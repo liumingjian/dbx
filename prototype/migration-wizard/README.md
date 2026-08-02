@@ -1,6 +1,6 @@
 # DBX migration wizard prototype
 
-> Throwaway UI prototype for GitHub issue #21. This is not production code and stores all mutations in memory only.
+> Throwaway UI prototype for GitHub issue #21. This is not production code: all mutations are in-memory only and no database or credential is contacted.
 
 ## Run
 
@@ -10,31 +10,29 @@ From the repository root:
 python3 -m http.server 4173 --directory prototype/migration-wizard
 ```
 
-Open <http://localhost:4173/?variant=A>. Use the floating switcher to move between `?variant=A`, `?variant=B`, and `?variant=C` without changing the route.
+Open <http://localhost:4173/?variant=A>. The user lands on A; the bottom switcher preserves `?variant=A|B|C` for provenance and comparison.
 
-## What this prototype tests
+## What changed after user feedback
 
-- **A · 线性向导** — six explicit stages create reassurance and a visible sense of progress: connection, table scope, preflight/contract, execution confirmation, monitoring, validation report.
-- **B · 异常工作台** — an overview rail puts blockers and operator decisions first, keeping ordinary tables out of the way until exceptions are resolved.
-- **C · 三个决定** — a goal-oriented landing view reduces the journey to scope, risk, and safe-start decisions; details remain available on demand.
+Variant A remains the primary route, but it now uses a DBX shell rather than a generic card flow: a persistent dark navy sidebar (作业中心 / 数据源 / 系统设置), compact white top bar, pale workspace, bordered creation canvas, and a six-stage horizontal-in-canvas mental model expressed through clickable numbered navigation. The density and split-pane information architecture intentionally follow the X2Doris reference article and screenshots at <https://cloud.tencent.com/developer/article/2550911> without copying its branding or pixels.
 
-The variants are structurally different layouts, not color variations. All three use the same illustrative in-memory data and vocabulary from the domain model.
+- Stage 0 selects already-configured source and target connections; 数据源 is a separate management surface and there is no inline connection form.
+- Stage 1 resembles a source database/table tree plus a dense workspace table. It supports search, select all, explicit exclusions, individual selection, and numeric sorting; it deliberately has no regex control.
+- Stage 2 is exception-first: blockers and risks appear before safe tables, table-level field mapping is dense and structured, and DDL is a separate line-numbered, read-only tab with an explicit lock message. A blocker must be excluded or cropped and re-preflighted.
+- Stage 3 is a compact execution confirmation with a truthful scope summary and write-freeze acknowledgement.
+- Stages 4 and 5 stay table-centric: monitoring shows stage/progress/result/timestamp per table, while validation keeps PASS, FAIL, and INCONCLUSIVE separate from accepted-risk disposition. Rerun only selects failed/inconclusive eligible tables; accepted risk never changes a technical result.
 
-## Clickable coverage
+## Variants and tradeoffs
 
-- Select an existing connection or open the add-connection stub.
-- Search the 200-table list, select/clear all, toggle individual tables, and sort by row count/data size (numeric sort, no regex).
-- Review safe/risky/blocked preflight counts and the explicit 20 MiB block.
-- Edit a structured mapping exception; DDL is deliberately read-only.
-- Confirm a time-bounded write freeze and a concrete migration scope.
-- Observe truthful run and table states, compact accessible progress bars, live-update toggle, timeline, and rerun draft action.
-- Read PASS/FAIL/INCONCLUSIVE technical results separately from accepted-risk disposition.
-- Use empty/loading/live examples via the selection controls, paused live-update toggle, and waiting/running table rows.
+- **A · 线性向导** is the agreed journey: discoverability and safety win over maximum information density.
+- **B · 异常工作台** remains an earlier contrast concept that puts exceptions first for experienced operators.
+- **C · 三个决定** remains an earlier contrast concept that compresses the journey for orientation.
 
-Keyboard arrows move between stages in variant A and are ignored while focus is in inputs/selects. Responsive CSS collapses the side rail on narrow screens.
+The X2Doris lineage is used as a visual/configuration reference: persistent shell, compact enterprise controls, database tree + workspace, numbered progress, mapping table, read-only DDL review, centered confirmation, dense task center, and compact start confirmation. DBX intentionally does not expose X2Doris-only concepts such as connectors, boxes, topics, Spark settings, or arbitrary resource knobs. DBX instead emphasizes explicit connection reuse, table scope, preflight evidence, write-freeze accountability, and truthful table-level results.
 
-## Assumptions
+## Prototype constraints
 
-- One source MySQL database and one PostgreSQL target schema.
-- Illustrative 200-table metadata; no network, authentication, SQL execution, or persistence.
-- The prototype intentionally does not represent backend APIs, permissions, or real-time transport.
+- Illustrative 200-table metadata; the initial state contains 196 eligible tables and 4 explicitly excluded blockers, so excluded blockers never appear as migrated validation results.
+- One MySQL source and PostgreSQL target schema; no network, authentication, SQL execution, persistence, or real-time transport.
+- Keyboard arrows move between stages in A and are ignored while focus is in inputs/selects. Responsive CSS collapses the shell on narrow screens.
+- This is intentionally plain HTML/CSS/JS with no dependencies.
