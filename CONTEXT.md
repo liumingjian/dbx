@@ -28,6 +28,18 @@ _Avoid_: Password field, current password
 The immutable, single-table write intent that DBX must prove before starting a Sink, derived from approved source metadata, preflight findings, and mapping exceptions. DDL is one rendering of this contract, not an independent configuration.
 _Avoid_: Editable DDL, sink schema
 
+**Source dialect**:
+The versioned description of one supported source database family, responsible for interpreting its metadata, value and identifier semantics, exact source-side facts, and extraction requirements. It supplies facts and plans but never advances migration workflow.
+_Avoid_: Source connector, source adapter
+
+**Target dialect**:
+The versioned description of one supported target database family, responsible for interpreting its types, identifiers and structures and for deriving target operations and structural proof from a table write contract. It supplies facts and plans but never advances migration workflow.
+_Avoid_: Sink connector, target adapter
+
+**Database pair**:
+An explicitly supported, directed and versioned conversion relationship from one source dialect to one target dialect. It owns cross-database mapping and compatibility decisions; the presence of two endpoint dialects alone does not imply a supported pair.
+_Avoid_: Automatic dialect combination, bidirectional pair
+
 **Validation disposition**:
 An operator's audited decision about a failed or inconclusive validation result. Accepting risk may close the workflow but never changes the technical validation result to passed.
 _Avoid_: Manual pass, overridden result
