@@ -9,6 +9,7 @@ import { MigrationWizardStagePage } from '@/pages/MigrationWizardStagePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { TableMigrationUnitPage } from '@/pages/TableMigrationUnitPage';
+import { ValidationReportPage } from '@/pages/ValidationReportPage';
 import { MigrationTasksRedirect } from './MigrationTasksRedirect';
 import { routePatterns } from './paths';
 
@@ -39,6 +40,15 @@ export const routes = [
         element: <MigrationRunPage />,
         children: [{ path: tableMigrationUnitChildPath, element: <TableMigrationUnitPage /> }],
       },
+      /**
+       * 校验报告 is a **sibling** of 运行监控 rather than a drawer over it (#40).
+       *
+       * The evidence drawer is an overlay because it is about one row of the screen
+       * underneath. A 校验报告 is not about the monitor at all: it is the artefact a DBA
+       * submits to a change review, read on its own, exported, and quoted. Its address
+       * names the run and says what it is.
+       */
+      { path: routePatterns.validationReport, element: <ValidationReportPage /> },
       { path: routePatterns.databaseConnections, element: <DatabaseConnectionsPage /> },
       { path: routePatterns.settings, element: <SettingsPage /> },
       { path: routePatterns.densitySample, element: <DensitySamplePage /> },

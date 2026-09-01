@@ -23,6 +23,9 @@ import type {
   StructuralProofGapStatement,
   TableMigrationUnitEvidence,
   UnresolvedFinding,
+  RecordValidationDispositionRequest,
+  ValidationDisposition,
+  ValidationReport,
   WriteFreezeDeclaration,
 } from '@/contract';
 import type { ControllableClock } from './clock';
@@ -33,8 +36,15 @@ import {
   buildRunPlan,
   projectRunProgress,
   seedMonitoredRun,
+  validationExecutionIdOf,
+  withDispositions,
   type RunPlan,
 } from './fixtures/runProgress';
+import {
+  acceptedCheckIdsOf,
+  buildValidationReport,
+  validationExecutionOf,
+} from './fixtures/validation';
 import { buildTableMigrationUnitEvidence } from './fixtures/tableEvidence';
 import { generateSourceTables } from './fixtures/sourceTables';
 import {
@@ -98,6 +108,25 @@ export interface MockStore {
     runId: string,
     unitId: string,
   ): TableMigrationUnitEvidence | undefined;
+  /**
+   * 校验报告 (#40): the technical conclusions of one 迁移运行, its 迁移范围, and the
+   * 校验处置 recorded against it — three separate things, in one read.
+   */
+  getValidationReport(runId: string): ValidationReport | undefined;
+  /**
+   * Records an operator's 校验处置 against one table's 校验执行.
+   *
+   * It **appends a decision**; it cannot reach the 校验执行 at all. That is the constraint
+   * the whole audit chain hangs from — 「accepting risk may close the workflow but never
+   * changes the technical validation result to passed」 — and it is enforced by shape here
+   * rather than by a rule anyone has to remember: executions are projected from the
+   * immutable run plan, and dispositions live in their own map.
+   */
+  recordValidationDisposition(
+    runId: string,
+    request: RecordValidationDispositionRequest,
+  ): RecordValidationDispositionResult;
+
   /** What a 取消 would stop, stated before the operator commits to it. */
   describeRunCancellation(runId: string): RunCancellationConsequences | undefined;
   /**
@@ -182,6 +211,19 @@ export interface MockStore {
    */
   startMigrationRun(draftId: string, freeze: WriteFreezeDeclaration): StartMigrationRunResult;
 }
+
+/** Why a 校验处置 was refused, or the report it produced. */
+export type RecordValidationDispositionResult =
+  | { readonly ok: true; readonly report: ValidationReport }
+  | {
+      readonly ok: false;
+      readonly code:
+        | 'NOT_FOUND'
+        /** A 校验处置 without a named 责任人 or a stated 理由 is not an audited decision. */
+        | 'REASON_OR_OPERATOR_MISSING'
+        /** Nothing to dispose of: this table's 校验执行 concluded `PASS`, or never ran. */
+        | 'NOTHING_TO_DISPOSE';
+    };
 
 /** Why a start was refused, or the 迁移任务 and 迁移运行 it produced. */
 export type StartMigrationRunResult =
@@ -291,6 +333,26 @@ export function createMockStore({
     }
   }
 
+  /**
+   * The 校验处置 recorded so far, keyed by 迁移运行 and 表迁移单元.
+   *
+   * A map of its own, beside the runs rather than inside them. A 迁移运行 is 「one
+   * immutable execution attempt」 and its 校验执行 are projections of an immutable plan, so
+   * there is nowhere in either for a disposition to be written — which is precisely the
+   * point: 「接受风险」 has no reachable path to a technical result.
+   */
+  const dispositions = new Map<string, Map<string, ValidationDisposition>>();
+
+  function dispositionsOf(runId: string): Map<string, ValidationDisposition> {
+    const existing = dispositions.get(runId);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = new Map<string, ValidationDisposition>();
+    dispositions.set(runId, created);
+    return created;
+  }
+
   function planOf(run: MigrationRun): RunPlan {
     const existing = runPlans.get(run.id);
     if (existing !== undefined) {
@@ -317,11 +379,84 @@ export function createMockStore({
    * end time it was recorded with: a 迁移运行 is an immutable execution attempt, and the
    * clock moving on does not make a finished one start again.
    */
+  /**
+   * The run plan as it stands after the 校验处置 recorded against it.
+   *
+   * The only thing a disposition changes is a unit's **workflow outcome**: a table whose
+   * validation did not pass has no outcome of its own until a person closes the workflow,
+   * and what they close it with is `COMPLETED_WITH_ACCEPTED_RISK` — never `SUCCEEDED`.
+   */
+  function effectivePlanOf(run: MigrationRun): RunPlan {
+    return withDispositions(planOf(run), new Set(dispositionsOf(run.id).keys()));
+  }
+
+  /** One 校验执行, projected at the instant it concluded. */
+  function concludedExecutionOf(run: MigrationRun, unitId: string) {
+    const unitPlan = planOf(run).units.find((unit) => unit.id === unitId);
+    if (unitPlan === undefined) {
+      return null;
+    }
+    const startedAtMs = Date.parse(run.startedAt);
+    const at = (quantum: number) =>
+      new Date(startedAtMs + quantum * OBSERVATION_INTERVAL_MOCK_MS).toISOString();
+    return validationExecutionOf(unitPlan, unitPlan.validationEndsAt, at);
+  }
+
+  /**
+   * The 校验处置 a 「已记录校验处置」 scenario boots with.
+   *
+   * Lead decision D22 applied to this stage: 「接受风险已记录，技术结论没有被改写」 is a
+   * state about the end of a run, and a review link has to land on it rather than have the
+   * reviewer perform the decision first. The recorded reason and 责任人 are part of the
+   * seeded world for the same reason the 取消 request is.
+   */
+  for (const run of runs.values()) {
+    if (runPlanShapeOf(run) !== 'accepted-risk') {
+      continue;
+    }
+    const startedAtMs = Date.parse(run.startedAt);
+    for (const unitPlan of planOf(run).units) {
+      if (unitPlan.outcome !== null) {
+        continue;
+      }
+      const execution = concludedExecutionOf(run, unitPlan.id);
+      if (execution === null) {
+        continue;
+      }
+      dispositionsOf(run.id).set(unitPlan.id, {
+        executionId: execution.id,
+        unitId: unitPlan.id,
+        recordedAt: new Date(
+          startedAtMs + (unitPlan.validationEndsAt + 2) * OBSERVATION_INTERVAL_MOCK_MS,
+        ).toISOString(),
+        accountableOperator: 'zhang.wei',
+        reason: '差异已在变更评审 CHG-2026-0901-1 中逐行复核，业务同意在本次窗口内接受。',
+        acceptedCheckIds: acceptedCheckIdsOf(execution),
+      });
+    }
+  }
+
+  /**
+   * 校验报告 for one run, at the instant 运行监控 is looking at.
+   *
+   * Frozen like every other read: a report a reviewer could write to is not evidence.
+   */
+  function validationReportOf(run: MigrationRun): ValidationReport {
+    return deepFreeze(
+      buildValidationReport({
+        run,
+        plan: effectivePlanOf(run),
+        snapshot: snapshotOf(run),
+        dispositions: dispositionsOf(run.id),
+      }),
+    );
+  }
+
   function snapshotOf(run: MigrationRun): RunProgressSnapshot {
     const ended = run.endedAt === null ? null : Date.parse(run.endedAt);
     const projected = projectRunProgress({
       run,
-      plan: planOf(run),
+      plan: effectivePlanOf(run),
       nowMs: ended ?? clock.now(),
       cancellationRequestedAtMs:
         cancellationRequests.get(run.id) ??
@@ -882,6 +1017,53 @@ export function createMockStore({
       }
       const evidence = buildTableMigrationUnitEvidence(snapshotOf(run), unitId);
       return evidence === undefined ? undefined : deepFreeze(evidence);
+    },
+
+    getValidationReport(runId) {
+      const run = runs.get(runId);
+      return run === undefined ? undefined : validationReportOf(run);
+    },
+
+    recordValidationDisposition(runId, request) {
+      const run = runs.get(runId);
+      if (run === undefined) {
+        return { ok: false, code: 'NOT_FOUND' };
+      }
+      const reason = request.reason.trim();
+      const accountableOperator = request.accountableOperator.trim();
+      // 校验处置 is 「an operator's **audited** decision」: a decision with nobody's name on
+      // it and no stated reason is not one, so it is refused rather than stored blank.
+      if (reason === '' || accountableOperator === '') {
+        return { ok: false, code: 'REASON_OR_OPERATOR_MISSING' };
+      }
+
+      const row = validationReportOf(run).rows.find((entry) => entry.unitId === request.unitId);
+      if (row === undefined) {
+        return { ok: false, code: 'NOT_FOUND' };
+      }
+      // Nothing to accept: a `PASS` needs no decision, an unfinished attempt has not
+      // produced a result yet, and a table that never ran a 校验执行 has no technical
+      // result for a disposition to be *about*.
+      const accepted =
+        row.execution === null || row.execution.completedAt === null
+          ? []
+          : acceptedCheckIdsOf(row.execution);
+      if (accepted.length === 0) {
+        return { ok: false, code: 'NOTHING_TO_DISPOSE' };
+      }
+
+      dispositionsOf(runId).set(request.unitId, {
+        executionId: validationExecutionIdOf(request.unitId),
+        unitId: request.unitId,
+        recordedAt: new Date(clock.now()).toISOString(),
+        accountableOperator,
+        reason,
+        acceptedCheckIds: accepted,
+      });
+
+      // Re-read rather than patch: the report is a projection, so what comes back is what
+      // any other reader would now see — including the technical conclusion, unchanged.
+      return { ok: true, report: validationReportOf(run) };
     },
 
     describeRunCancellation(runId) {
