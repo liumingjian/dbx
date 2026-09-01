@@ -1,0 +1,167 @@
+// Chinese typography override layer (ADR-0014) — the token values.
+//
+// This module holds values only and imports nothing from Carbon, so that
+// `src/styles/index.scss` can feed it straight into `@use '@carbon/react/scss/type'
+// with (...)`. Overriding the tokens themselves, rather than patching selected Carbon
+// classes, is what makes the layer reach every Carbon component instead of only the
+// handful DBX happens to render today.
+//
+// Every value here is fixed by ADR-0014 and must be re-tested whenever Carbon is upgraded:
+//
+//   * letter-spacing is zeroed on all 18 type tokens that carry one — Carbon's 0.16px and
+//     0.32px are tuned for small Latin text and visibly loosen Chinese words;
+//   * `label-01` / `helper-text-01` / `caption-01` move 12px -> 13px (not 14px, which would
+//     collide with `body-compact-01`);
+//   * `body-compact-01` line height moves 1.28572 -> 1.45.
+//
+// Consequence, also fixed by ADR-0014: the smallest usable table row height in Chinese is
+// `sm` (32px). `xs` (24px) is unavailable and table density is planned against 32px.
+//
+// Each map below restates Carbon's own definition with only the intended properties
+// changed. Sass configuration replaces a map wholesale, so every key the original carries
+// — including `font-family` on the code tokens — has to be repeated here.
+
+$size-13px: 0.8125rem;
+$size-14px: 0.875rem;
+$size-12px: 0.75rem;
+$mono-stack:
+  'IBM Plex Mono',
+  system-ui,
+  -apple-system,
+  BlinkMacSystemFont,
+  '.SFNSText-Regular',
+  monospace;
+
+/// The DBX family stack. Latin first, so identifiers and numbers keep Plex letterforms
+/// rather than the Latin glyphs of a Chinese face.
+$font-family-sans:
+  'IBM Plex Sans',
+  'IBM Plex Sans SC',
+  -apple-system,
+  'PingFang SC',
+  'Microsoft YaHei',
+  sans-serif;
+
+// --- 12px -> 13px, letter-spacing zeroed ------------------------------------------------
+
+$caption-01: (
+  font-size: $size-13px,
+  font-weight: 400,
+  line-height: 1.33333,
+  letter-spacing: 0,
+);
+$label-01: (
+  font-size: $size-13px,
+  font-weight: 400,
+  line-height: 1.33333,
+  letter-spacing: 0,
+);
+// `helper-text-01` carries no font-weight in Carbon; keep it that way.
+$helper-text-01: (
+  font-size: $size-13px,
+  line-height: 1.33333,
+  letter-spacing: 0,
+);
+
+// --- line height 1.28572 -> 1.45, letter-spacing zeroed ---------------------------------
+
+$body-compact-01: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.45,
+  letter-spacing: 0,
+);
+
+// --- letter-spacing zeroed, otherwise unchanged -----------------------------------------
+
+$caption-02: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$label-02: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$helper-text-02: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$body-short-01: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$body-long-01: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.42857,
+  letter-spacing: 0,
+);
+$body-01: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.42857,
+  letter-spacing: 0,
+);
+$code-01: (
+  font-family: $mono-stack,
+  font-size: $size-12px,
+  font-weight: 400,
+  line-height: 1.33333,
+  letter-spacing: 0,
+);
+$code-02: (
+  font-family: $mono-stack,
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.42857,
+  letter-spacing: 0,
+);
+$heading-01: (
+  font-size: $size-14px,
+  font-weight: 600,
+  line-height: 1.42857,
+  letter-spacing: 0,
+);
+$heading-compact-01: (
+  font-size: $size-14px,
+  font-weight: 600,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$productive-heading-01: (
+  font-size: $size-14px,
+  font-weight: 600,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$expressive-heading-01: (
+  font-size: $size-14px,
+  font-weight: 600,
+  line-height: 1.42857,
+  letter-spacing: 0,
+);
+$legal-01: (
+  font-size: $size-12px,
+  font-weight: 400,
+  line-height: 1.33333,
+  letter-spacing: 0,
+);
+$legal-02: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+
+// Row heights. `xs` (24px) is deliberately absent: it is unusable for Chinese at this
+// line height, so it is not expressible as a token.
+$row-height-condensed: 2rem; // 32px
+$row-height-comfortable: 2.5rem; // 40px

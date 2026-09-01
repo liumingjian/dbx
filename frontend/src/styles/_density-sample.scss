@@ -1,0 +1,43 @@
+// Styles for the Chinese density sample only (`/design/density`).
+//
+// Kept out of the product layer because the sample is a design reference surface with a
+// single job — showing Chinese body text at a 32px and a 40px row height — and it is a
+// plain table rather than `DbxTable` (ADR-0015) precisely because the question it answers
+// is typography, not table behaviour.
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+@use '@carbon/react/scss/type' as type;
+
+.dbx-density-sample__table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: $layer-01;
+}
+
+.dbx-density-sample__table th,
+.dbx-density-sample__table td {
+  text-align: left;
+  padding: 0 $spacing-05;
+  border-bottom: 1px solid $border-subtle-01;
+  white-space: nowrap;
+}
+
+.dbx-density-sample__table th {
+  height: var(--dbx-row-height-condensed);
+  color: $text-secondary;
+  font-weight: 600;
+
+  @include type.type-style('label-01');
+}
+
+.dbx-density-sample__table td {
+  @include type.type-style('body-compact-01');
+}
+
+.dbx-density-sample--condensed td {
+  height: var(--dbx-row-height-condensed);
+}
+
+.dbx-density-sample--comfortable td {
+  height: var(--dbx-row-height-comfortable);
+}

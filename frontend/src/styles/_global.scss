@@ -1,0 +1,28 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: $background;
+  color: $text-primary;
+}
+
+.dbx-page {
+  padding: $spacing-06 $spacing-07;
+  max-width: 66rem;
+}
+
+.dbx-page__title {
+  margin-bottom: $spacing-03;
+}
+
+.dbx-page__lead {
+  color: $text-secondary;
+  margin-bottom: $spacing-06;
+}

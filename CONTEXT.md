@@ -34,6 +34,13 @@ An immutable version of secret authentication material referenced by connections
 _Avoid_: Password field, current password
 _中文_: 凭据版本
 
+**Data source management**:
+The product surface on which database connections and their credential versions are registered, verified, and maintained. It is a navigation area, not an entity: the thing it manages is always a database connection. Connection creation and credential entry happen only here, never inline inside the migration wizard.
+_Avoid_: Connection wizard, inline credentials
+_中文_: 数据源
+
+Its Chinese wording names the navigation area alone. An individual endpoint is a 数据库连接 and never a 数据源, which is why `Database connection` still lists `datasource` under `_Avoid_`.
+
 **Mapping rule**:
 A structured, reviewable exception to DBX's automatic table or column mapping. A rule names one source coordinate, one bounded action, its target value, and whether DBX or the user produced it; user rules override automatic rules. Rules never contain arbitrary SQL or regular expressions in v1.
 _Avoid_: Mapping script, route expression
