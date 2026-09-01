@@ -64,6 +64,15 @@ export interface DatabaseConnection {
   readonly port: number;
   /** The MySQL database or PostgreSQL database this endpoint defaults to. */
   readonly database: string;
+  /**
+   * The databases this endpoint exposes, `database` included.
+   *
+   * The migration wizard needs it because a migration task is 「one source MySQL database
+   * into one PostgreSQL schema」 (`CONTEXT.md`): which database is being migrated is an
+   * explicit operator choice, and a connection that reaches a server reaches more than one
+   * database. Always non-empty, and always deterministically ordered.
+   */
+  readonly databases: readonly string[];
   readonly tls: TlsMode;
   readonly currentCredentialVersion: CredentialVersion;
   /** Historical versions remain auditable, so this only grows. */

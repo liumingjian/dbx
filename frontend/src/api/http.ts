@@ -49,6 +49,20 @@ export async function getJson<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+export async function patchJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await send(path, {
+    method: 'PATCH',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return (await response.json()) as T;
+}
+
+/** A deletion that leaves no trace has nothing to return but the fact that it happened. */
+export async function remove(path: string): Promise<void> {
+  await send(path, { method: 'DELETE' });
+}
+
 export async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const response = await send(path, {
     method: 'POST',

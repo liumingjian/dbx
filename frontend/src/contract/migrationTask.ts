@@ -39,6 +39,18 @@ export interface MigrationTask {
 export type MigrationDraftStage = 'connections' | 'scope' | 'tables' | 'confirm';
 
 /**
+ * How the operator stated the 迁移范围.
+ *
+ * ADR-0015 leaves cross-page selection semantics to DBX, and the difference the model
+ * turns on has to survive a browser refresh as well as a page change: 「我逐张勾选了这些」
+ * and 「我要符合当前筛选的全部，除了这几张」 are different decisions, and only the second
+ * one makes an unticked table a recorded exception rather than an oversight. Deriving the
+ * kind back from the two lists is not possible — a fully ticked selection and an
+ * all-matching selection with no exclusions look identical — so the draft says which it is.
+ */
+export type MigrationDraftScopeKind = 'SELECTED_TABLES' | 'ALL_TABLES_EXCEPT';
+
+/**
  * An unapproved, discardable working set of wizard selections and per-table configuration
  * that has not yet become a migration task (`CONTEXT.md`). It produces no migration run,
  * is never referenced as audit evidence, and may be deleted without trace.
@@ -55,7 +67,10 @@ export interface MigrationDraft {
   readonly sourceDatabase: string | null;
   readonly targetConnectionId: DatabaseConnectionId | null;
   readonly targetSchema: string | null;
+  readonly scopeKind: MigrationDraftScopeKind;
+  /** The source tables in the 迁移范围 right now, by name. */
   readonly selectedTables: readonly string[];
+  /** Tables the operator explicitly took out of an `ALL_TABLES_EXCEPT` scope. */
   readonly excludedTables: readonly string[];
   readonly completedStages: readonly MigrationDraftStage[];
 }

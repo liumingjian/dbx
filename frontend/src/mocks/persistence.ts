@@ -22,11 +22,13 @@ export interface DraftPersistence {
 export const DRAFT_STORAGE_KEY = 'dbx.migration-drafts';
 
 /**
- * Bumped whenever the persisted shape changes. A payload written by an older version is
- * discarded rather than migrated: a draft is discardable by definition, so guessing at a
- * stale shape would buy nothing and could resurrect a half-valid selection.
+ * Bumped whenever the persisted shape changes — version 2 added the draft's scope kind
+ * (#34), so a version 1 payload no longer says which selection the operator made. A
+ * payload written by an older version is discarded rather than migrated: a draft is
+ * discardable by definition, so guessing at a stale shape would buy nothing and could
+ * resurrect a half-valid selection.
  */
-export const DRAFT_SCHEMA_VERSION = 1;
+export const DRAFT_SCHEMA_VERSION = 2;
 
 interface PersistedPayload {
   readonly schemaVersion: number;
