@@ -174,7 +174,9 @@ function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult
       messages.wizard.gates.preflightNotSupported(
         notSupported.length,
         firstNotSupported.sourceTable,
-        firstNotSupported.preflightConclusion ?? '',
+        firstNotSupported.preflightConclusion === null
+          ? ''
+          : messages.conclusion.labels[firstNotSupported.preflightConclusion],
       ),
     );
   }

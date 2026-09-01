@@ -1,6 +1,7 @@
 import type {
   DraftMappingRule,
   PreflightFindingCode,
+  PreflightInconclusiveReason,
   DraftTableConfiguration,
   DraftTableWorkspace,
   MappingException,
@@ -601,10 +602,14 @@ function valueDomainColumnsOf(
   return chosen;
 }
 
-/** Why a scan could not conclude. A technical literal, as ADR-0003 words it. */
-function inconclusiveReasonOf(seed: number, table: SourceTableSummary): string {
-  const reasons = ['QUERY_TIMEOUT', 'PERMISSION_DENIED', 'CONNECTION_LOST'] as const;
-  return reasons[hashOf(`${seed}:${table.name}:reason`) % reasons.length] as string;
+/** Why a scan could not conclude — one of the three conditions ADR-0003 names. */
+function inconclusiveReasonOf(seed: number, table: SourceTableSummary): PreflightInconclusiveReason {
+  const reasons: readonly PreflightInconclusiveReason[] = [
+    'QUERY_TIMEOUT',
+    'PERMISSION_DENIED',
+    'CONNECTION_LOST',
+  ];
+  return reasons[hashOf(`${seed}:${table.name}:reason`) % reasons.length] as PreflightInconclusiveReason;
 }
 
 function finding(

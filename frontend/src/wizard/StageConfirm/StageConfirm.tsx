@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useExecutionConfirmationSummary, useStartMigrationRun } from '@/api/executionConfirmation';
 import { DbxTable, type DbxTableColumn } from '@/components/DbxTable';
 import { ConclusionIndicator } from '@/conclusions';
+import { findingDetail, findingLabel } from '@/features/preflight/preflightVocabulary';
 import { ErrorState, LoadingState } from '@/components/ViewState';
 import type {
   ExecutionSummaryTable,
@@ -149,10 +150,10 @@ export function StageConfirm({ context, onPatch }: StageConfirmProps) {
         id: 'code',
         header: copy.findingColumns.code,
         width: 260,
-        // `CONTEXT.md` carries no `_中文_` for a finding code, so the literal is rendered
-        // and the sentence beside it explains it (lead decision D28).
-        textValue: (row) => row.code,
-        renderCell: (row) => <Identifier>{row.code}</Identifier>,
+        // `CONTEXT.md` words every finding code; the sentence in the detail column states
+        // the exact fact behind the name.
+        textValue: (row) => findingLabel(row.code),
+        renderCell: (row) => <span>{findingLabel(row.code)}</span>,
       },
       {
         id: 'coordinate',
@@ -169,7 +170,8 @@ export function StageConfirm({ context, onPatch }: StageConfirmProps) {
         textValue: (row) => messages.wizard.tables.preflight.codes[row.code],
         renderCell: (row) => (
           <span>
-            {messages.wizard.tables.preflight.codes[row.code]} <Identifier>{row.detail}</Identifier>
+            {messages.wizard.tables.preflight.codes[row.code]}{' '}
+            <Identifier>{findingDetail(row.detail)}</Identifier>
           </span>
         ),
       },

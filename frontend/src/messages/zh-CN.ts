@@ -41,20 +41,20 @@ export const messages = {
       approvedAt: '批准时间',
     },
     /**
-     * A migration run's status has no `_中文_` line in `CONTEXT.md`, so the interface
-     * shows the enum literal rather than inventing a translation — the precedent batch 1
-     * set for preflight conclusions. The indicator beside it comes from the conclusion
-     * mapping module, so the meaning is never carried by colour alone.
+     * 迁移运行状态 (`CONTEXT.md`, ADR-0004). Three of the eight end in completion, so none
+     * of them may be worded as a bare 「完成」: 全部完成, 完成，有失败 and 完成，已接受风险
+     * carry the difference into every list the run appears in. The indicator beside them
+     * comes from the conclusion mapping module, so meaning is never carried by colour alone.
      */
     runStatuses: {
-      PREPARING: 'PREPARING',
-      RUNNING: 'RUNNING',
-      ATTENTION_REQUIRED: 'ATTENTION_REQUIRED',
-      CANCELLING: 'CANCELLING',
-      COMPLETED: 'COMPLETED',
-      COMPLETED_WITH_FAILURES: 'COMPLETED_WITH_FAILURES',
-      COMPLETED_WITH_ACCEPTED_RISK: 'COMPLETED_WITH_ACCEPTED_RISK',
-      CANCELLED: 'CANCELLED',
+      PREPARING: '准备中',
+      RUNNING: '进行中',
+      ATTENTION_REQUIRED: '需要人工处理',
+      CANCELLING: '取消中',
+      COMPLETED: '全部完成',
+      COMPLETED_WITH_FAILURES: '完成，有失败',
+      COMPLETED_WITH_ACCEPTED_RISK: '完成，已接受风险',
+      CANCELLED: '已取消',
     },
     neverRun: '尚未运行',
     filters: {
@@ -218,7 +218,7 @@ export const messages = {
       preflightInFlight: (count: number, example: string) =>
         `迁移范围内还有 ${count} 张表的预检正在进行（例如 ${example}）。预检得出结论前不能进入下一阶段。`,
       preflightNotSupported: (count: number, example: string, conclusion: string) =>
-        `迁移范围内有 ${count} 张表的预检结论不是 SUPPORTED（例如 ${example}：${conclusion}）。只有 SUPPORTED 的预检可以继续。请修正源后重新预检、裁剪超限字段后重跑预检，或显式排除该表。`,
+        `迁移范围内有 ${count} 张表的预检结论不是可迁移（例如 ${example}：${conclusion}）。只有结论为可迁移的预检可以继续。请修正源后重新预检、裁剪超限字段后重跑预检，或显式排除该表。`,
       preflightBlockingFindings: (count: number, example: string) =>
         `迁移范围内有 ${count} 张表带着阻断发现（例如 ${example}）。阻断发现不能被确认掉，只能被解决或让该表退出迁移范围。`,
       /**
@@ -399,10 +399,25 @@ export const messages = {
         largestRow: (bytes: string) => `最大行 ${bytes} 字节`,
         envelope: '大记录包络上限为 20 MiB（20,971,520 字节）；超过 1 MiB 即为大记录表。',
         /**
-         * A finding is rendered as its stable code plus a sentence. `CONTEXT.md` carries no
-         * `_中文_` for these codes, so the literal is shown (lead decision D13) and the
-         * sentence explains it, exactly as 映射例外 already does.
+         * A 预检发现 is rendered as its short name plus a sentence. `CONTEXT.md` fixes both: the
+         * short name under 「Preflight finding code」 and the exact fact the sentence states.
          */
+        codeLabels: {
+          LARGE_RECORD_VALUE: '大记录单值',
+          LARGE_RECORD_ROW: '大记录整行',
+          VALUE_DOMAIN_OUT_OF_RANGE: '值域超出目标类型',
+          ZERO_DATE_VALUE_REJECTED: '零日期值将被拒绝',
+          ENVELOPE_SCAN_INCONCLUSIVE: '包络扫描无法判定',
+        },
+        /**
+         * Why an exact scan could not conclude (`CONTEXT.md`, 「Preflight inconclusive
+         * reason」). Each names a condition the operator can go and fix.
+         */
+        inconclusiveReasons: {
+          QUERY_TIMEOUT: '查询超时',
+          PERMISSION_DENIED: '权限不足',
+          CONNECTION_LOST: '连接中断',
+        },
         codes: {
           LARGE_RECORD_VALUE: '单个源值的精确字节数。超过 20 MiB 上限即无法迁移。',
           LARGE_RECORD_ROW: '整行序列化前载荷的精确字节数。裁掉一个字段不豁免整行检查。',
@@ -418,7 +433,7 @@ export const messages = {
           `无法确认是否可迁移：DBX 未能完成 20 MiB 精确预检（${reason}）。修复权限、超时或连接问题后重试；不能忽略此检查继续迁移。`,
         /** The same shape, for a block that is not about the envelope. */
         unsupportedTitle: (table: string) =>
-          `无法迁移：表 ${table} 的预检结论是 UNSUPPORTED。请按下面三条出路之一处理；不能忽略此结论继续迁移。`,
+          `无法迁移：表 ${table} 的预检结论是不可迁移。请按下面三条出路之一处理；不能忽略此结论继续迁移。`,
         exits: {
           heading: '面对阻断，有三条出路',
           /** The whole point of the panel: there is no fourth exit, and no acknowledgement. */
@@ -471,11 +486,10 @@ export const messages = {
         APPROVED_ZERO_DATE_RELAXATION: '按已批准的逐列零日期放宽，允许为空。',
       },
       /**
-       * `CONTEXT.md` carries no `_中文_` for a rule's origin, so the interface shows the
-       * enum literal — the precedent batch 1 set for preflight conclusions (lead decision
-       * D13). 「user rules override automatic rules」 is what the column is for.
+       * 映射规则来源 (`CONTEXT.md`). 「user rules override automatic rules」 is what the
+       * column is for, so the two words say who decided rather than what kind of rule it is.
        */
-      ruleOrigins: { PLATFORM: 'PLATFORM', USER: 'USER' },
+      ruleOrigins: { PLATFORM: 'DBX 自动生成', USER: '用户指定' },
       chooseRule: '请选择',
       ruleLabel: (column: string) => `为 ${column} 选择映射规则`,
       undecided: (count: number) => `还有 ${count} 项映射例外需要你决定；DBX 不会替你选。`,
@@ -743,33 +757,40 @@ export const messages = {
       },
     },
     /**
-     * Phases (ADR-0004). `WAITING_FOR_BOX` is 等待调度 — an ordinary waiting state, not a
-     * fault, carrying no diagnosis. The rest have no `_中文_` line and are shown as the
-     * enum literal, following the precedent batch 1 set for preflight conclusions.
+     * 阶段 (ADR-0004, `CONTEXT.md` 「Table migration phase」). A phase says what is
+     * happening and never how it turned out — which is why 已结束 is a phase and the
+     * 技术结果 beside it is a separate word. `WAITING_FOR_BOX` is 等待调度: an ordinary
+     * waiting state, not a fault, and it does not name the box (Gate 7).
      */
     phases: {
-      DISCOVERED: 'DISCOVERED',
-      PREFLIGHTING: 'PREFLIGHTING',
-      AWAITING_APPROVAL: 'AWAITING_APPROVAL',
-      READY: 'READY',
-      CREATING_TARGET: 'CREATING_TARGET',
+      DISCOVERED: '已读取源结构',
+      PREFLIGHTING: '预检中',
+      AWAITING_APPROVAL: '等待批准',
+      READY: '已批准待执行',
+      CREATING_TARGET: '创建目标表中',
       WAITING_FOR_BOX: '等待调度',
-      TRANSFERRING: 'TRANSFERRING',
-      VALIDATING: 'VALIDATING',
-      TERMINAL: 'TERMINAL',
+      TRANSFERRING: '传输中',
+      VALIDATING: '校验中',
+      TERMINAL: '已结束',
     },
     /**
-     * Outcomes (ADR-0004). `BLOCKED_BY_BOX_FAILURE` is 因关联失败而阻塞: the unit's own
-     * technical result is undetermined rather than failed, and it is a candidate for
-     * re-migration. The others are enum literals for want of a `_中文_` line.
+     * 技术结果 (ADR-0004, `CONTEXT.md` 「Table migration outcome」).
+     *
+     * Two of these words exist to keep a unit's own fact apart from something a person
+     * did to the run. `BLOCKED_BY_BOX_FAILURE` is 因关联失败而阻塞 — undetermined rather
+     * than failed, and a 重新迁移 candidate. `CANCELLED` is 因运行取消而停止 and
+     * deliberately **not** 取消: `CONTEXT.md` gives 取消 to a person's terminal stop of a
+     * 迁移运行, and a unit that stopped without a result of its own is a different fact.
+     * `SUCCEEDED` is 迁移完成 because that is exactly the boundary `CONTEXT.md` defines,
+     * and a second word for it would be a second meaning.
      */
     outcomes: {
-      SUCCEEDED: 'SUCCEEDED',
-      FAILED: 'FAILED',
+      SUCCEEDED: '迁移完成',
+      FAILED: '迁移失败',
       BLOCKED_BY_BOX_FAILURE: '因关联失败而阻塞',
-      SKIPPED: 'SKIPPED',
-      CANCELLED: 'CANCELLED',
-      COMPLETED_WITH_ACCEPTED_RISK: 'COMPLETED_WITH_ACCEPTED_RISK',
+      SKIPPED: '已排除未迁移',
+      CANCELLED: '因运行取消而停止',
+      COMPLETED_WITH_ACCEPTED_RISK: '完成，已接受风险',
     },
     /**
      * 根因域's `Kafka Connect` and `Kafka` are presented as the single 迁移平台 domain
@@ -777,13 +798,14 @@ export const messages = {
      * so nothing is lost from the audit record — it is simply not the operator's business.
      */
     rootCauseDomains: {
-      USER_INPUT: 'USER_INPUT',
-      SOURCE_DATABASE: 'SOURCE_DATABASE',
-      TARGET_DATABASE: 'TARGET_DATABASE',
+      USER_INPUT: '用户输入',
+      SOURCE_DATABASE: '源数据库',
+      TARGET_DATABASE: '目标数据库',
       KAFKA_CONNECT: '迁移平台',
       KAFKA: '迁移平台',
-      RUNTIME_ENVIRONMENT: 'RUNTIME_ENVIRONMENT',
-      PLATFORM: 'PLATFORM',
+      RUNTIME_ENVIRONMENT: '运行环境',
+      /** DBX itself — never 平台, which would collide with 迁移平台 above. */
+      PLATFORM: 'DBX 自身',
     },
     /**
      * 单表证据 (#39) — one 表迁移单元's own 错误事件 and the 诊断 made of them.
@@ -832,14 +854,14 @@ export const messages = {
         rootCauseDomain: (domain: string) => `根因域 ${domain}`,
         sourceKind: (kind: string) => `诊断来源 ${kind}`,
         /**
-         * The three source kinds have no `_中文_` line in `CONTEXT.md`, so they are shown
-         * as the enum literal — the precedent batch 1 set for preflight conclusions
-         * (lead decisions D13/D16/D23/D28/D31).
+         * 诊断来源 (`CONTEXT.md`). It is shown because it tells the operator how much the
+         * diagnosis is worth trusting: a fact DBX established itself, an interpretation of
+         * an external signal, or an admission that no cause was established.
          */
         sourceKinds: {
-          STRUCTURED: 'STRUCTURED',
-          EXTERNAL_TRANSLATION: 'EXTERNAL_TRANSLATION',
-          SYSTEM_FALLBACK: 'SYSTEM_FALLBACK',
+          STRUCTURED: 'DBX 直接判定',
+          EXTERNAL_TRANSLATION: '外部信号翻译',
+          SYSTEM_FALLBACK: '兜底判定',
         },
         affectedHeading: '影响',
         actionHeading: '建议动作',
@@ -999,16 +1021,11 @@ export const messages = {
     latestCheckLabel: '最近校验',
     neverChecked: '尚未校验',
     /**
-     * A connection check has no `_中文_` wording for its outcomes in `CONTEXT.md`, so the
-     * interface shows the literal rather than inventing a translation — the precedent
-     * batch 1 set for preflight conclusions.
-     */
-    /**
      * Keyed by the `ConnectionCheckOutcome` literal itself, so every reader — 数据源, and
      * the evidence a 迁移运行 established for itself (#41) — renders one wording from one
      * table rather than each keeping a map of its own.
      */
-    checkOutcomes: { SUCCEEDED: 'SUCCEEDED', FAILED: 'FAILED', NOT_RUN: 'NOT_RUN' },
+    checkOutcomes: { SUCCEEDED: '校验通过', FAILED: '校验失败', NOT_RUN: '尚未校验' },
     recheckAction: '重新校验',
     /** Credential versions are immutable, so maintaining one adds a version. */
     addCredentialVersionAction: '新建凭据版本',
@@ -1032,10 +1049,11 @@ export const messages = {
       databaseLabel: '数据库',
       usernameLabel: '用户名',
       tlsLabel: 'TLS',
+      /** TLS 模式 (`CONTEXT.md`). */
       tlsModes: {
-        disabled: 'DISABLED',
-        serverAuthenticated: 'SERVER_AUTHENTICATED',
-        mutual: 'MUTUAL',
+        disabled: '不启用 TLS',
+        serverAuthenticated: '校验服务端证书',
+        mutual: '双向证书校验',
       },
       secretLabel: '凭据版本',
       secretHelper: '保存后生成第一个凭据版本。凭据版本不可修改，维护凭据是新建一个版本。',
@@ -1096,7 +1114,7 @@ export const messages = {
    */
   validation: {
     title: '校验报告',
-    lead: '校验执行给出技术结论；校验处置是操作员对失败或无法判定结果的决定。接受风险可以关闭流程，但不会把技术结论改写为 PASS。',
+    lead: '校验执行给出技术结论；校验处置是操作员对未通过或无法判定结果的决定。接受风险可以关闭流程，但不会把技术结论改写为通过。',
     openAction: '查看校验报告',
     backToRun: '返回运行监控',
     observedAt: (at: string) => `报告观测时间 ${at}`,
@@ -1132,13 +1150,13 @@ export const messages = {
       unitLabel: '张',
       columns: { sourceTable: '源表', reason: '排除原因' },
       reasons: {
-        OPERATOR_EXCLUDED: 'OPERATOR_EXCLUDED',
-        PREFLIGHT_UNSUPPORTED: 'PREFLIGHT_UNSUPPORTED',
-        PREFLIGHT_INCONCLUSIVE: 'PREFLIGHT_INCONCLUSIVE',
+        OPERATOR_EXCLUDED: '操作员显式排除',
+        PREFLIGHT_UNSUPPORTED: '预检判定不可迁移',
+        PREFLIGHT_INCONCLUSIVE: '预检无法判定',
       },
       reasonDetails: {
         OPERATOR_EXCLUDED: '操作员在迁移范围里显式排除了这张表；显式排除是可复核的例外。',
-        PREFLIGHT_UNSUPPORTED: '这张表的预检结论是 UNSUPPORTED，只有 SUPPORTED 的预检可以继续。',
+        PREFLIGHT_UNSUPPORTED: '这张表的预检结论是不可迁移，只有结论为可迁移的预检可以继续。',
         PREFLIGHT_INCONCLUSIVE: '预检无法确认这张表是否可迁移，不能被确认掉。',
       },
     },
@@ -1156,7 +1174,7 @@ export const messages = {
       note: '按校验执行本身的结论计数，与是否记录了校验处置无关。',
       itemsHeading: '校验项分布',
       itemsNote:
-        'NOT_APPLICABLE 是校验计划判定这一项对这张表不适用，NOT_RUN 是校验计划没有启用这一项或校验执行没有发生——两者都不是失败，不需要去追。',
+        '不适用是校验计划判定这一项对这张表没有可比对的对象，未执行是校验计划没有启用这一项或校验执行没有发生——两者都不是失败，不需要去追。',
       countOf: (label: string, count: number) => `${label} ${count}`,
     },
     rows: {
@@ -1189,11 +1207,11 @@ export const messages = {
       disposed: '只看已记录校验处置',
     },
     checks: {
-      ROW_COUNT: 'ROW_COUNT',
-      PRIMARY_KEY_TERMINAL_VALUE: 'PRIMARY_KEY_TERMINAL_VALUE',
-      NULL_CONSTRAINT_CONFORMANCE: 'NULL_CONSTRAINT_CONFORMANCE',
-      VALUE_CHECKSUM_SAMPLE: 'VALUE_CHECKSUM_SAMPLE',
-      LARGE_RECORD_VALUE_INTEGRITY: 'LARGE_RECORD_VALUE_INTEGRITY',
+      ROW_COUNT: '行数比对',
+      PRIMARY_KEY_TERMINAL_VALUE: '主键终值比对',
+      NULL_CONSTRAINT_CONFORMANCE: '非空约束符合性',
+      VALUE_CHECKSUM_SAMPLE: '抽样值比对',
+      LARGE_RECORD_VALUE_INTEGRITY: '大记录值完整性',
     },
     /**
      * 校验处置 — 「an operator's audited decision about a failed or inconclusive validation
@@ -1202,7 +1220,7 @@ export const messages = {
     disposition: {
       heading: '校验处置',
       statement:
-        '校验处置是对失败或无法判定的技术结论所做的、有责任人的决定。它可以关闭流程，但不会把技术结论改写为 PASS：上面的技术结论在记录处置前后完全一样。',
+        '校验处置是对未通过或无法判定的技术结论所做的、有责任人的决定。它可以关闭流程，但不会把技术结论改写为通过：上面的技术结论在记录处置前后完全一样。',
       recorded: '已记录校验处置',
       none: '未记录校验处置',
       action: '记录校验处置',
@@ -1217,7 +1235,7 @@ export const messages = {
       modal: {
         title: '记录校验处置',
         body: (sourceTable: string, conclusion: string) =>
-          `${sourceTable} 的校验执行技术结论是 ${conclusion}。记录校验处置会关闭这张表的流程，但不会改变这个技术结论，也不会把它变成 PASS。`,
+          `${sourceTable} 的校验执行技术结论是 ${conclusion}。记录校验处置会关闭这张表的流程，但不会改变这个技术结论，也不会把它变成通过。`,
         operatorLabel: '责任人',
         operatorHelper: '写下对这次决定负责的人，不是角色或团队。',
         reasonLabel: '理由',
@@ -1253,22 +1271,24 @@ export const messages = {
   },
   conclusion: {
     /**
-     * Labels for the closed set of judgements DBX renders as an indicator.
+     * Labels for the closed set of judgements DBX renders as an indicator. Every one of
+     * them is a `_中文_` line in `CONTEXT.md`.
      *
-     * Only 卡死 has a `_中文_` line in `CONTEXT.md`. The rest are enum literals, because
-     * `CONTEXT.md` carries no Chinese wording for them and the repository rule is to add
-     * the word there first rather than invent one here. `IN_FLIGHT` is the gap this
-     * ticket adds to that list.
+     * Three distinctions are the reason this table exists at all. 无法判定 is a statement
+     * about what DBX could not establish, never a softened 「有点风险」 — which is why it
+     * shares no word with 未通过 and is drawn as `unknown` rather than as a caution.
+     * 不适用 and 未执行 are separate facts: the plan found nothing here to compare, versus
+     * the check simply did not happen; neither is a failure to chase.
      */
     labels: {
-      SUPPORTED: 'SUPPORTED',
-      UNSUPPORTED: 'UNSUPPORTED',
-      INCONCLUSIVE: 'INCONCLUSIVE',
-      PASS: 'PASS',
-      FAIL: 'FAIL',
-      NOT_APPLICABLE: 'NOT_APPLICABLE',
-      NOT_RUN: 'NOT_RUN',
-      IN_FLIGHT: 'IN_FLIGHT',
+      SUPPORTED: '可迁移',
+      UNSUPPORTED: '不可迁移',
+      INCONCLUSIVE: '无法判定',
+      PASS: '通过',
+      FAIL: '未通过',
+      NOT_APPLICABLE: '不适用',
+      NOT_RUN: '未执行',
+      IN_FLIGHT: '执行中',
       STUCK: '卡死',
     },
   },
@@ -1343,7 +1363,7 @@ export const messages = {
       `上一次迁移运行的选定表数是 ${runCount} 张，迁移任务的选定表数是 ${taskCount} 张。新的迁移运行只覆盖你在这里选中的表。`,
     candidatesHeading: '可重新迁移的表',
     candidatesStatement:
-      '这些表的技术结果是失败或未定：校验执行结论是 FAIL、INCONCLUSIVE 或 NOT_RUN，或者因关联失败而阻塞。校验执行结论是 PASS 的表不在这里——它们已经有了自己的技术结论。',
+      '这些表的技术结果是失败或未定：校验执行结论是未通过、无法判定或未执行，或者因关联失败而阻塞。校验执行结论是通过的表不在这里——它们已经有了自己的技术结论。',
     exclusionsNotice:
       '预检排除项不会出现在这里：它们没有迁移，也没有校验执行，因此没有技术结论，不能当成失败的表重新迁移。',
     listLabel: '可重新迁移的表',
@@ -1361,7 +1381,7 @@ export const messages = {
     ineligible: {
       heading: '现在不能重新迁移的表',
       statement:
-        '这些表刚刚重新读过预检，结论不是 SUPPORTED，或者还没有可批准的表写入契约。只有 SUPPORTED 的预检可以继续。它们仍然列在这里，因为它们正是需要处理的表。',
+        '这些表刚刚重新读过预检，结论不是可迁移，或者还没有可批准的表写入契约。只有结论为可迁移的预检可以继续。它们仍然列在这里，因为它们正是需要处理的表。',
       none: '没有这样的表。',
       of: (table: string, conclusion: string) => `${table}：本次预检结论 ${conclusion}`,
       noContract: '没有可批准的表写入契约',

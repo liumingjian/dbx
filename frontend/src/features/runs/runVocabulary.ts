@@ -18,11 +18,18 @@ import { messages } from '@/messages';
  *    undetermined rather than failed;
  *  - 根因域 `Kafka Connect` and `Kafka` → the single **迁移平台** domain.
  *
- * Everything else is rendered as its enum literal, because `CONTEXT.md` carries no `_中文_`
- * line for it and the repository rule is to add the word there first. The three above are
- * the exception precisely because the fallback is unavailable for them: rendering those
- * literals would put the execution platform's own vocabulary on the operator's screen,
- * which is the one thing Gate 7 forbids.
+ * Every other 阶段, 技术结果 and 根因域 now has its own `_中文_` line too (#42), so nothing
+ * here renders a persisted literal. Two of the words above remain the ones this module was
+ * built for, because for them the old fallback was never available: rendering
+ * `WAITING_FOR_BOX`, `BLOCKED_BY_BOX_FAILURE` or the two execution-platform domains would
+ * put the execution platform's own vocabulary on the operator's screen, which is the one
+ * thing Gate 7 forbids.
+ *
+ * Two more distinctions the table now carries, both decided in `CONTEXT.md`:
+ *
+ *  - `CANCELLED` → **因运行取消而停止**, never 取消. A person cancels a 迁移运行; a unit
+ *    merely stops without a result of its own.
+ *  - 根因域 `PLATFORM` → **DBX 自身**, never 平台 — which would collide with 迁移平台.
  */
 
 export function phaseLabel(phase: TableMigrationPhase): string {
