@@ -5,6 +5,7 @@ import type {
   PruneColumnRequest,
   RecordMappingRuleRequest,
   RegisterDatabaseConnectionRequest,
+  WriteFreezeDeclaration,
 } from '@/contract';
 import { API_BASE } from '@/api/http';
 import { getMockContext } from './context';
@@ -171,6 +172,36 @@ export const handlers = [
       return workspace ? HttpResponse.json(workspace) : notFound();
     },
   ),
+
+  // 执行确认's summary: one aggregate rather than six reads, because it is one global
+  // check and halves fetched separately could contradict each other.
+  http.get(`${API_BASE}/migration-drafts/:id/execution-confirmation`, async ({ params }) => {
+    const faulted = await applyTransportFault('executionConfirmation');
+    if (faulted) return faulted;
+    const summary = getMockContext().store.summariseExecutionConfirmation(String(params.id));
+    return summary ? HttpResponse.json(summary) : notFound();
+  }),
+
+  /**
+   * Starting the migration: the 迁移草稿 becomes a 迁移任务 and its first 迁移运行.
+   *
+   * A POST to the runs of a draft rather than a PATCH of the draft, because nothing is
+   * being edited — an immutable record is being created, and the draft ceases to exist.
+   * The refusals are the server's own: Gate 5 and Gate 6 are constraints on the system,
+   * not on the button, so a request that never went past the wizard is refused here too.
+   */
+  http.post(`${API_BASE}/migration-drafts/:id/migration-runs`, async ({ params, request }) => {
+    const faulted = await applyTransportFault('executionConfirmation');
+    if (faulted) return faulted;
+    const body = (await request.json()) as WriteFreezeDeclaration;
+    const result = getMockContext().store.startMigrationRun(String(params.id), body);
+    if (result.ok) {
+      return HttpResponse.json({ task: result.task, run: result.run }, { status: 201 });
+    }
+    return result.code === 'NOT_FOUND'
+      ? notFound()
+      : apiError(409, result.code, 'The migration draft may not be started.');
+  }),
 
   http.get(`${API_BASE}/migration-tasks`, async () => {
     const faulted = await applyTransportFault('migrationTasks');

@@ -10,11 +10,13 @@ export { WizardShell } from './WizardShell';
 export { StageConnections } from './StageConnections';
 export { StageScope } from './StageScope';
 export { StageTables } from './StageTables';
+export { StageConfirm } from './StageConfirm';
 export {
   evaluateStageGate,
   furthestReachableStage,
   isStageComplete,
   isStageReachable,
+  mayStartMigration,
   nextStage,
   previousStage,
   resolveStageEntry,

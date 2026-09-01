@@ -12,6 +12,7 @@ import type { MigrationDraftPatch } from '@/contract';
 import { messages } from '@/messages';
 import { isWizardStage, paths, type WizardStage } from '@/routes/paths';
 import {
+  StageConfirm,
   StageConnections,
   StageScope,
   StageTables,
@@ -20,6 +21,7 @@ import {
   type WizardGateContext,
 } from '@/wizard';
 import { useDraftTableConfigurations } from '@/api/draftTables';
+import { useExecutionConfirmationSummary } from '@/api/executionConfirmation';
 import { Page } from './Page';
 import { NotFoundPage } from './NotFoundPage';
 
@@ -46,13 +48,14 @@ export interface WizardStageProps {
  * Which component renders which stage.
  *
  * A stage with no entry renders the "later batch" placeholder, which is honest while its
- * gate (`src/wizard/stageGates.ts`) also says the stage is undelivered. #37 adds
- * `confirm`, and #38/#40 take over 运行监控 and 校验报告 from the migration run.
+ * gate (`src/wizard/stageGates.ts`) also says the stage belongs to a 迁移运行. #38 and #40
+ * take over 运行监控 and 校验报告 from the migration run.
  */
 const stageContent: Partial<Record<WizardStage, ComponentType<WizardStageProps>>> = {
   connections: StageConnections,
   scope: StageScope,
   tables: StageTables,
+  confirm: StageConfirm,
 };
 
 export function MigrationWizardStagePage() {
@@ -65,6 +68,10 @@ export function MigrationWizardStagePage() {
   // does not wait for them: `null` is a state the gate answers for, which keeps the shell
   // rendering while the read is in flight.
   const tableConfigurationsQuery = useDraftTableConfigurations(draftId ?? '');
+  // Stage four's gate is likewise a fact the server states rather than one the browser can
+  // compute: which tables a 结构证明 can be established for is a statement about the target
+  // catalog (#37). Same polarity as the summaries above — `null` blocks.
+  const executionSummaryQuery = useExecutionConfirmationSummary(draftId ?? '');
   const update = useUpdateMigrationDraft();
   const discard = useDiscardMigrationDraft();
 
@@ -116,6 +123,7 @@ export function MigrationWizardStagePage() {
     draft: draftQuery.data,
     connections: connectionsQuery.data ?? [],
     tableConfigurations: tableConfigurationsQuery.data ?? null,
+    executionSummary: executionSummaryQuery.data ?? null,
   };
 
   const permitted = resolveStageEntry(stage, context);

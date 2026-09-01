@@ -205,7 +205,38 @@ export const messages = {
         `迁移范围内有 ${count} 张表的预检结论不是 SUPPORTED（例如 ${example}：${conclusion}）。只有 SUPPORTED 的预检可以继续。请修正源后重新预检、裁剪超限字段后重跑预检，或显式排除该表。`,
       preflightBlockingFindings: (count: number, example: string) =>
         `迁移范围内有 ${count} 张表带着阻断发现（例如 ${example}）。阻断发现不能被确认掉，只能被解决或让该表退出迁移范围。`,
-      stageNotYetDelivered: '本阶段将在后续批次交付，暂时无法继续。',
+      /**
+       * 执行确认 (#37). The stage's gate is the pair of constraints the whole stage exists
+       * for, evaluated in the order a safety sequence reads them: what is not yet known,
+       * then 写冻结, then 结构证明, and only then the fact that leaving this stage is not
+       * something 「下一步」 does at all.
+       */
+      executionSummaryUnread: '还没有读到执行确认汇总，暂时无法判断能否启动迁移。',
+      /**
+       * **Gate 5**: 「没有写冻结确认就无法启动」.
+       *
+       * `CONTEXT.md` lists 「permanent checkbox」 under 写冻结's `_Avoid_`, so the sentence
+       * names what a confirmation actually consists of — a 责任人 and a 时限 — rather than
+       * asking for a tick.
+       */
+      writeFreezeNotConfirmed:
+        '启动前必须确认源端写冻结，并写明责任人与时限。没有写冻结确认，DBX 不会创建迁移运行。',
+      /**
+       * **Gate 6**: 「没有结构证明就不会开始写入目标」.
+       *
+       * The frontend cannot enforce this — 结构证明 is a server-side catalog comparison
+       * performed inside the 迁移运行 — so what it does is state the constraint and refuse
+       * to start while the summary reports a table it cannot be established for (lead
+       * decision D11).
+       */
+      structuralProofMissing: (count: number, example: string) =>
+        `还有 ${count} 张表无法建立结构证明（例如 ${example}）。没有结构证明，DBX 不会开始写入目标表。`,
+      /**
+       * Nothing is wrong, and the stage still does not lead anywhere: 运行监控 belongs to a
+       * 迁移运行, and a 迁移运行 only exists once the operator starts one deliberately.
+       */
+      runNotStarted:
+        '执行确认不通往下一步：按「开始迁移」创建迁移运行之后，运行监控才会出现。',
       stageBelongsToRun: '本阶段属于迁移运行，执行确认之后才会出现。',
     },
     connections: {
@@ -444,6 +475,111 @@ export const messages = {
       loading: '正在读取逐表配置与预检。',
       error: {
         title: '逐表配置读取失败',
+        body: '这次请求没有成功。稍后重试，或确认 DBX 后端是否可达。',
+      },
+    },
+    /**
+     * 阶段四 执行确认 — the last screen before a production migration starts (#37).
+     *
+     * Three words from `CONTEXT.md` carry it. 迁移运行 is 「one **immutable** execution
+     * attempt」, so the copy says the scope cannot be altered afterwards rather than
+     * implying a draft that can be revised. 写冻结 is 「externally enforced, time-bounded
+     * … with an accountable operator and expiry」 and lists 「permanent checkbox」 under
+     * `_Avoid_`, so nothing here is a tick and nothing here is open-ended. 结构证明 is 「the
+     * deterministic comparison of the actual PostgreSQL table … only zero difference
+     * permits the Sink to start」, and because that comparison happens server-side inside
+     * the run, the interface states the constraint rather than claiming to perform it.
+     */
+    confirm: {
+      lead: '启动前的最后一次全局核对：源、目标、选中的表、显式排除、将要批准的表写入契约，以及仍未解决的发现。',
+      scopeHeading: '本次执行范围',
+      sourceLabel: '源',
+      targetLabel: '目标',
+      /** How the operator stated the 迁移范围; the two are different decisions (D20). */
+      scopeKinds: {
+        SELECTED_TABLES: '逐张勾选',
+        ALL_TABLES_EXCEPT: '符合当前筛选的全部，减去显式排除的',
+      },
+      tablesHeading: '选中的表',
+      /** A source table is counted in 张, a 表写入契约 in 份, a column in 列. */
+      unitLabel: '张',
+      tableColumns: {
+        sourceTable: '源表',
+        targetTable: '目标表',
+        preflightConclusion: '预检结论',
+        contract: '表写入契约',
+        columnCount: '写入列数',
+        condition: '当前情况',
+      },
+      contractVersion: (version: number) => `v${version}`,
+      contractMissing: '尚未生成',
+      contractsSummary: (tables: string, columns: string) =>
+        `本次将批准 ${tables} 份表写入契约，共 ${columns} 列。表写入契约是不可变的单表写入意图，启动后不再改动。`,
+      excludedHeading: '显式排除',
+      excludedEmpty: '没有显式排除任何表。',
+      excludedConsequence: '显式排除是可复核的例外：这些表不迁移，也不会被计为校验失败。',
+      /**
+       * The part of the summary that must not be skimmed past.
+       *
+       * A blocking 发现 cannot reach this stage — stage three's gate holds it — so
+       * everything listed here was found, judged non-blocking, and never resolved. It
+       * travels into the migration with the table it belongs to, which is why it is stated
+       * at the top of the page instead of at the bottom.
+       */
+      findingsHeading: '未解决的发现',
+      findingsNotice: (count: string) =>
+        `迁移范围里还有 ${count} 项未解决的发现。它们不阻断启动，但会随这次迁移一起被带走；启动前请逐条看过。`,
+      findingsEmpty: '迁移范围内没有未解决的发现。',
+      findingColumns: { sourceTable: '源表', code: '发现', coordinate: '源坐标', detail: '证据' },
+      wholeTable: '整表',
+      /** 写冻结 — `CONTEXT.md` 的 `_Avoid_` 明确排除「permanent checkbox」. */
+      freezeHeading: '写冻结',
+      freezeConstraint:
+        '写冻结由源端在 DBX 之外保障，DBX 只记录这份承诺：它必须从源基线捕获开始一直有效，直到每张选中的表进入校验终态或执行停止。',
+      operatorLabel: '责任人',
+      operatorHelper: '写明为这次写冻结负责的人。责任人不能留空。',
+      durationLabel: '时限',
+      durationOption: (hours: number) => `${hours} 小时`,
+      changeReferenceLabel: '变更单号',
+      changeReferenceHelper: '选填：写冻结是在哪张变更单下安排的。',
+      expiryPreview: (moment: string) => `若现在启动，写冻结到期时间为 ${moment}。`,
+      confirmFreezeAction: '确认写冻结',
+      revokeFreezeAction: '撤销写冻结确认',
+      freezeConfirmed: (operator: string, hours: number) =>
+        `${operator} 已确认写冻结，时限 ${hours} 小时。`,
+      freezeNotConfirmed: '尚未确认写冻结。',
+      /** 结构证明 — stated, never simulated. See lead decision D11. */
+      proofHeading: '结构证明',
+      proofConstraint:
+        '结构证明是目标表与已批准的表写入契约的确定性比对，只有零差异才允许开始写入。没有结构证明，DBX 不会向目标表写入任何数据。结构证明由平台在迁移运行内、建表之后完成，因此这一步只声明约束，不代为完成。',
+      proofReady: (count: string) => `${count} 张表将在写入前逐张完成结构证明。`,
+      proofGapsHeading: '无法建立结构证明的表',
+      proofGaps: {
+        CONTRACT_NOT_APPROVED: '没有已批准的表写入契约，结构证明没有可比对的对象。',
+        TARGET_TABLE_EXISTS:
+          '目标 schema 里已经存在同名表。首次运行遇到已存在的目标表会退回复核，DBX 不会复用、清空或替换它。',
+      },
+      startAction: '开始迁移',
+      /**
+       * Starting is an act requiring deliberate intent, never a stray click, so it asks
+       * for the source database's own identifier — a thing only someone who knows what
+       * they are starting can type.
+       */
+      start: {
+        title: '确认开始迁移',
+        body: '启动会把这份迁移草稿变成迁移任务，并生成第一次迁移运行。迁移运行是不可变的执行快照：此次执行的范围日后不可篡改，迁移草稿也不再存在。',
+        challengeLabel: (database: string) => `输入源数据库名 ${database} 以确认`,
+        challengeHelper: '这一步不能顺手点过：请手动输入源数据库名。',
+        confirm: '确认并开始迁移',
+        cancel: '取消',
+      },
+      startFailed: {
+        title: '没有创建迁移运行',
+        body: '这次启动没有成功，迁移草稿仍在原处。请核对写冻结与结构证明，然后再试一次。',
+      },
+      loading: '正在读取执行确认汇总。',
+      error: {
+        title: '执行确认汇总读取失败',
         body: '这次请求没有成功。稍后重试，或确认 DBX 后端是否可达。',
       },
     },

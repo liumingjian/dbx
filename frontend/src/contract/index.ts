@@ -12,3 +12,4 @@ export type * from './sourceTable';
 export type * from './tableMigrationUnit';
 export type * from './validation';
 export type * from './tableConfiguration';
+export type * from './executionConfirmation';

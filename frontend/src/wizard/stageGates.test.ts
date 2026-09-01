@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import type { DatabaseConnection, DraftTableConfiguration, MigrationDraft } from '@/contract';
+import type {
+  DatabaseConnection,
+  DraftTableConfiguration,
+  ExecutionConfirmationSummary,
+  MigrationDraft,
+  StructuralProofGapStatement,
+} from '@/contract';
 import { messages } from '@/messages';
 import {
   evaluateStageGate,
   furthestReachableStage,
   isStageComplete,
   isStageReachable,
+  mayStartMigration,
   resolveStageEntry,
   type WizardGateContext,
 } from './stageGates';
@@ -89,6 +96,7 @@ function draft(overrides: Partial<MigrationDraft> = {}): MigrationDraft {
     excludedTables: [],
     prunedColumns: [],
     mappingRules: [],
+    writeFreeze: null,
     completedStages: [],
     ...overrides,
   };
@@ -116,14 +124,47 @@ function configuration(overrides: Partial<DraftTableConfiguration> = {}): DraftT
   };
 }
 
+/** The 执行确认 summary as the server would state it for a scope that is ready to run. */
+function summary(gaps: readonly StructuralProofGapStatement[] = []): ExecutionConfirmationSummary {
+  return {
+    draftId: 'draft-1',
+    sourceConnectionId: source.id,
+    sourceConnectionName: source.name,
+    sourceDatabase: 'orders',
+    targetConnectionId: target.id,
+    targetConnectionName: target.name,
+    targetSchema: 'orders',
+    scopeKind: 'SELECTED_TABLES',
+    tables: [
+      {
+        sourceTable: 'order_item',
+        targetTable: 'order_item',
+        preflightConclusion: 'SUPPORTED',
+        contractVersion: 1,
+        contractColumnCount: 9,
+        largeRecordTable: false,
+        prunedColumnCount: 0,
+      },
+    ],
+    excludedTables: [],
+    unresolvedFindings: [],
+    structuralProof: { provableTableCount: 1 - gaps.length, gaps },
+    assembledAt: '2026-09-01T09:00:00.000Z',
+  };
+}
+
+const freeze = { accountableOperator: 'zhang.wei', durationHours: 8, changeReference: null };
+
 const context = (
   entry: MigrationDraft,
   connections = [source, target],
   tableConfigurations: readonly DraftTableConfiguration[] | null = [configuration()],
+  executionSummary: ExecutionConfirmationSummary | null = summary(),
 ): WizardGateContext => ({
   draft: entry,
   connections,
   tableConfigurations,
+  executionSummary,
 });
 
 describe('wizard stage gating', () => {
@@ -157,7 +198,8 @@ describe('wizard stage gating', () => {
     const withTables = { ...configured, selectedTables: ['order_item'] };
     expect(evaluateStageGate('scope', context(withTables)).blocked).toBe(false);
     expect(isStageReachable('tables', context(withTables))).toBe(true);
-    // 执行确认 is where this draft now stops, because #37 has not delivered its gate yet.
+    // 执行确认 is where every draft stops: what leaves that stage is 「开始迁移」, which
+    // ends the draft, and never 「下一步」.
     expect(furthestReachableStage(context(withTables))).toBe('confirm');
   });
 
@@ -309,6 +351,91 @@ describe('wizard stage gating', () => {
     const ready = context({ ...configured, selectedTables: ['order_item'] });
     expect(evaluateStageGate('tables', ready).blocked).toBe(false);
     expect(furthestReachableStage(ready)).toBe('confirm');
+  });
+
+  it('is Gate 5: no 写冻结 confirmation, no start', () => {
+    // `CONTEXT.md` on 写冻结: 「externally enforced, time-bounded … has an accountable
+    // operator and expiry」, with 「permanent checkbox」 under `_Avoid_`. So the sentence
+    // names the 责任人 and the 时限, and an unconfirmed freeze blocks exactly as it would
+    // if the operator had never reached the stage.
+    const ready = context({ ...configured, selectedTables: ['order_item'] });
+    expect(evaluateStageGate('confirm', ready)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.writeFreezeNotConfirmed,
+    });
+    expect(mayStartMigration(ready)).toBe(false);
+  });
+
+  it('is Gate 5: a 写冻结 with no named 责任人 is not a confirmation', () => {
+    const blank = context({
+      ...configured,
+      selectedTables: ['order_item'],
+      writeFreeze: { ...freeze, accountableOperator: '  ' },
+    });
+    expect(evaluateStageGate('confirm', blank)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.writeFreezeNotConfirmed,
+    });
+    expect(mayStartMigration(blank)).toBe(false);
+  });
+
+  it('is Gate 5: a 写冻结 with no 时限 is the permanent checkbox the glossary rules out', () => {
+    const unbounded = context({
+      ...configured,
+      selectedTables: ['order_item'],
+      writeFreeze: { ...freeze, durationHours: 0 },
+    });
+    expect(evaluateStageGate('confirm', unbounded)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.writeFreezeNotConfirmed,
+    });
+  });
+
+  it('is Gate 6: a missing 结构证明 stops the start, and names the table', () => {
+    // The frontend cannot perform a 结构证明 — it is a server-side catalog comparison
+    // inside the run (lead decision D11) — so what it does is refuse while the summary
+    // reports one it cannot be established for.
+    const occupied = context(
+      { ...configured, selectedTables: ['order_item'], writeFreeze: freeze },
+      [source, target],
+      [configuration()],
+      summary([{ sourceTable: 'order_item', gap: 'TARGET_TABLE_EXISTS' }]),
+    );
+    expect(evaluateStageGate('confirm', occupied)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.structuralProofMissing(1, 'order_item'),
+    });
+    expect(mayStartMigration(occupied)).toBe(false);
+  });
+
+  it('does not let 执行确认 answer on a summary it has not read yet', () => {
+    const unread = context(
+      { ...configured, selectedTables: ['order_item'], writeFreeze: freeze },
+      [source, target],
+      [configuration()],
+      null,
+    );
+    expect(evaluateStageGate('confirm', unread)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.executionSummaryUnread,
+    });
+    expect(mayStartMigration(unread)).toBe(false);
+  });
+
+  it('lets the migration start once both constraints are satisfied, and still not 下一步', () => {
+    // The gate never passes, and that is the shape rather than an omission: what leaves
+    // 执行确认 is 「开始迁移」, which ends the draft. 运行监控 belongs to the 迁移运行.
+    const ready = context({
+      ...configured,
+      selectedTables: ['order_item'],
+      writeFreeze: freeze,
+    });
+    expect(evaluateStageGate('confirm', ready)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.runNotStarted,
+    });
+    expect(mayStartMigration(ready)).toBe(true);
+    expect(isStageReachable('monitor', ready)).toBe(false);
   });
 
   it('keeps 运行监控 and 校验报告 out of a draft, because a draft produces no 迁移运行', () => {

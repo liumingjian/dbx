@@ -1,4 +1,9 @@
-import type { DatabaseConnection, DraftTableConfiguration, MigrationDraft } from '@/contract';
+import type {
+  DatabaseConnection,
+  DraftTableConfiguration,
+  ExecutionConfirmationSummary,
+  MigrationDraft,
+} from '@/contract';
 import { messages } from '@/messages';
 import { wizardStages, type WizardStage } from '@/routes/paths';
 
@@ -23,7 +28,8 @@ import { wizardStages, type WizardStage } from '@/routes/paths';
  * **How a later stage declares its gate**: add its rule to `wizardStageGates` below, in the
  * stage's own entry, returning the sentence from `messages.wizard.gates`. Nothing else has
  * to change — the progress indicator, the footer, the redirect and the tests all read this
- * table. #35 (`tables`) and #37 (`confirm`) replace the placeholders that stand there now.
+ * table. Every one of the four configuration stages now has a real rule; nothing here is a
+ * placeholder.
  */
 
 /** Everything a gate is allowed to look at. Gates are pure functions of this. */
@@ -40,6 +46,15 @@ export interface WizardGateContext {
    * reads the same list for Gate 2.
    */
   readonly tableConfigurations: readonly DraftTableConfiguration[] | null;
+  /**
+   * The 执行确认 summary of this draft, or `null` while it is still being read.
+   *
+   * Same polarity as `tableConfigurations`, for the same reason: an unknown safety fact is
+   * not a satisfied one. Gate 6's whole content is a statement the *server* makes — which
+   * tables it can establish a 结构证明 for — so the gate cannot compute it and must not
+   * guess at it. Added by #37.
+   */
+  readonly executionSummary: ExecutionConfirmationSummary | null;
 }
 
 /**
@@ -193,14 +208,68 @@ function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult
 }
 
 /**
- * A stage whose rule belongs to a ticket that has not landed yet.
+ * Stage four: 执行确认. **This is Gate 5 and Gate 6** (#30 §15.4, #37).
  *
- * It blocks, and says so plainly. The alternative — letting the draft walk through a stage
- * that enforces nothing — would put an unguarded stage into the journey and quietly make
- * the gating mechanism look weaker than it is.
+ * The gate never passes, and that is the point rather than an omission. Leaving 执行确认
+ * is not something 「下一步」 does: what leaves it is 「开始迁移」, which creates a 迁移任务
+ * and an immutable 迁移运行 and ends the draft. 运行监控 belongs to that run, so a draft is
+ * never inside it — exactly as it is never inside 校验报告.
+ *
+ * What the gate is for is the two constraints the start button reads, in the order a
+ * safety sequence reads them:
+ *
+ *  - **Gate 5** — 「没有写冻结确认就无法启动」. `CONTEXT.md` makes a 写冻结 an externally
+ *    enforced, time-bounded commitment with an accountable operator, and lists
+ *    「permanent checkbox」 under `_Avoid_`: a declaration with no named 责任人 or no 时限
+ *    is not one, so it blocks exactly as an absent one does.
+ *  - **Gate 6** — 「没有结构证明就不会开始写入目标」. This one is deliberately weaker than
+ *    the other eight (lead decision D11), because 结构证明 is a deterministic catalog
+ *    comparison the platform performs inside the run, after DDL. The frontend cannot
+ *    perform it and does not pretend to: it refuses to start while the summary reports a
+ *    table no 结构证明 can be established for, and the stage states the constraint in
+ *    domain language beside the refusal.
  */
-const notYetDelivered = (): StageGateResult =>
-  blockedBy(messages.wizard.gates.stageNotYetDelivered);
+function confirmGate({ executionSummary, draft }: WizardGateContext): StageGateResult {
+  if (executionSummary === null) {
+    return blockedBy(messages.wizard.gates.executionSummaryUnread);
+  }
+
+  const freeze = draft.writeFreeze;
+  if (
+    freeze === null ||
+    freeze.accountableOperator.trim() === '' ||
+    !Number.isFinite(freeze.durationHours) ||
+    freeze.durationHours <= 0
+  ) {
+    return blockedBy(messages.wizard.gates.writeFreezeNotConfirmed);
+  }
+
+  const gaps = executionSummary.structuralProof.gaps;
+  const first = gaps[0];
+  if (first !== undefined) {
+    return blockedBy(
+      messages.wizard.gates.structuralProofMissing(
+        new Set(gaps.map((gap) => gap.sourceTable)).size,
+        first.sourceTable,
+      ),
+    );
+  }
+
+  return blockedBy(messages.wizard.gates.runNotStarted);
+}
+
+/**
+ * Whether 执行确认 would let the migration start, as the start button reads it.
+ *
+ * The stage's own gate never passes — 「下一步」 is not what leaves this stage — so the
+ * button cannot simply ask whether the stage is blocked. It asks whether the only reason
+ * left is that nobody has pressed it yet, which keeps one evaluation behind both the
+ * refusal on screen and the refusal to act.
+ */
+export function mayStartMigration(context: WizardGateContext): boolean {
+  const gate = confirmGate(context);
+  return gate.blocked && gate.reason === messages.wizard.gates.runNotStarted;
+}
 
 /**
  * 运行监控 and 校验报告 observe a 迁移运行, and a draft has none: a draft "produces no
@@ -215,8 +284,7 @@ export const wizardStageGates: Readonly<
   connections: connectionsGate,
   scope: scopeGate,
   tables: tablesGate,
-  /** #37 replaces this with Gate 5 (写冻结) and Gate 6 (结构证明). */
-  confirm: notYetDelivered,
+  confirm: confirmGate,
   monitor: belongsToRun,
   validation: belongsToRun,
 };
