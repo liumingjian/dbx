@@ -105,6 +105,47 @@ export const messages = {
       },
     },
   },
+  /**
+   * 迁移草稿 — an unapproved, discardable working set that has not become a migration task.
+   *
+   * The wording keeps the two apart on purpose: `Migration task` lists 「unapproved
+   * migration task」 under `_Avoid_`, so a draft is never described as a task in any state.
+   */
+  drafts: {
+    title: '迁移草稿',
+    lead: '迁移草稿尚未批准：它不产生迁移运行，也不会被审计引用，丢弃后不留痕迹。经执行确认后才成为迁移任务。',
+    listLabel: '迁移草稿',
+    /** A draft is counted in 份; a migration task in 项; a source table in 张. */
+    unitLabel: '份',
+    columns: {
+      name: '名称',
+      sourceDatabase: '源 MySQL database',
+      targetSchema: '目标 PostgreSQL schema',
+      selectedTableCount: '已选表数',
+      updatedAt: '最近修改',
+      actions: '操作',
+    },
+    unnamed: '未命名迁移草稿',
+    notChosen: '尚未选择',
+    createAction: '新建迁移草稿',
+    continueAction: '继续编辑',
+    discardAction: '丢弃',
+    discard: {
+      title: '丢弃这份迁移草稿？',
+      body: '迁移草稿丢弃后不留痕迹：它没有迁移运行，也不会留在审计记录里。已批准的迁移任务不受影响。',
+      confirm: '丢弃',
+      cancel: '关闭',
+    },
+    loading: '正在读取迁移草稿。',
+    empty: {
+      title: '当前没有迁移草稿',
+      body: '下一步：新建迁移草稿，选择源与目标的数据库连接，再挑选迁移范围。',
+    },
+    error: {
+      title: '迁移草稿读取失败',
+      body: '这次请求没有成功。稍后重试，或确认 DBX 后端是否可达。',
+    },
+  },
   wizard: {
     title: '新建迁移草稿',
     stageLabel: '阶段',
@@ -116,6 +157,100 @@ export const messages = {
       confirm: '执行确认',
       monitor: '运行监控',
       validation: '校验报告',
+    },
+    /** One progress indicator only (ADR-0007): no second vertical stage rail. */
+    progressLabel: '迁移向导阶段',
+    backAction: '上一步',
+    nextAction: '下一步',
+    discardAction: '丢弃迁移草稿',
+    exitAction: '返回迁移任务',
+    blockedTitle: '还不能进入下一阶段',
+    loading: '正在读取迁移草稿。',
+    notFound: {
+      title: '找不到这份迁移草稿',
+      body: '它可能已经被丢弃。迁移草稿丢弃后不留痕迹，因此没有可恢复的内容。',
+    },
+    error: {
+      title: '迁移草稿读取失败',
+      body: '这次请求没有成功。稍后重试，或确认 DBX 后端是否可达。',
+    },
+    notYetBuilt: '本阶段将在后续批次交付。',
+    /**
+     * Why a stage will not let the operator move on. Each line belongs to exactly one
+     * stage's gate (`src/wizard/stageGates.ts`); the stage that owns the rule owns the
+     * sentence, so a gate can never be enforced in one place and explained in another.
+     */
+    gates: {
+      connectionsIncomplete:
+        '请先选择源与目标的数据库连接，并指定源 MySQL database 与目标 PostgreSQL schema。',
+      connectionUnusable: (name: string, outcome: string) =>
+        `数据库连接「${name}」的最近校验是 ${outcome}，不能用于迁移。请在数据源里重新校验，或改选其他数据库连接。`,
+      /** Gate 1 (#30 §15.4): 一张表都没选时不能前进. */
+      noTableSelected: '请先选择至少一张表纳入迁移范围；空的迁移范围不会被创建。',
+      stageNotYetDelivered: '本阶段将在后续批次交付，暂时无法继续。',
+      stageBelongsToRun: '本阶段属于迁移运行，执行确认之后才会出现。',
+    },
+    connections: {
+      lead: '数据库连接与凭据版本只在数据源里维护；向导从已登记的数据库连接中选择，不录入凭据。',
+      sourceHeading: '源端',
+      targetHeading: '目标端',
+      connectionLabel: '数据库连接',
+      sourceDatabaseLabel: '源 MySQL database',
+      targetSchemaLabel: '目标 PostgreSQL schema',
+      targetSchemaHelper: '目标 schema 是本次迁移的落点。凭据不在这里录入。',
+      chooseConnection: '请选择数据库连接',
+      chooseDatabase: '请选择数据库',
+      endpointLabel: '端点',
+      latestCheckLabel: '最近校验',
+      neverChecked: '尚未校验',
+      manageConnectionsLink: '前往数据源',
+      unusableTitle: '这个数据库连接现在不可用',
+      /** Worded apart from the gate's sentence so the two never print the same line twice. */
+      unusableDetail: (outcome: string) =>
+        `最近校验是 ${outcome}。请在数据源里重新校验，或改选其他数据库连接。`,
+      resolvedPairLabel: '本次迁移落点',
+    },
+    scope: {
+      lead: '选中的表进入逐表配置与预检；显式排除的表不迁移，也不会被计为校验失败。',
+      listLabel: '源表',
+      /** A source table is counted in 张. */
+      unitLabel: '张',
+      searchLabel: '按名称搜索源表',
+      searchPlaceholder: '表名',
+      columns: {
+        name: '表名',
+        sourceDatabase: '源数据库',
+        columnCount: '列数',
+        estimatedRowCount: '预估行数',
+        estimatedBytes: '预估数据量',
+        condition: '当前情况',
+      },
+      /** `Source baseline` lists 「estimated row count」 under `_Avoid_`: these are not one. */
+      estimateNotice: '行数与数据量是发现阶段的预估值，不是源基线；源基线在写冻结之后捕获。',
+      largeRecordTable: '大记录表',
+      mappingExceptions: (count: number) => `映射规则 ${count} 条`,
+      blockingFindings: (count: number) => `阻断发现 ${count} 项`,
+      summaryLabel: '迁移范围汇总',
+      /**
+       * The draft-level total, worded differently from `DbxTable`'s 「已选 N 张」 on
+       * purpose: the table's count is about the rows matching the current search, and this
+       * one is about what the 迁移草稿 will carry into the next stage. Two counts that
+       * differ must not share a sentence.
+       */
+      scopeTotal: (count: number) => `迁移范围共 ${count} 张`,
+      excludedHeading: '显式排除',
+      excludedEmpty: '还没有显式排除任何表。',
+      excludedConsequence: '显式排除是可复核的例外：这些表不迁移，也不会被计为校验失败。',
+      restoreAction: (name: string) => `撤销排除 ${name}`,
+      loading: '正在读取源表。',
+      empty: {
+        title: '这个源数据库里没有表',
+        body: '返回上一阶段换一个源 MySQL database 再看。',
+      },
+      error: {
+        title: '源表读取失败',
+        body: '这次请求没有成功。稍后重试，或确认 DBX 后端是否可达。',
+      },
     },
   },
   run: {
