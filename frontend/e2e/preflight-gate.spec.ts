@@ -4,7 +4,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  * Seam ① — 预检证据与阻断门禁, and **Gates 2 and 3** of the nine journey gates (#30 §15.4).
  *
  * Both gates are stated as refusals, because a happy path proves nothing about a
- * constraint. Gate 2 is 「`UNSUPPORTED` 或 `INCONCLUSIVE` 的预检不能被批准」, so the case
+ * constraint. Gate 2 is 「结论为不可迁移或无法判定的预检不能被批准」, so the case
  * that matters is the one where the wizard **would not move** and there was nothing on
  * screen to click that would have made it. Gate 3 is 「映射变更使契约失效并重跑受影响的
  * 证据」, so the case that matters is the one where the **old conclusion left the screen**
@@ -75,7 +75,7 @@ async function tableNameOf(node: Locator): Promise<string> {
 function nodeFor(page: Page, name: string): Locator {
   return tree(page)
     .getByRole('treeitem')
-    .filter({ hasText: new RegExp(`^${name}(SUPPORTED|UNSUPPORTED|INCONCLUSIVE|IN_FLIGHT)`) })
+    .filter({ hasText: new RegExp(`^${name}(可迁移|不可迁移|无法判定|执行中)`) })
     .first();
 }
 
@@ -90,21 +90,21 @@ async function open(page: Page, node: Locator): Promise<string> {
 /**
  * The table nothing could be concluded about.
  *
- * `INCONCLUSIVE` is the conclusion #30 says the stage exists to keep separate from a
+ * 无法判定 is the conclusion #30 says the stage exists to keep separate from a
  * warning, so it is the one the blocking case is written against.
  */
 function inconclusiveTable(page: Page): Locator {
-  return tree(page).getByRole('treeitem').filter({ hasText: 'INCONCLUSIVE' }).first();
+  return tree(page).getByRole('treeitem').filter({ hasText: '无法判定' }).first();
 }
 
-test.describe('Gate 2：UNSUPPORTED 或 INCONCLUSIVE 的预检不能被批准', () => {
+test.describe('Gate 2：结论为不可迁移或无法判定的预检不能被批准', () => {
   test('holds the stage shut, and offers nothing that would confirm it away', async ({ page }) => {
     await openStage(page);
     const name = await open(page, inconclusiveTable(page));
 
     // 「无法判定」 has its own form. It is not a warning, and the interface never softens it
     // into one — that misreading is the whole reason this stage is written down.
-    await expect(preflight(page)).toContainText('INCONCLUSIVE');
+    await expect(preflight(page)).toContainText('无法判定');
     await expect(preflight(page)).toContainText('无法确认是否可迁移');
     await expect(preflight(page)).toContainText('不能忽略此检查继续迁移');
     await expect(preflight(page)).not.toContainText('警告');
@@ -122,7 +122,7 @@ test.describe('Gate 2：UNSUPPORTED 或 INCONCLUSIVE 的预检不能被批准', 
 
     // And the stage refuses to advance, saying which table and which conclusion.
     const url = page.url();
-    await expect(page.getByText(/只有 SUPPORTED 的预检可以继续/)).toBeVisible();
+    await expect(page.getByText(/只有结论为可迁移的预检可以继续/)).toBeVisible();
     await page.getByRole('button', { name: '下一步' }).click();
     await expect(page).toHaveURL(url);
 
@@ -131,7 +131,7 @@ test.describe('Gate 2：UNSUPPORTED 或 INCONCLUSIVE 的预检不能被批准', 
     // survives the redirect, which is what makes the blocked world reviewable at all.
     await page.goto(`/tasks/new/${seededDraftId}/confirm?scenario=${scenario}`);
     await expect(page).toHaveURL(new RegExp(`/tables\\?scenario=${scenario}$`));
-    await expect(page.getByText(/只有 SUPPORTED 的预检可以继续/)).toBeVisible();
+    await expect(page.getByText(/只有结论为可迁移的预检可以继续/)).toBeVisible();
     expect(name).not.toBe('');
   });
 
@@ -141,13 +141,13 @@ test.describe('Gate 2：UNSUPPORTED 或 INCONCLUSIVE 的预检不能被批准', 
     await openStage(page);
     const node = tree(page)
       .getByRole('treeitem')
-      .filter({ hasText: 'UNSUPPORTED' })
+      .filter({ hasText: '不可迁移' })
       .filter({ hasText: '大记录表' })
       .filter({ hasText: '映射规则' })
       .first();
     await open(page, node);
 
-    await expect(preflight(page)).toContainText('UNSUPPORTED');
+    await expect(preflight(page)).toContainText('不可迁移');
     await expect(preflight(page)).toContainText('大记录表');
     await expect(preflight(page)).toContainText(/最大单值 [\d,]+ 字节/);
     await expect(preflight(page)).toContainText('大记录包络上限为 20 MiB（20,971,520 字节）');
@@ -174,7 +174,7 @@ test.describe('Gate 2：UNSUPPORTED 或 INCONCLUSIVE 的预检不能被批准', 
     // And a rerun reports what it finds. Nothing about asking again relaxes a scan that
     // still cannot complete — ADR-0003: it 「cannot be overridden into a runnable table」.
     await expect(preflight(page)).toContainText(/评估于/, { timeout: 20_000 });
-    await expect(preflight(page)).toContainText('INCONCLUSIVE');
+    await expect(preflight(page)).toContainText('无法判定');
     await expect(preflight(page)).toContainText('无法确认是否可迁移');
   });
 });
@@ -186,7 +186,7 @@ test.describe('面对阻断的三条出路', () => {
     await openStage(page);
     const node = tree(page)
       .getByRole('treeitem')
-      .filter({ hasText: 'UNSUPPORTED' })
+      .filter({ hasText: '不可迁移' })
       .filter({ hasText: '大记录表' })
       .first();
     const name = await open(page, node);
@@ -202,7 +202,9 @@ test.describe('面对阻断的三条出路', () => {
     // The conclusion goes away while the rescan runs, and comes back as a new one.
     await expect(preflight(page)).toContainText('预检进行中');
     await expect(preflight(page)).toContainText(/评估于/, { timeout: 20_000 });
-    await expect(preflight(page)).toContainText('SUPPORTED');
+    // `exact`, because 不可迁移 contains 可迁移: a substring match here would let the
+    // opposite conclusion satisfy the assertion.
+    await expect(preflight(page).getByText('可迁移', { exact: true })).toBeVisible();
     await expect(preflight(page)).not.toContainText('超过 DBX v1 的 20 MiB');
 
     // The cut is a reviewable decision rather than a disappearance: the column is still
@@ -233,16 +235,16 @@ test.describe('Gate 3：映射变更使契约失效并重跑受影响的证据',
     await openStage(page);
 
     // A table whose 表写入契约 is still missing because DBX will not choose the zero-date
-    // relaxation on the operator's behalf, and whose 预检 has so far concluded SUPPORTED.
+    // relaxation on the operator's behalf, and whose 预检 has so far concluded 可迁移.
     const node = tree(page)
       .getByRole('treeitem')
       .filter({ hasText: '尚未生成表写入契约' })
-      .filter({ hasNotText: 'UNSUPPORTED' })
-      .filter({ hasNotText: 'INCONCLUSIVE' })
+      .filter({ hasNotText: '不可迁移' })
+      .filter({ hasNotText: '无法判定' })
       .first();
     const name = await open(page, node);
 
-    const conclusion = preflight(page).getByText('SUPPORTED', { exact: true });
+    const conclusion = preflight(page).getByText('可迁移', { exact: true });
     await expect(conclusion).toBeVisible();
     await expect(preflight(page)).toContainText(/评估于/);
 
@@ -257,7 +259,7 @@ test.describe('Gate 3：映射变更使契约失效并重跑受影响的证据',
     await expect(preflight(page)).toContainText('预检进行中');
     await expect(conclusion).toHaveCount(0);
     await expect(preflight(page)).not.toContainText('评估于');
-    await expect(nodeFor(page, name)).toContainText('IN_FLIGHT');
+    await expect(nodeFor(page, name)).toContainText('执行中');
 
     // The contract was invalidated and reassembled from the new rule at the same time.
     await expect(page.getByRole('region', { name: '目标 DDL（PostgreSQL 15）' })).toContainText(
@@ -267,7 +269,7 @@ test.describe('Gate 3：映射变更使契约失效并重跑受影响的证据',
     // And the rerun reaches a different conclusion, which is the point: the evidence was
     // re-established rather than relabelled.
     await expect(preflight(page)).toContainText(/评估于/, { timeout: 20_000 });
-    await expect(preflight(page).getByText('UNSUPPORTED', { exact: true })).toBeVisible();
+    await expect(preflight(page).getByText('不可迁移', { exact: true })).toBeVisible();
     await expect(preflight(page)).toContainText('零日期值在目标端会被拒绝');
     await expect(preflight(page)).toContainText('不能忽略此结论继续迁移');
   });

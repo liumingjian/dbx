@@ -18,15 +18,15 @@ test.describe('数据源: the registry of 数据库连接', () => {
 
     await expect(first).toContainText('凭据版本');
     await expect(first).toContainText('最近校验');
-    // A check reports its own outcome and the instant it was observed.
-    await expect(list).toContainText('SUCCEEDED');
+    // A check reports its own outcome and the instant it was observed, in the wording
+    // `CONTEXT.md` fixes for a 连接校验 outcome.
+    await expect(list).toContainText('校验通过');
     await expect(list).toContainText('UTC');
 
     // A connection that has never been checked says so rather than implying health.
-    await expect(list).toContainText('NOT_RUN');
     await expect(list).toContainText('尚未校验');
-    // And one whose credential no longer works reports FAILED.
-    await expect(list).toContainText('FAILED');
+    // And one whose credential no longer works says so too.
+    await expect(list).toContainText('校验失败');
   });
 
   test('calls the area 数据源 and each endpoint a 数据库连接', async ({ page }) => {
@@ -44,13 +44,13 @@ test.describe('数据源: the registry of 数据库连接', () => {
     await page.goto('/connections');
 
     const failing = page.getByRole('listitem').filter({ hasText: '分析库（预发）' });
-    await expect(failing).toContainText('FAILED');
+    await expect(failing).toContainText('校验失败');
 
     const neverChecked = page.getByRole('listitem').filter({ hasText: '计费库（生产）' });
-    await expect(neverChecked).toContainText('NOT_RUN');
+    await expect(neverChecked).toContainText('尚未校验');
     await neverChecked.getByRole('button', { name: '重新校验' }).click();
 
-    await expect(neverChecked).toContainText('SUCCEEDED');
+    await expect(neverChecked).toContainText('校验通过');
     await expect(neverChecked).not.toContainText('尚未校验');
   });
 });
@@ -71,7 +71,7 @@ test.describe('连接创建与凭据维护只在数据源里', () => {
     const created = page.getByRole('listitem').filter({ hasText: '报表库（生产）' });
     await expect(created).toBeVisible();
     // A brand-new connection has not been checked yet, and says so.
-    await expect(created).toContainText('NOT_RUN');
+    await expect(created).toContainText('尚未校验');
     await expect(created).toContainText('v1');
   });
 
@@ -82,7 +82,7 @@ test.describe('连接创建与凭据维护只在数据源里', () => {
 
     const connection = page.getByRole('listitem').filter({ hasText: '订单库（生产）' });
     await expect(connection).toContainText('v3');
-    await expect(connection).toContainText('SUCCEEDED');
+    await expect(connection).toContainText('校验通过');
 
     await connection.getByRole('button', { name: '新建凭据版本' }).click();
     await page.getByLabel('凭据版本').fill('rotated-secret');
@@ -90,7 +90,7 @@ test.describe('连接创建与凭据维护只在数据源里', () => {
 
     await expect(connection).toContainText('v4');
     // The previous check authenticated with a version that is no longer current.
-    await expect(connection).toContainText('NOT_RUN');
+    await expect(connection).toContainText('尚未校验');
   });
 
   test('the migration wizard offers no way to type a credential', async ({ page }) => {

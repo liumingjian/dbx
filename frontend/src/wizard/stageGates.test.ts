@@ -293,8 +293,9 @@ describe('wizard stage gating', () => {
 
   it('is Gate 2: an UNSUPPORTED 预检 cannot be approved', () => {
     // `CONTEXT.md` on 预检: 「only `SUPPORTED` may proceed」. The reason names the table and
-    // the conclusion — as the enum literal, as everywhere else in DBX — and the three
-    // exits, because a constraint that cannot say what would resolve it is a dead end.
+    // the conclusion — in the conclusion's own `_中文_` wording, 不可迁移, never the
+    // persisted literal — and the three exits, because a constraint that cannot say what
+    // would resolve it is a dead end.
     const blocked = context(
       { ...configured, selectedTables: ['order_item', 'order_event'] },
       [source, target],
@@ -309,7 +310,11 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('tables', blocked)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.preflightNotSupported(1, 'order_event', 'UNSUPPORTED'),
+      reason: messages.wizard.gates.preflightNotSupported(
+        1,
+        'order_event',
+        messages.conclusion.labels.UNSUPPORTED,
+      ),
     });
     expect(isStageReachable('confirm', blocked)).toBe(false);
   });
@@ -324,7 +329,11 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('tables', blocked)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.preflightNotSupported(1, 'order_item', 'INCONCLUSIVE'),
+      reason: messages.wizard.gates.preflightNotSupported(
+        1,
+        'order_item',
+        messages.conclusion.labels.INCONCLUSIVE,
+      ),
     });
   });
 
@@ -370,7 +379,11 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('tables', both)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.preflightNotSupported(1, 'order_item', 'UNSUPPORTED'),
+      reason: messages.wizard.gates.preflightNotSupported(
+        1,
+        'order_item',
+        messages.conclusion.labels.UNSUPPORTED,
+      ),
     });
   });
 

@@ -54,6 +54,16 @@ export type PreflightFindingCode =
    */
   | 'ENVELOPE_SCAN_INCONCLUSIVE';
 
+/**
+ * Why an exact scan could not conclude — the `detail` an `ENVELOPE_SCAN_INCONCLUSIVE`
+ * finding carries.
+ *
+ * A closed union rather than a free string, for the same reason `PreflightFindingCode` is
+ * one: `CONTEXT.md` gives each of these its own wording, and a value the interface cannot
+ * word would reach the operator as a raw literal.
+ */
+export type PreflightInconclusiveReason = 'QUERY_TIMEOUT' | 'PERMISSION_DENIED' | 'CONNECTION_LOST';
+
 export interface PreflightFinding {
   /** Stable code; the interface renders wording for it, never the raw code alone. */
   readonly code: PreflightFindingCode;

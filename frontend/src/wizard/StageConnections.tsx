@@ -53,11 +53,9 @@ function ConnectionCheckSummary({ connection }: { connection: DatabaseConnection
         {messages.wizard.connections.latestCheckLabel}：
         <ConclusionIndicator
           conclusion={connectionCheckConclusion(latestCheck.outcome)}
-          label={latestCheck.outcome}
+          label={messages.connections.checkOutcomes[latestCheck.outcome]}
         />
-        {latestCheck.checkedAt === null ? (
-          <span> {messages.wizard.connections.neverChecked}</span>
-        ) : (
+        {latestCheck.checkedAt === null ? null : (
           <Identifier> {formatTimestamp(latestCheck.checkedAt)}</Identifier>
         )}
       </p>
@@ -68,7 +66,9 @@ function ConnectionCheckSummary({ connection }: { connection: DatabaseConnection
           hideCloseButton
           role="alert"
           title={messages.wizard.connections.unusableTitle}
-          subtitle={messages.wizard.connections.unusableDetail(latestCheck.outcome)}
+          subtitle={messages.wizard.connections.unusableDetail(
+            messages.connections.checkOutcomes[latestCheck.outcome],
+          )}
         />
       )}
     </>

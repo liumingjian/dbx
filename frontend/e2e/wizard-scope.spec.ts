@@ -184,7 +184,7 @@ test.describe('阶段二：在 1200 张表里选迁移范围', () => {
     const table = scopeTable(page);
 
     await expect(table).toContainText('当前情况');
-    await expect(table).toContainText('SUPPORTED');
+    await expect(table).toContainText('可迁移');
     // `Source baseline` lists 「estimated row count」 under `_Avoid_`; the screen says which
     // of the two it is showing.
     await expect(page.getByText(/行数与数据量是发现阶段的预估值，不是源基线/)).toBeVisible();

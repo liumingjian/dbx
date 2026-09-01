@@ -22,9 +22,8 @@ export type TlsMode = 'DISABLED' | 'SERVER_AUTHENTICATED' | 'MUTUAL';
  * The outcome of the lightweight connectivity and identity check ADR-0006 runs when a
  * connection is saved and re-run on demand.
  *
- * `CONTEXT.md` carries no `_中文_` wording for these values, so — following the precedent
- * batch 1 set for preflight conclusions — the interface renders the literal rather than
- * inventing a translation.
+ * `CONTEXT.md` words all three under 「Connection check outcome」. 尚未校验 is an absence of
+ * evidence rather than evidence of a problem, which is why it is not 失败.
  */
 export type ConnectionCheckOutcome = 'SUCCEEDED' | 'FAILED' | 'NOT_RUN';
 

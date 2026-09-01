@@ -1,5 +1,6 @@
 import { Button, InlineNotification, Tag } from '@carbon/react';
 import { ConclusionIndicator } from '@/conclusions';
+import { findingDetail, findingLabel } from '@/features/preflight/preflightVocabulary';
 import type { DraftTableWorkspace, PreflightFinding } from '@/contract';
 import { formatCount, formatTimestamp } from '@/format/display';
 import { messages } from '@/messages';
@@ -49,15 +50,15 @@ function findingRow(finding: PreflightFinding) {
   return (
     <li key={`${finding.code}:${finding.sourceColumn ?? ''}`} className="dbx-preflight__finding">
       <span className="dbx-preflight__finding-head">
-        {/* The code is the stable fact and is rendered as the literal it is; `CONTEXT.md`
-            carries no Chinese for it, so the sentence beside it explains rather than
-            replaces it (lead decision D13). */}
-        <Identifier>{finding.code}</Identifier>
+        {/* The finding's name comes from `CONTEXT.md`; the sentence below states the
+            exact fact behind it. The stable code stays a coordinate in the contract and
+            in the diagnostic evidence, not something a DBA is asked to decode. */}
+        <span className="dbx-preflight__finding-name">{findingLabel(finding.code)}</span>
         <Tag type={finding.blocking ? 'red' : 'cool-gray'} size="sm">
           {finding.blocking ? copy.blocking : copy.nonBlocking}
         </Tag>
         {finding.sourceColumn === null ? null : <Identifier>{finding.sourceColumn}</Identifier>}
-        <Identifier>{finding.detail}</Identifier>
+        <Identifier>{findingDetail(finding.detail)}</Identifier>
       </span>
       <span className="dbx-preflight__finding-body">{copy.codes[finding.code]}</span>
     </li>
@@ -86,7 +87,7 @@ export function PreflightPane({
 
   const blockingTitle =
     preflight.conclusion === 'INCONCLUSIVE'
-      ? copy.inconclusiveTitle(scanFinding?.detail ?? '')
+      ? copy.inconclusiveTitle(findingDetail(scanFinding?.detail ?? ''))
       : envelopeFinding !== undefined
         ? copy.overEnvelopeTitle(
             workspace.sourceTable,

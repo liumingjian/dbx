@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { messages } from '@/messages';
 import type { ValidationReport, ValidationReportRow } from '@/contract';
 import { formatValidationReport } from './reportExport';
 import { isDisposable, summariseValidationReport } from './reportSummary';
@@ -141,11 +142,13 @@ describe('the exported report', () => {
   });
 
   it('keeps the technical conclusion and the 校验处置 as separate labelled fields', () => {
-    expect(text).toContain('校验执行技术结论 FAIL');
+    expect(text).toContain(`校验执行技术结论 ${messages.conclusion.labels.FAIL}`);
     expect(text).toContain('校验处置 已记录校验处置');
-    expect(text).toContain('技术结论仍然是 FAIL');
+    expect(text).toContain(`技术结论仍然是${messages.conclusion.labels.FAIL}`);
     // Nothing in the export ever says a disposed result passed.
-    expect(text).not.toContain('校验执行技术结论 PASS · 校验处置 已记录校验处置');
+    expect(text).not.toContain(
+      `校验执行技术结论 ${messages.conclusion.labels.PASS} · 校验处置 已记录校验处置`,
+    );
   });
 
   it('names the responsible party and the reason', () => {
@@ -156,7 +159,7 @@ describe('the exported report', () => {
   it('lists 预检排除项 as tables that never migrated', () => {
     expect(text).toContain('预检排除项');
     expect(text).toContain('audit_log');
-    expect(text).toContain('PREFLIGHT_UNSUPPORTED');
+    expect(text).toContain(messages.validation.exclusions.reasons.PREFLIGHT_UNSUPPORTED);
     expect(text).toContain('没有校验执行');
   });
 

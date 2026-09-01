@@ -30,10 +30,10 @@ import { Page } from './Page';
  * The page is full-bleed (lead decision D7): both tables here carry eight columns at 32px
  * row height, and reading width would put them behind a horizontal scrollbar for no gain.
  *
- * The latest run's status is rendered as an enum literal beside an indicator taken from
- * the conclusion mapping module, never as a colour alone: `CONTEXT.md` carries no `_中文_`
- * for a migration run status, and inventing one here would make the interface the source
- * of domain language instead of its reader.
+ * The latest run's status is rendered in `CONTEXT.md`'s wording beside an indicator taken
+ * from the conclusion mapping module, never as a colour alone. The three statuses that end
+ * in completion are worded apart — 全部完成, 完成，有失败, 完成，已接受风险 — because this
+ * column is where a reader decides whether a run needs their attention.
  */
 const runStatuses: readonly MigrationRunStatus[] = [
   'PREPARING',

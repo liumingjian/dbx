@@ -120,11 +120,11 @@ test.describe('Gate 9：重新迁移创建新的迁移运行，并显示它自�
     const evidence = panel(page, '本次迁移运行重新建立的证据');
     await expect(evidence).toContainText('上一次迁移运行的结论不会被带到这一次');
     await expect(evidence).toContainText('连接检查');
-    await expect(evidence).toContainText('SUCCEEDED');
+    await expect(evidence).toContainText('校验通过');
     await expect(evidence).toContainText('写冻结确认');
     await expect(evidence).toContainText('责任人 li.na');
     await expect(evidence).toContainText('源基线');
-    await expect(evidence).toContainText('预检 SUPPORTED');
+    await expect(evidence).toContainText('预检 可迁移');
     await expect(evidence).toContainText('表写入契约 v');
 
     // The history now holds both attempts, side by side, each with its own conclusion.

@@ -176,6 +176,10 @@
   gap: $spacing-03;
 }
 
+.dbx-preflight__finding-name {
+  @include type-style('heading-compact-01');
+}
+
 .dbx-preflight__finding-body {
   display: block;
   color: $text-secondary;
