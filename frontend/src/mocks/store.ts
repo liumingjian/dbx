@@ -337,6 +337,15 @@ export const CONFIRM_DRAFT_ID = 'draft-ready-for-confirm';
  */
 export const PREFLIGHT_RERUN_MOCK_MS = 180_000;
 
+/**
+ * How long a 预检 rerun takes while mock time is frozen, in **real** milliseconds.
+ *
+ * The same wait `PREFLIGHT_RERUN_MOCK_MS` produces at the default rate, so 「预检进行中」 is
+ * still a state a reviewer can be caught in — and a frozen clock, which `?clockRate=0`
+ * selects deliberately, no longer means a scan that never ends.
+ */
+export const PREFLIGHT_RERUN_FROZEN_REAL_MS = 3_000;
+
 export function createMockStore({
   scenario,
   clock,
@@ -784,12 +793,21 @@ export function createMockStore({
    * about work, not part of the operator's unapproved working set — persisting it would
    * resurrect a running scan on a page nobody has open.
    */
-  const preflightRerunUntil = new Map<string, number>();
+  const preflightRerunUntil = new Map<string, { mockUntil: number; realUntil: number }>();
   const rerunKey = (draftId: string, sourceTable: string): string =>
     `${draftId}\u0000${sourceTable}`;
 
   const markPreflightRerun = (draftId: string, sourceTable: string): void => {
-    preflightRerunUntil.set(rerunKey(draftId, sourceTable), clock.now() + PREFLIGHT_RERUN_MOCK_MS);
+    preflightRerunUntil.set(rerunKey(draftId, sourceTable), {
+      mockUntil: clock.now() + PREFLIGHT_RERUN_MOCK_MS,
+      // Frozen mock time (`?clockRate=0`) is a supported value — `normaliseRate` says so,
+      // and a reviewer taking a screenshot wants it. But a duration denominated in a clock
+      // that does not move never elapses, and the workspace polls until the scan concludes,
+      // so a rerun under a frozen clock used to hang for ever. While time is frozen the
+      // window is measured in real milliseconds instead: the same wait the default rate
+      // produces, and the scan still finishes.
+      realUntil: Date.now() + PREFLIGHT_RERUN_FROZEN_REAL_MS,
+    });
   };
 
   const preflightInFlight = (draftId: string, sourceTable: string): boolean => {
@@ -798,7 +816,9 @@ export function createMockStore({
     if (until === undefined) {
       return false;
     }
-    if (clock.now() >= until) {
+    const elapsed =
+      clock.getRate() === 0 ? Date.now() >= until.realUntil : clock.now() >= until.mockUntil;
+    if (elapsed) {
       preflightRerunUntil.delete(key);
       return false;
     }

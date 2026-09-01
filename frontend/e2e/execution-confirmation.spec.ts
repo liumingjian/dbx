@@ -222,6 +222,32 @@ test.describe('启动是一个需要明确意图的动作', () => {
     await expect(confirm).toBeEnabled();
   });
 
+  test('Enter in the challenge field does not start a migration either', async ({ page }) => {
+    // A Carbon modal submits on Enter, which is why `StartMigrationModal` re-checks the
+    // challenge inside `onRequestSubmit` rather than trusting the disabled button. Nothing
+    // proved that until now: a keystroke is not a click, and a dialog whose safety lived in
+    // a button's appearance would start a production migration from the keyboard.
+    await openConfirm(page, 'stage-confirm');
+    await confirmWriteFreeze(page);
+
+    const before = page.url();
+    await startButton(page).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('确认开始迁移');
+
+    await dialog.getByLabel(/输入源数据库名/).press('Enter');
+    // Nothing started, and the dialog is still standing there asking for the name.
+    await expect(page).toHaveURL(before);
+    await expect(dialog).toBeVisible();
+    await expect(page).not.toHaveURL(/\/runs\//);
+
+    // A near miss submitted by keyboard is not intent either.
+    await dialog.getByLabel(/输入源数据库名/).fill('order');
+    await dialog.getByLabel(/输入源数据库名/).press('Enter');
+    await expect(page).toHaveURL(before);
+    await expect(dialog).toBeVisible();
+  });
+
   test('turns the 迁移草稿 into a 迁移任务 and one immutable 迁移运行', async ({ page }) => {
     await openConfirm(page, 'stage-confirm');
     await confirmWriteFreeze(page, 'li.na');

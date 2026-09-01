@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expectFreeOfExecutionPlatform, visibleText } from './gate7';
 
 /**
  * Seam ① — 重新迁移, and **Gate 9** of the nine journey gates (#30 §15.4, #41).
@@ -223,13 +224,45 @@ test.describe('重新迁移的候选是有边界的', () => {
   });
 });
 
+test.describe('发起重新迁移 needs intent, from the keyboard too', () => {
+  test('Enter in the challenge field starts nothing', async ({ page }) => {
+    // `StartRemigrationModal` re-checks its guard inside `onRequestSubmit` **because**
+    // Carbon modals submit on Enter. Nothing exercised that path, so the re-check was an
+    // untested claim — and a 重新迁移 started from a keystroke is a new production run.
+    await openReport(page, 'inconclusive-validation');
+    const remigration = remigrationPanel(page);
+    await remigration.getByRole('button', { name: '当前页全选' }).click();
+    await remigration.getByRole('button', { name: '发起重新迁移' }).click();
+
+    const dialog = page.getByRole('dialog', { name: '发起重新迁移' });
+    await expect(dialog).toBeVisible();
+    const before = page.url();
+
+    await dialog.getByLabel('键入源 database 名称 orders 以确认').press('Enter');
+    await expect(page).toHaveURL(before);
+    await expect(dialog).toBeVisible();
+
+    // Filling the 写冻结 fields is not consent to start either, while the name is unsaid.
+    await dialog.getByLabel('责任人').fill('li.na');
+    await dialog.getByLabel('写冻结时限（小时）').fill('6');
+    await dialog.getByLabel('键入源 database 名称 orders 以确认').press('Enter');
+    await expect(page).toHaveURL(before);
+    await expect(dialog).toBeVisible();
+  });
+});
+
 test.describe('Gate 7 binds this surface too', () => {
   test('no 箱, 连接器 or topic reaches 重新迁移', async ({ page }) => {
     await openReport(page, 'inconclusive-validation');
     await expect(remigrationPanel(page)).toBeVisible();
-    const text = (await remigrationPanel(page).innerText()).toLowerCase();
-    for (const forbidden of ['箱', '连接器', 'topic', 'box', 'connector', 'kafka']) {
-      expect(text, `「${forbidden}」 must not reach the interface`).not.toContain(forbidden);
-    }
+    // The whole screen, not one panel: a leak arrives wherever it arrives, and scanning the
+    // panel that was written most carefully proves the least.
+    expectFreeOfExecutionPlatform(await visibleText(page), '重新迁移');
+
+    // 因关联失败而阻塞 units are re-migration candidates (D29/D35), so the 卡死 run is the
+    // one place the platform's own literals would most plausibly be reached for.
+    await openReport(page, 'stuck-table');
+    await expect(remigrationPanel(page)).toBeVisible();
+    expectFreeOfExecutionPlatform(await visibleText(page), '重新迁移（某表卡死）');
   });
 });

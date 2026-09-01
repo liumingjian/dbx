@@ -98,13 +98,17 @@ test.describe('Gate 4: DDL 只读', () => {
       await expect(pane.locator('input')).toHaveCount(0);
       await expect(pane.locator('[contenteditable]')).toHaveCount(0);
 
-      const statement = pane.locator('pre');
-      const before = await statement.textContent();
-      await statement.click();
+      // The whole pane's rendered text, before and after. Reading only the `<pre>` would
+      // have passed even if the keystrokes never landed anywhere near it — and a `<pre>`
+      // takes no focus, so where they land is not something this test can assume. What is
+      // asserted is the operator-visible fact: nothing the DBA typed shows up on the DDL.
+      const before = await pane.innerText();
+      await pane.locator('pre').click();
       await page.keyboard.type('DROP TABLE order_item;');
       await page.keyboard.press('Enter');
       await page.keyboard.press('Backspace');
-      expect(await statement.textContent()).toBe(before);
+      expect(await pane.innerText()).toBe(before);
+      await expect(pane).not.toContainText('DROP TABLE order_item');
     }
 
     // And the interface says why, so the operator does not go looking for the editor.
