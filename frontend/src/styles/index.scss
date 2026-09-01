@@ -1,0 +1,19 @@
+// Global style entry. Order matters:
+//   1. Carbon config — turn off Carbon's own @font-face emission, because DBX self-hosts
+//      IBM Plex from the official split subsets (ADR-0014, no Google Fonts).
+//   2. Theme — g10 for the whole product. Inline g100 is reserved for the live blocks
+//      inside run monitoring and is applied per-component, never here.
+//   3. Carbon itself.
+//   4. The Chinese typography override layer, last, so it wins over Carbon's type styles.
+@use '@carbon/react/scss/config' with (
+  $font-path: '@ibm/plex',
+  $use-akamai-cdn: false,
+  $css--font-face: false
+);
+@use '@carbon/react/scss/themes' as themes;
+@use '@carbon/react/scss/theme' with (
+  $theme: themes.$g10
+);
+@use '@carbon/react';
+@use './chinese-typography';
+@use './global';
