@@ -21,6 +21,7 @@ import type {
   SourceBaselineEntry,
   SourceTableSummary,
   StructuralProofGapStatement,
+  TableMigrationUnitEvidence,
   UnresolvedFinding,
   WriteFreezeDeclaration,
 } from '@/contract';
@@ -34,6 +35,7 @@ import {
   seedMonitoredRun,
   type RunPlan,
 } from './fixtures/runProgress';
+import { buildTableMigrationUnitEvidence } from './fixtures/tableEvidence';
 import { generateSourceTables } from './fixtures/sourceTables';
 import {
   draftTableConfigurationOf,
@@ -86,6 +88,16 @@ export interface MockStore {
    * tens of seconds and the same review link reproducible.
    */
   getRunProgress(runId: string): RunProgressSnapshot | undefined;
+  /**
+   * The 单表证据 of one 表迁移单元: its 错误事件 and the 诊断 made of them (#39).
+   *
+   * Projected from the same snapshot 运行监控 reads, so the drawer and the row it was
+   * opened from can never describe different instants.
+   */
+  getTableMigrationUnitEvidence(
+    runId: string,
+    unitId: string,
+  ): TableMigrationUnitEvidence | undefined;
   /** What a 取消 would stop, stated before the operator commits to it. */
   describeRunCancellation(runId: string): RunCancellationConsequences | undefined;
   /**
@@ -861,6 +873,15 @@ export function createMockStore({
     getRunProgress(runId) {
       const run = runs.get(runId);
       return run === undefined ? undefined : snapshotOf(run);
+    },
+
+    getTableMigrationUnitEvidence(runId, unitId) {
+      const run = runs.get(runId);
+      if (run === undefined) {
+        return undefined;
+      }
+      const evidence = buildTableMigrationUnitEvidence(snapshotOf(run), unitId);
+      return evidence === undefined ? undefined : deepFreeze(evidence);
     },
 
     describeRunCancellation(runId) {

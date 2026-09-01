@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Button, ContentSwitcher, Link as CarbonLink, Switch, Theme } from '@carbon/react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '@/api/http';
 import { useRunProgress } from '@/api/runProgress';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ViewState';
@@ -104,6 +104,7 @@ function distributionOf(units: readonly TableMigrationUnit[]): readonly string[]
 
 export function MigrationRunPage() {
   const { runId = '' } = useParams();
+  const navigate = useNavigate();
   const progress = useRunProgress(runId);
   const [filter, setFilter] = useState<UnitFilter>('all');
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -119,6 +120,7 @@ export function MigrationRunPage() {
     return (
       <Page title={messages.run.title}>
         <LoadingState description={messages.run.loading} />
+        <Outlet />
       </Page>
     );
   }
@@ -139,6 +141,12 @@ export function MigrationRunPage() {
             onRetry={progress.refresh}
           />
         )}
+        {/*
+          The drawer is a child route, so it renders over whatever state the run itself is
+          in — including this one. A deep link into a table's evidence must not be lost
+          because the run's own observation happened to fail.
+        */}
+        <Outlet />
       </Page>
     );
   }
@@ -249,10 +257,20 @@ export function MigrationRunPage() {
         and nothing above or below them.
       */}
       <Theme theme="g100" className="dbx-run__live">
-        <RunProgressMatrix snapshot={snapshot} units={units} filterActive={filter !== 'all'} />
+        <RunProgressMatrix
+          snapshot={snapshot}
+          units={units}
+          filterActive={filter !== 'all'}
+          // 单表证据 has its own URL (#39): activating a row is a navigation, built
+          // through `paths` so the active scenario travels with it (D25).
+          onRowActivate={(unit) => void navigate(paths.tableMigrationUnit(runId, unit.id))}
+        />
         <RunEventStream snapshot={snapshot} />
         <RunLogPanel snapshot={snapshot} />
       </Theme>
+
+      {/* 单表证据, over this page and with its own URL (#39). */}
+      <Outlet />
 
       <CancelRunModal
         runId={run.id}

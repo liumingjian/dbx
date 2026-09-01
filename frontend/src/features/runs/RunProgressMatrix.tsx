@@ -26,6 +26,14 @@ interface RunProgressMatrixProps {
   readonly snapshot: RunProgressSnapshot;
   readonly units: readonly TableMigrationUnit[];
   readonly filterActive: boolean;
+  /**
+   * Opening one table's 单表证据 (#39).
+   *
+   * One prop, and the matrix knows nothing about what happens next: it reports that a row
+   * was activated, and the page turns that into a navigation. A drawer opened from here
+   * has its own URL, so this is a route change rather than a panel being revealed.
+   */
+  readonly onRowActivate?: (unit: TableMigrationUnit) => void;
 }
 
 function progressPercent(unit: TableMigrationUnit): number {
@@ -49,7 +57,12 @@ function isLagging(unit: TableMigrationUnit, snapshot: RunProgressSnapshot): boo
   return unit.progress.observedAt < snapshot.observedAt;
 }
 
-export function RunProgressMatrix({ snapshot, units, filterActive }: RunProgressMatrixProps) {
+export function RunProgressMatrix({
+  snapshot,
+  units,
+  filterActive,
+  onRowActivate,
+}: RunProgressMatrixProps) {
   const copy = messages.run.matrix;
   // The units the run's 卡死 diagnosis names, memoised so the column definitions below do
   // not rebuild on every render.
@@ -181,6 +194,7 @@ export function RunProgressMatrix({ snapshot, units, filterActive }: RunProgress
       rows={units}
       rowId={(unit) => unit.id}
       filterActive={filterActive}
+      onRowActivate={onRowActivate}
       empty={{ title: messages.run.empty.title, body: messages.run.empty.body }}
       densityPreferenceKey="run-progress-matrix"
     />

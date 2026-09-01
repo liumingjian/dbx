@@ -245,6 +245,28 @@ export const handlers = [
     return snapshot ? HttpResponse.json(snapshot) : notFound();
   }),
 
+  /**
+   * 单表证据 (#39): one 表迁移单元's 错误事件 and the 诊断 made of them.
+   *
+   * Its own endpoint rather than a slice of the progress snapshot, because it is a
+   * different read with a different lifetime: the monitor repeats its observation every
+   * couple of seconds, while a table's evidence is quoted into a ticket and re-read from a
+   * link. It is faulted with `tableMigrationUnits`, so the drawer's loading and error
+   * states are reachable from the same URL scenario the matrix uses.
+   */
+  http.get(
+    `${API_BASE}/migration-runs/:id/table-migration-units/:unitId/evidence`,
+    async ({ params }) => {
+      const faulted = await applyTransportFault('tableMigrationUnits');
+      if (faulted) return faulted;
+      const evidence = getMockContext().store.getTableMigrationUnitEvidence(
+        String(params.id),
+        String(params.unitId),
+      );
+      return evidence ? HttpResponse.json(evidence) : notFound();
+    },
+  ),
+
   // What a 取消 would stop, read before it is requested rather than described in a dialog.
   http.get(`${API_BASE}/migration-runs/:id/cancellation`, async ({ params }) => {
     const faulted = await applyTransportFault('migrationRuns');

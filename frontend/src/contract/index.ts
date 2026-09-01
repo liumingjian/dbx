@@ -11,6 +11,7 @@ export type * from './migrationRun';
 export type * from './sourceTable';
 export type * from './tableMigrationUnit';
 export type * from './runProgress';
+export type * from './tableEvidence';
 export type * from './validation';
 export type * from './tableConfiguration';
 export type * from './executionConfirmation';
