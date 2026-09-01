@@ -9,6 +9,7 @@
 export { WizardShell } from './WizardShell';
 export { StageConnections } from './StageConnections';
 export { StageScope } from './StageScope';
+export { StageTables } from './StageTables';
 export {
   evaluateStageGate,
   furthestReachableStage,

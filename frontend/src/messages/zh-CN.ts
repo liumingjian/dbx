@@ -187,6 +187,10 @@ export const messages = {
         `数据库连接「${name}」的最近校验是 ${outcome}，不能用于迁移。请在数据源里重新校验，或改选其他数据库连接。`,
       /** Gate 1 (#30 §15.4): 一张表都没选时不能前进. */
       noTableSelected: '请先选择至少一张表纳入迁移范围；空的迁移范围不会被创建。',
+      /** Stage three, #35's clause: a table with an undecided mapping exception has no contract. */
+      tableConfigurationsUnread: '还没有读到逐表配置与预检，暂时无法判断能否进入下一阶段。',
+      contractNotGenerated: (count: number, example: string) =>
+        `迁移范围内还有 ${count} 张表没有生成表写入契约（例如 ${example}）。请在逐表配置里决定它们的映射例外。`,
       stageNotYetDelivered: '本阶段将在后续批次交付，暂时无法继续。',
       stageBelongsToRun: '本阶段属于迁移运行，执行确认之后才会出现。',
     },
@@ -249,6 +253,107 @@ export const messages = {
       },
       error: {
         title: '源表读取失败',
+        body: '这次请求没有成功。稍后重试，或确认 DBX 后端是否可达。',
+      },
+    },
+    /**
+     * 阶段三 逐表配置与预检 — the single-table workspace (#35).
+     *
+     * Two words carry the whole stage and both come from `CONTEXT.md`: 表写入契约 is the
+     * immutable write intent, and 映射规则 is 「a structured, reviewable exception to
+     * DBX's automatic table or column mapping … never arbitrary SQL or regular
+     * expressions」. The copy below never calls the DDL a script, an editor or a
+     * configuration, because ADR-0011 lists 「editable DDL」 among its rejected
+     * alternatives — the DDL is one rendering of the contract and nothing else.
+     */
+    tables: {
+      lead: '字段映射默认自动完成。这里集中列出需要复核的结构化映射例外，改动映射后表写入契约与 DDL 会重新生成。',
+      treeLabel: '对象树',
+      treeSearchLabel: '按名称搜索迁移范围内的表',
+      treeSearchPlaceholder: '表名',
+      treeTruncated: (shown: number, total: number) =>
+        `对象树显示 ${shown} 张，迁移范围共 ${total} 张。按名称搜索缩小范围。`,
+      /** The object kinds the tree groups by. All five are structures MySQL reports. */
+      objectKinds: {
+        COLUMN: '列',
+        PRIMARY_KEY: '主键',
+        UNIQUE_CONSTRAINT: '唯一约束',
+        INDEX: '索引',
+        FOREIGN_KEY: '外键',
+      },
+      /**
+       * ADR-0011 keeps unique constraints other than the primary key, ordinary indexes,
+       * foreign keys, comments and collation outside the v1 writable-table boundary. They
+       * are preserved as 补建 SQL — `Supplemental SQL`'s `_中文_` — and 「DBX v1 delivers
+       * it but does not execute it as part of migration」.
+       */
+      outOfContract: '补建 SQL',
+      outOfContractNotice:
+        '标为补建 SQL 的对象不在 v1 可写表边界内：DBX 交付脚本，但不在迁移过程中执行。',
+      largeRecordTable: '大记录表',
+      chooseTable: '在对象树里选择一张表，查看它的源 DDL、目标 DDL 与发现。',
+      sourceDdlTitle: '源 DDL（MySQL 8.0）',
+      targetDdlTitle: '目标 DDL（PostgreSQL 15）',
+      supplementalTitle: '补建 SQL',
+      /** Story 44: the operator must not mistake this for a SQL editor. */
+      readOnlyNotice:
+        'DDL 是表写入契约的只读完整呈现，不是可以手改的 SQL 编辑器。要改变结构，请在发现列表里改映射规则，契约与 DDL 会重新生成。',
+      copyAction: (what: string) => `复制${what}`,
+      copied: '已复制',
+      contractVersion: (version: number) => `表写入契约 v${version}`,
+      contractGeneratedAt: (moment: string) => `重新生成于 ${moment}`,
+      contractMissing: {
+        title: '尚未生成表写入契约',
+        body: '还有映射例外没有决定。表写入契约是完整的写入意图，缺一项就不生成，DDL 也不会呈现半份。',
+      },
+      findingsLabel: '发现',
+      mappingListLabel: '映射例外',
+      /** A mapping rule is counted in 条, as 迁移范围 already counts them. */
+      mappingUnitLabel: '条',
+      mappingColumns: {
+        sourceColumn: '源字段',
+        sourceType: '源类型',
+        reason: '例外原因',
+        rule: '映射规则',
+        origin: '规则来源',
+      },
+      mappingReasons: {
+        ENUM_VALUE_DOMAIN: 'MySQL enum 在目标端没有对应类型，值域需要由字符串类型承载。',
+        UNSIGNED_INTEGER_RANGE: '无符号整数的取值范围超出同名有符号目标类型。',
+        AUTO_INCREMENT_IDENTITY: 'numeric(20,0) 自增列在目标端由标识列或独占序列承载。',
+        ZERO_DATE_DEFAULT:
+          '零日期默认值不在受支持的默认值白名单内；逐列放宽必须由人批准，DBX 不会替你决定。',
+      },
+      mappingConsequences: {
+        PRESERVES_VALUE_DOMAIN: '保留原值域，不截断。',
+        FIXED_WIDTH_MAY_TRUNCATE: '固定宽度，超长的值会被拒绝。',
+        WIDER_TARGET_TYPE: '用更宽的目标类型容纳全部取值。',
+        EXACT_NUMERIC_TARGET: '用精确数值类型容纳全部取值。',
+        PLATFORM_OWNED_IDENTITY: '由目标端标识列生成。',
+        OWNED_EXPLICIT_SEQUENCE: '由该表独占的显式序列生成。',
+        REJECTS_ZERO_DATE: '保持 NOT NULL；零日期值在预检阶段被判为阻断。',
+        APPROVED_ZERO_DATE_RELAXATION: '按已批准的逐列零日期放宽，允许为空。',
+      },
+      /**
+       * `CONTEXT.md` carries no `_中文_` for a rule's origin, so the interface shows the
+       * enum literal — the precedent batch 1 set for preflight conclusions (lead decision
+       * D13). 「user rules override automatic rules」 is what the column is for.
+       */
+      ruleOrigins: { PLATFORM: 'PLATFORM', USER: 'USER' },
+      chooseRule: '请选择',
+      ruleLabel: (column: string) => `为 ${column} 选择映射规则`,
+      undecided: (count: number) => `还有 ${count} 项映射例外需要你决定；DBX 不会替你选。`,
+      noExceptions: {
+        title: '字段均使用自动映射',
+        body: '本表没有需要处理的结构化映射例外，不必逐字段自检。',
+      },
+      emptyScope: {
+        title: '迁移范围里没有表',
+        body: '返回上一阶段，至少选择一张表纳入迁移范围。',
+      },
+      loading: '正在读取逐表配置与预检。',
+      error: {
+        title: '逐表配置读取失败',
         body: '这次请求没有成功。稍后重试，或确认 DBX 后端是否可达。',
       },
     },

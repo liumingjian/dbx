@@ -1,0 +1,125 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+@use '@carbon/react/scss/type' as *;
+@use '@carbon/colors' as *;
+
+// 阶段三 单表工作区 (#35).
+//
+// Three panes on one screen: the object tree, the source and target DDL side by side, and
+// the findings list. This layout is the stated reason the wizard is a full page rather than
+// a wide tearsheet (ADR-0014), so it has to actually fit — which is why every pane scrolls
+// inside itself instead of letting the page grow past the viewport.
+
+.dbx-workspace__grid {
+  display: grid;
+  grid-template-columns: 20rem minmax(0, 1fr);
+  gap: $spacing-05;
+  align-items: start;
+}
+
+.dbx-workspace__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: $spacing-05;
+}
+
+.dbx-workspace__notice,
+.dbx-workspace__findings {
+  // The read-only statement and the findings list both speak about the pair of DDL panes
+  // above them, so they run the full width of the pair.
+  grid-column: 1 / -1;
+}
+
+.dbx-workspace__notice {
+  color: $text-secondary;
+  border-inline-start: 2px solid $border-strong;
+  padding-inline-start: $spacing-04;
+}
+
+.dbx-workspace__tree {
+  border: 1px solid $border-subtle;
+  background-color: $layer;
+  padding: $spacing-04;
+  max-block-size: 30rem;
+  overflow: auto;
+}
+
+.dbx-workspace__tree-label {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-03;
+}
+
+.dbx-workspace__tree-detail {
+  color: $text-secondary;
+}
+
+.dbx-workspace__target {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-05;
+  min-inline-size: 0;
+}
+
+.dbx-workspace__undecided {
+  color: $text-primary;
+  margin-block-end: $spacing-04;
+}
+
+.dbx-ddl {
+  border: 1px solid $border-subtle;
+  background-color: $layer;
+  padding: $spacing-04;
+  min-inline-size: 0;
+}
+
+.dbx-ddl__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-03;
+}
+
+.dbx-ddl__empty {
+  padding: $spacing-05 0;
+}
+
+.dbx-ddl__code {
+  @include type-style('code-01');
+
+  margin-block-start: $spacing-03;
+  padding: $spacing-04;
+  background-color: $layer-accent;
+  max-block-size: 18rem;
+  overflow: auto;
+  // Read-only, so the statement keeps its own line breaks rather than reflowing.
+  white-space: pre;
+}
+
+// The DBX-owned SQL palette (ADR-0014 makes it DBX's concern; there is no highlighting
+// dependency). Colours are Carbon's, at 60-level so they hold their contrast on $layer-accent.
+.dbx-sql--keyword {
+  color: $blue-60;
+  font-weight: 600;
+}
+
+.dbx-sql--type {
+  color: $teal-60;
+}
+
+.dbx-sql--identifier {
+  color: $text-primary;
+  font-weight: 600;
+}
+
+.dbx-sql--string {
+  color: $magenta-60;
+}
+
+.dbx-sql--number {
+  color: $purple-60;
+}
+
+.dbx-sql--punctuation {
+  color: $text-secondary;
+}

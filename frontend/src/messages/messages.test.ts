@@ -79,6 +79,32 @@ describe('messages module', () => {
     expect(messages.wizard.scope.largeRecordTable).toBe('大记录表');
   });
 
+  it('calls the DDL a rendering of the 表写入契约, never an editor', () => {
+    // ADR-0011 lists 「editable DDL」 among its rejected alternatives, and `Table write
+    // contract`'s `_Avoid_` names it too. The wording is the product's main defence
+    // against a DBA assuming the pane is a SQL editor (story 44).
+    expect(messages.wizard.tables.readOnlyNotice).toContain('表写入契约');
+    expect(messages.wizard.tables.readOnlyNotice).toContain('只读');
+    expect(messages.wizard.tables.readOnlyNotice).toContain('不是可以手改的 SQL 编辑器');
+    expect(messages.wizard.tables.contractVersion(2)).toContain('表写入契约');
+  });
+
+  it('uses 补建 SQL for the structures outside the v1 writable-table contract', () => {
+    // `Supplemental SQL`'s `_中文_` is 补建 SQL, and its definition is that DBX v1
+    // delivers it but does not execute it as part of migration. Calling it 「已迁移的
+    // 约束」 would claim a structural migration v1 does not perform.
+    expect(messages.wizard.tables.outOfContract).toBe('补建 SQL');
+    expect(messages.wizard.tables.supplementalTitle).toBe('补建 SQL');
+    expect(messages.wizard.tables.outOfContractNotice).toContain('不在迁移过程中执行');
+  });
+
+  it('shows a 映射规则 origin as the enum literal', () => {
+    // As with preflight conclusions: CONTEXT.md carries no `_中文_` for these, so the
+    // interface renders the literal rather than inventing a translation.
+    expect(messages.wizard.tables.ruleOrigins.PLATFORM).toBe('PLATFORM');
+    expect(messages.wizard.tables.ruleOrigins.USER).toBe('USER');
+  });
+
   it('keeps the two selection scopes verbally distinct', () => {
     // ADR-0015 leaves cross-page selection semantics to DBX. "Select all" that silently
     // means "this page" is the mistake the wording exists to prevent.
