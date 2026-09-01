@@ -21,6 +21,7 @@ function draft(overrides: Partial<MigrationDraft> = {}): MigrationDraft {
     targetSchema: 'orders',
     scopeKind: 'SELECTED_TABLES',
     selectedTables: [],
+    mappingRules: [],
     excludedTables: [],
     completedStages: [],
     ...overrides,

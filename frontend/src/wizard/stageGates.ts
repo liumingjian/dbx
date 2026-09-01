@@ -1,4 +1,4 @@
-import type { DatabaseConnection, MigrationDraft } from '@/contract';
+import type { DatabaseConnection, DraftTableConfiguration, MigrationDraft } from '@/contract';
 import { messages } from '@/messages';
 import { wizardStages, type WizardStage } from '@/routes/paths';
 
@@ -31,6 +31,15 @@ export interface WizardGateContext {
   readonly draft: MigrationDraft;
   /** Needed by stage one: a connection can go bad after it was chosen. */
   readonly connections: readonly DatabaseConnection[];
+  /**
+   * The 逐表配置 of every table in the 迁移范围, or `null` while it is still being read.
+   *
+   * Null is a state rather than an omission: until the summaries are in, stage three's
+   * gate cannot say whether every table has a 表写入契约, and answering 「not blocked」 on
+   * missing evidence is how a safety sequence quietly stops being one. Added by #35; #36
+   * reads the same list for Gate 2.
+   */
+  readonly tableConfigurations: readonly DraftTableConfiguration[] | null;
 }
 
 /**
@@ -103,6 +112,40 @@ function scopeGate({ draft }: WizardGateContext): StageGateResult {
 }
 
 /**
+ * Stage three: 逐表配置与预检.
+ *
+ * The clause below is #35's, and it is the one ADR-0011 forces: a 表写入契约 is 「the
+ * immutable, single-table write intent」, and DBX may not assemble one while a mapping
+ * exception it refuses to decide — the *approved* per-column zero-date relaxation — is
+ * still undecided. A table in the 迁移范围 with no contract has nothing for 执行确认 to
+ * summarise and nothing for a 结构证明 to compare against, so the wizard stops here.
+ *
+ * **#36 attaches Gate 2 immediately below**: a table whose 预检 concluded `UNSUPPORTED`
+ * or `INCONCLUSIVE` may not be approved. Everything it needs is already in
+ * `tableConfigurations` — `preflightConclusion` and `blockingFindingCount` per table — so
+ * the clause is added here and nowhere else.
+ */
+function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult {
+  if (tableConfigurations === null) {
+    return blockedBy(messages.wizard.gates.tableConfigurationsUnread);
+  }
+
+  const withoutContract = tableConfigurations.filter(
+    (configuration) => configuration.contractVersion === null,
+  );
+  const first = withoutContract[0];
+  if (first !== undefined) {
+    return blockedBy(
+      messages.wizard.gates.contractNotGenerated(withoutContract.length, first.sourceTable),
+    );
+  }
+
+  // #36: Gate 2 — 预检结论为 UNSUPPORTED 或 INCONCLUSIVE 的表不能被批准 — goes here.
+
+  return passes;
+}
+
+/**
  * A stage whose rule belongs to a ticket that has not landed yet.
  *
  * It blocks, and says so plainly. The alternative — letting the draft walk through a stage
@@ -124,8 +167,7 @@ export const wizardStageGates: Readonly<
 > = {
   connections: connectionsGate,
   scope: scopeGate,
-  /** #35 replaces this with 「预检结论与生成的契约」. */
-  tables: notYetDelivered,
+  tables: tablesGate,
   /** #37 replaces this with Gate 5 (写冻结) and Gate 6 (结构证明). */
   confirm: notYetDelivered,
   monitor: belongsToRun,

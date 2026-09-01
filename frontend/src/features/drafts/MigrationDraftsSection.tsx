@@ -39,9 +39,19 @@ export function MigrationDraftsSection() {
   const drafts = useMemo(() => draftsQuery.data ?? [], [draftsQuery.data]);
   const connections = useMemo(() => connectionsQuery.data ?? [], [connectionsQuery.data]);
 
-  /** Resume where the draft actually stands, by the same gate evaluation the wizard uses. */
+  /**
+   * Resume where the draft actually stands, by the same gate evaluation the wizard uses.
+   *
+   * The list does not read the draft's 逐表配置 — it would be one request per row — so the
+   * stage-three evidence is `null` here. That resolves to 逐表配置与预检 at the furthest,
+   * which is the honest answer: this page cannot say the stage was satisfied, and the
+   * wizard re-evaluates it properly the moment the draft is opened.
+   */
   const resumePath = (draft: MigrationDraft) =>
-    paths.wizardStage(draft.id, furthestReachableStage({ draft, connections }));
+    paths.wizardStage(
+      draft.id,
+      furthestReachableStage({ draft, connections, tableConfigurations: null }),
+    );
 
   const startDraft = () =>
     create.mutate(
