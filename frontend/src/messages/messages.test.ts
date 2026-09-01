@@ -229,4 +229,74 @@ describe('messages module', () => {
     expect(messages.table.selection.selectAllMatchingAction).toBe('选中符合当前筛选的全部');
     expect(messages.table.selection.selectedCount(3, '张')).toBe('已选 3 张');
   });
+
+  it('gives the two phases named after the box their operator-facing words', () => {
+    // Gate 7: 「A box is an internal scheduling detail, and the operator is not required to
+    // understand the execution platform in order to run the product」 (`CONTEXT.md`). The
+    // usual fallback — render the enum literal — is unavailable for these two, because the
+    // literals name the box; `CONTEXT.md` therefore defines the words, and they are used.
+    expect(messages.run.phases.WAITING_FOR_BOX).toBe('等待调度');
+    expect(messages.run.outcomes.BLOCKED_BY_BOX_FAILURE).toBe('因关联失败而阻塞');
+    for (const label of [
+      ...Object.values(messages.run.phases),
+      ...Object.values(messages.run.outcomes),
+      ...Object.values(messages.run.rootCauseDomains),
+    ]) {
+      expect(label.toLowerCase()).not.toContain('box');
+      expect(label.toLowerCase()).not.toContain('kafka');
+      expect(label).not.toContain('箱');
+    }
+    // Everything else keeps the enum literal, for want of a `_中文_` line.
+    expect(messages.run.phases.TRANSFERRING).toBe('TRANSFERRING');
+    expect(messages.run.outcomes.SUCCEEDED).toBe('SUCCEEDED');
+  });
+
+  it('presents both execution-platform 根因域 values as the single 迁移平台 domain', () => {
+    // `CONTEXT.md`: 「The distinction between them is DBX's own to act on, not the
+    // operator's」. The specific domain is retained in the diagnostic evidence.
+    expect(messages.run.rootCauseDomains.KAFKA_CONNECT).toBe('迁移平台');
+    expect(messages.run.rootCauseDomains.KAFKA).toBe('迁移平台');
+  });
+
+  it('says progress may jump and lag rather than implying smooth advance', () => {
+    // ADR-0004 makes progress observations coalescable. An interface that renders them as
+    // smooth advance is telling a DBA something the platform never said.
+    const notice = messages.run.observationNotice;
+    expect(notice).toContain('跳变');
+    expect(notice).toContain('滞后');
+    expect(notice).toContain('不做平滑推进');
+    expect(messages.run.lagging).toBe('观测滞后');
+    expect(messages.run.laggingDetail('2026-09-01 09:00 UTC')).toContain('不是卡死');
+  });
+
+  it('never grades 卡死 as a degree of slowness', () => {
+    // 卡死's `_Avoid_` names 「slow」, 「failed」 and 「timed out」. It is a terminal
+    // diagnosis with a threshold, and the copy states the threshold rather than a degree.
+    const stuck = messages.run.stuck;
+    expect(stuck.heading).toBe('卡死');
+    expect(stuck.statement).toContain('终局诊断');
+    expect(stuck.statement).toContain('硬阈值');
+    expect(stuck.notSlow).toContain('慢的表仍在推进');
+    // 因关联失败而阻塞 is not a failure of the table it names.
+    expect(stuck.blockedExplanation).toContain('技术结果未定');
+    expect(stuck.blockedExplanation).toContain('重新迁移');
+  });
+
+  it('states what a 取消 does and does not do, before it happens', () => {
+    // 取消's `_Avoid_` names 「discard」, 「delete」 and 「rollback」; its definition keeps
+    // target data and diagnostic evidence. Both halves are consequences, so both are said.
+    const cancel = messages.run.cancel;
+    expect(cancel.preserved).toContain('保留');
+    expect(cancel.preserved).toContain('不是丢弃');
+    expect(cancel.preserved).toContain('不回滚');
+    expect(cancel.terminalStop).toContain('新的迁移运行');
+    expect(cancel.terminal(2)).toContain('技术结果保持不变');
+  });
+
+  it('names the bound and the true total when a list is bounded', () => {
+    // Lead decision D24: bounded rendering states its bound and the true total.
+    expect(messages.run.matrix.bounded(12, 1164)).toContain('12');
+    expect(messages.run.matrix.bounded(12, 1164)).toContain('1164');
+    expect(messages.run.events.bounded(60, 400)).toContain('共 400 条');
+  });
 });

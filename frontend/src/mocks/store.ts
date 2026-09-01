@@ -11,9 +11,12 @@ import type {
   MigrationDraft,
   MigrationDraftPatch,
   MigrationRun,
+  MigrationRunStatus,
   MigrationTask,
   PruneColumnRequest,
   RecordMappingRuleRequest,
+  RunCancellationConsequences,
+  RunProgressSnapshot,
   RegisterDatabaseConnectionRequest,
   SourceBaselineEntry,
   SourceTableSummary,
@@ -24,6 +27,13 @@ import type {
 import type { ControllableClock } from './clock';
 import { seedDatabaseConnections, unreachableConnectionIds } from './fixtures/databaseConnections';
 import { seedMigrationTasks } from './fixtures/migrationTasks';
+import {
+  OBSERVATION_INTERVAL_MOCK_MS,
+  buildRunPlan,
+  projectRunProgress,
+  seedMonitoredRun,
+  type RunPlan,
+} from './fixtures/runProgress';
 import { generateSourceTables } from './fixtures/sourceTables';
 import {
   draftTableConfigurationOf,
@@ -32,7 +42,7 @@ import {
 } from './fixtures/tableWorkspace';
 import { deepFreeze } from './immutable';
 import type { DraftPersistence } from './persistence';
-import type { ScenarioDefinition } from './scenarios';
+import type { ScenarioDefinition, SeedPlan } from './scenarios';
 
 /**
  * The stateful mock store behind MSW (ADR-0016).
@@ -68,6 +78,26 @@ export interface MockStore {
   /** A task's migration runs, most recent first. A rerun is a new run, never a retry. */
   listMigrationRuns(taskId: string): MigrationRun[];
   getMigrationRun(id: string): MigrationRun | undefined;
+  /**
+   * One 迁移运行 as it stands at this instant: units, 卡死, timeline and log (#38).
+   *
+   * Assembled on read from the run's plan and the controllable clock rather than
+   * accumulated in a buffer, which is what makes a three-hour migration reviewable in
+   * tens of seconds and the same review link reproducible.
+   */
+  getRunProgress(runId: string): RunProgressSnapshot | undefined;
+  /** What a 取消 would stop, stated before the operator commits to it. */
+  describeRunCancellation(runId: string): RunCancellationConsequences | undefined;
+  /**
+   * Records an operator's 取消 of a running 迁移运行.
+   *
+   * A 取消 is 「a user-requested terminal stop … that preserves … target data and
+   * diagnostic evidence」 (`CONTEXT.md`), so it records a request instant and nothing is
+   * deleted, rolled back or reset. The run record itself stays frozen: what changes is
+   * what the projection makes of it from that instant onwards.
+   */
+  requestRunCancellation(runId: string): RunProgressSnapshot | undefined;
+
   /**
    * The tables discovered in one source database. Generated from the scenario seed, so a
    * 1200-table production schema is reproducible rather than merely large.
@@ -200,6 +230,112 @@ export function createMockStore({
   const seededTasks = seedMigrationTasks(scenario.seedPlan, clock);
   const tasks = new Map<string, MigrationTask>(seededTasks.tasks.map((task) => [task.id, task]));
   const runs = new Map<string, MigrationRun>(seededTasks.runs.map((run) => [run.id, run]));
+
+  /**
+   * The 迁移运行 that 运行监控 is entered through, and the plans behind every run.
+   *
+   * A plan is what gives a run its time dimension: phase, progress, timeline and log are
+   * all projections of one plan and the clock. Plans are built lazily and remembered, so a
+   * run does not re-draw its own shape between two polls.
+   */
+  const monitored = seedMonitoredRun(scenario.seedPlan, scenario.seed, clock);
+  const runPlans = new Map<string, RunPlan>();
+  const cancellationRequests = new Map<string, number>();
+  if (monitored !== null) {
+    runs.set(monitored.run.id, deepFreeze(monitored.run));
+    tasks.set(monitored.task.id, deepFreeze(monitored.task));
+    runPlans.set(monitored.run.id, monitored.plan);
+    if (monitored.plan.seededCancellationAt !== null) {
+      // 「操作员取消」 is a scenario, so the request is part of the seeded world rather
+      // than something a reviewer has to perform before they can look at it.
+      cancellationRequests.set(
+        monitored.run.id,
+        Date.parse(monitored.run.startedAt) +
+          monitored.plan.seededCancellationAt * OBSERVATION_INTERVAL_MOCK_MS,
+      );
+    }
+  }
+
+  /**
+   * Which shape a run's plan takes.
+   *
+   * A run that has already ended states what became of it, and the plan is chosen to agree
+   * with that record: a run whose status says `COMPLETED_WITH_FAILURES` must not project
+   * twelve successful tables. A run still in flight follows the scenario's own plan.
+   */
+  function runPlanShapeOf(run: MigrationRun): SeedPlan['runPlan'] {
+    switch (run.status) {
+      case 'COMPLETED_WITH_FAILURES':
+        return 'partial-table-failure';
+      case 'COMPLETED_WITH_ACCEPTED_RISK':
+        return 'accepted-risk';
+      case 'ATTENTION_REQUIRED':
+        return 'stuck-table';
+      case 'CANCELLED':
+      case 'CANCELLING':
+        return 'operator-cancellation';
+      default:
+        return seedPlan.runPlan;
+    }
+  }
+
+  function planOf(run: MigrationRun): RunPlan {
+    const existing = runPlans.get(run.id);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = buildRunPlan({
+      seed: scenario.seed,
+      runPlan: runPlanShapeOf(run),
+      sourceDatabase: run.sourceDatabase,
+      tables: run.sourceBaseline.entries.map((entry) => ({
+        name: entry.sourceTable,
+        exactRowCount: entry.exactRowCount,
+      })),
+    });
+    runPlans.set(run.id, created);
+    return created;
+  }
+
+  /**
+   * One run, projected at the instant that is meaningful for it.
+   *
+   * A run still in flight is projected at *now*, which is what gives 运行监控 its time
+   * dimension. A run that has ended is projected at its own end and keeps the status and
+   * end time it was recorded with: a 迁移运行 is an immutable execution attempt, and the
+   * clock moving on does not make a finished one start again.
+   */
+  function snapshotOf(run: MigrationRun): RunProgressSnapshot {
+    const ended = run.endedAt === null ? null : Date.parse(run.endedAt);
+    const projected = projectRunProgress({
+      run,
+      plan: planOf(run),
+      nowMs: ended ?? clock.now(),
+      cancellationRequestedAtMs:
+        cancellationRequests.get(run.id) ??
+        (run.cancellationRequestedAt === null ? null : Date.parse(run.cancellationRequestedAt)),
+      unitTotalCount: Math.max(run.selectedTableCount, planOf(run).units.length),
+    });
+    // Frozen like the record it describes: a 迁移运行 is 「one immutable execution
+    // attempt」, and a projection of one that could be written to would be a second,
+    // editable copy of audit evidence.
+    return deepFreeze(ended === null ? projected : { ...projected, run });
+  }
+
+  /** A run as it is observed now: its status is a projection of its units (ADR-0004). */
+  function observedRun(run: MigrationRun): MigrationRun {
+    return run.endedAt === null ? snapshotOf(run).run : run;
+  }
+
+  /** A task's 最近运行状态 follows the run it names rather than a copy taken at approval. */
+  function observedTask(task: MigrationTask): MigrationTask {
+    const latest = task.latestRunId === null ? undefined : runs.get(task.latestRunId);
+    if (latest === undefined || latest.endedAt !== null) {
+      return task;
+    }
+    const status: MigrationRunStatus = observedRun(latest).status;
+    return status === task.latestRunStatus ? task : { ...task, latestRunStatus: status };
+  }
   const sourceTablesByDatabase = new Map<string, SourceTableSummary[]>();
   const sourceTableIndex = new Map<string, Map<string, SourceTableSummary>>();
 
@@ -697,23 +833,63 @@ export function createMockStore({
     listMigrationTasks() {
       // Most recently approved first, with the identifier as the tie-break, so the list
       // reads the same way twice.
-      return [...tasks.values()].sort(
-        (a, b) => b.approvedAt.localeCompare(a.approvedAt, 'en') || a.id.localeCompare(b.id, 'en'),
-      );
+      return [...tasks.values()]
+        .sort(
+          (a, b) =>
+            b.approvedAt.localeCompare(a.approvedAt, 'en') || a.id.localeCompare(b.id, 'en'),
+        )
+        .map(observedTask);
     },
 
     getMigrationTask(id) {
-      return tasks.get(id);
+      const task = tasks.get(id);
+      return task === undefined ? undefined : observedTask(task);
     },
 
     listMigrationRuns(taskId) {
       return [...runs.values()]
         .filter((run) => run.taskId === taskId)
-        .sort((a, b) => b.startedAt.localeCompare(a.startedAt, 'en'));
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt, 'en'))
+        .map(observedRun);
     },
 
     getMigrationRun(id) {
-      return runs.get(id);
+      const run = runs.get(id);
+      return run === undefined ? undefined : observedRun(run);
+    },
+
+    getRunProgress(runId) {
+      const run = runs.get(runId);
+      return run === undefined ? undefined : snapshotOf(run);
+    },
+
+    describeRunCancellation(runId) {
+      const run = runs.get(runId);
+      if (run === undefined) {
+        return undefined;
+      }
+      const snapshot = snapshotOf(run);
+      const terminal = snapshot.units.filter((unit) => unit.phase === 'TERMINAL');
+      return {
+        runId,
+        inFlightUnitCount: snapshot.units.length - terminal.length,
+        terminalUnitCount: terminal.length,
+        alreadyRequested:
+          cancellationRequests.has(runId) || snapshot.run.cancellationRequestedAt !== null,
+      };
+    },
+
+    requestRunCancellation(runId) {
+      const run = runs.get(runId);
+      if (run === undefined) {
+        return undefined;
+      }
+      // A run that has already ended is not cancellable, and saying so by returning it
+      // unchanged is more honest than recording a request that stops nothing.
+      if (run.endedAt === null && !cancellationRequests.has(runId)) {
+        cancellationRequests.set(runId, clock.now());
+      }
+      return snapshotOf(run);
     },
 
     listSourceTables(sourceDatabase) {

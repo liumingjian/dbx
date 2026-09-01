@@ -583,11 +583,200 @@ export const messages = {
       },
     },
   },
+  /**
+   * 运行监控 (#38) — the wizard's fifth stage, seen from the 迁移运行 it observes.
+   *
+   * Two rules shape every string below.
+   *
+   * **Gate 7**: 箱、连接器、topic never reach the operator. `CONTEXT.md` states it as a
+   * property of 箱 itself — 「Never. A box is an internal scheduling detail, and the
+   * operator is not required to understand the execution platform」 — and gives the two
+   * phase literals named after it their own entries: `WAITING_FOR_BOX` is 等待调度 and
+   * `BLOCKED_BY_BOX_FAILURE` is 因关联失败而阻塞. Those two are used; the literals are not
+   * rendered. Every other phase and outcome has no `_中文_` line, so the interface shows
+   * the enum literal rather than inventing a translation.
+   *
+   * **卡死 is a diagnosis, not a degree of slowness.** `CONTEXT.md` puts 「slow」 and
+   * 「timed out」 under its `_Avoid_`, so the wording never grades it: it states the
+   * threshold, the last observed movement, and what DBX did about it.
+   */
   run: {
-    title: '迁移运行',
+    title: '运行监控',
+    lead: '监控以表迁移单元为中心：每张表的阶段、进度、技术结果与观测时间都是这张表自己的记录。',
     runLabel: '运行',
     unitLabel: '表迁移单元',
     evidenceTitle: '表迁移单元证据',
+    loading: '正在读取迁移运行的进度观测。',
+    error: {
+      title: '迁移运行进度读取失败',
+      body: '这次观测没有取到。稍后重试，或确认 DBX 后端是否可达。',
+    },
+    empty: {
+      title: '这次迁移运行还没有表迁移单元',
+      body: '迁移运行刚刚开始时还没有表迁移单元；进度观测到达后，这里会按表列出。',
+    },
+    notFound: {
+      title: '找不到这次迁移运行',
+      body: '这个迁移运行标识在当前数据里不存在。请从迁移任务的迁移运行列表重新进入。',
+    },
+    /**
+     * ADR-0004 makes progress observations coalescable, so the interface says so in as
+     * many words. It is not a disclaimer: a DBA who has learned to read a frozen bar as
+     * 「卡住了」 needs to know that a frozen number here can simply mean 「还没有新的观测」.
+     */
+    observationNotice:
+      '进度按观测渲染：观测可以被合并，因此进度可能跳变，也可能滞后。界面只显示已经观测到的数字和它的观测时间，不做平滑推进，也不做推算。',
+    observedAt: (at: string) => `观测时间 ${at}`,
+    lastProgressAt: (at: string) => `最近一次推进 ${at}`,
+    lagging: '观测滞后',
+    laggingDetail: (at: string) =>
+      `这张表最近一次观测是 ${at}，早于本次快照。滞后是正常的，它不是卡死。`,
+    noObservation: '尚无进度观测',
+    freezeLabel: '写冻结',
+    freezeSummary: (operator: string, expires: string) => `责任人 ${operator}，时限至 ${expires}`,
+    startedAt: '开始时间',
+    endedAt: '结束时间',
+    stillRunning: '进行中',
+    sourceLabel: '源',
+    targetLabel: '目标',
+    statusLabel: '迁移运行状态',
+    backAction: '返回迁移运行列表',
+    matrix: {
+      heading: '进度矩阵',
+      totals: (read: string, written: string, baseline: string) =>
+        `已观测：读取 ${read} 行、写入 ${written} 行；源基线共 ${baseline} 行`,
+      phaseHeading: '阶段与技术结果分布',
+      countOf: (label: string, count: number) => `${label} ${count}`,
+      /** Bounded rendering states its bound and the true total (lead decision D24). */
+      bounded: (shown: number, total: number) =>
+        `仅显示 ${shown} 个表迁移单元，这次迁移运行共 ${total} 个。`,
+      columns: {
+        sourceTable: '源表',
+        targetTable: '目标表',
+        phase: '阶段',
+        progress: '进度',
+        outcome: '技术结果',
+        observedAt: '观测时间',
+      },
+      progressOf: (read: string, baseline: string) => `${read} / ${baseline} 行`,
+      /** Never a smooth bar: the number and its observation time are what is真实的. */
+      readLabel: '已读',
+      writtenLabel: '已写',
+      noOutcome: '尚无技术结果',
+    },
+    filters: {
+      heading: '筛选表迁移单元',
+      all: '全部',
+      failed: '只看失败',
+      stuck: '只看卡死',
+      noMatch: {
+        title: '没有匹配项',
+        body: '当前筛选下没有表迁移单元。切换回「全部」可以看到这次迁移运行的所有表。',
+      },
+    },
+    /**
+     * Phases (ADR-0004). `WAITING_FOR_BOX` is 等待调度 — an ordinary waiting state, not a
+     * fault, carrying no diagnosis. The rest have no `_中文_` line and are shown as the
+     * enum literal, following the precedent batch 1 set for preflight conclusions.
+     */
+    phases: {
+      DISCOVERED: 'DISCOVERED',
+      PREFLIGHTING: 'PREFLIGHTING',
+      AWAITING_APPROVAL: 'AWAITING_APPROVAL',
+      READY: 'READY',
+      CREATING_TARGET: 'CREATING_TARGET',
+      WAITING_FOR_BOX: '等待调度',
+      TRANSFERRING: 'TRANSFERRING',
+      VALIDATING: 'VALIDATING',
+      TERMINAL: 'TERMINAL',
+    },
+    /**
+     * Outcomes (ADR-0004). `BLOCKED_BY_BOX_FAILURE` is 因关联失败而阻塞: the unit's own
+     * technical result is undetermined rather than failed, and it is a candidate for
+     * re-migration. The others are enum literals for want of a `_中文_` line.
+     */
+    outcomes: {
+      SUCCEEDED: 'SUCCEEDED',
+      FAILED: 'FAILED',
+      BLOCKED_BY_BOX_FAILURE: '因关联失败而阻塞',
+      SKIPPED: 'SKIPPED',
+      CANCELLED: 'CANCELLED',
+      COMPLETED_WITH_ACCEPTED_RISK: 'COMPLETED_WITH_ACCEPTED_RISK',
+    },
+    /**
+     * 根因域's `Kafka Connect` and `Kafka` are presented as the single 迁移平台 domain
+     * (`CONTEXT.md`). The specific domain is kept in the diagnostic evidence for support,
+     * so nothing is lost from the audit record — it is simply not the operator's business.
+     */
+    rootCauseDomains: {
+      USER_INPUT: 'USER_INPUT',
+      SOURCE_DATABASE: 'SOURCE_DATABASE',
+      TARGET_DATABASE: 'TARGET_DATABASE',
+      KAFKA_CONNECT: '迁移平台',
+      KAFKA: '迁移平台',
+      RUNTIME_ENVIRONMENT: 'RUNTIME_ENVIRONMENT',
+      PLATFORM: 'PLATFORM',
+    },
+    stuck: {
+      heading: '卡死',
+      /** 「slow」 and 「timed out」 are under 卡死's `_Avoid_`; the copy never grades it. */
+      statement:
+        '卡死是终局诊断，不是「慢」：在配置的硬阈值内完全没有可观测进度，而各项检查仍然报告健康。DBX 已经停止推进，并保留目标数据与诊断证据供排查。',
+      notSlow:
+        '与「慢」的区别：慢的表仍在推进，只是观测可能滞后；卡死的表在整个硬阈值内一行都没有推进。',
+      diagnosedAt: (at: string) => `诊断时间 ${at}`,
+      lastProgressAt: (at: string) => `最后一次可观测进度 ${at}`,
+      threshold: (minutes: string) => `配置的硬阈值 ${minutes} 分钟`,
+      noProgressFor: (minutes: string) => `已经 ${minutes} 分钟没有可观测进度`,
+      rootCauseDomain: (domain: string) => `根因域 ${domain}`,
+      stalledHeading: '停止推进的表',
+      blockedHeading: '因关联失败而阻塞的表',
+      blockedExplanation:
+        '这些表自己没有失败：它们的技术结果未定，而不是失败，因此是重新迁移的候选。',
+      nextStep:
+        '下一步由人判断：可以取消这次迁移运行，也可以在排查后用新的迁移运行重新迁移受影响的表。',
+    },
+    events: {
+      heading: '事件流',
+      lead: '这次迁移运行的时间线，最近的在最前。',
+      bounded: (shown: number, total: number) => `仅显示最近 ${shown} 条事件，共 ${total} 条。`,
+      columns: { occurredAt: '时间', sourceTable: '表', event: '事件' },
+      wholeRun: '整次迁移运行',
+      types: {
+        phaseEntered: (phase: string) => `进入阶段 ${phase}`,
+        outcomeRecorded: (outcome: string) => `记录技术结果 ${outcome}`,
+        runStatusChanged: (status: string) => `迁移运行状态 ${status}`,
+        stuckDiagnosed: '诊断为卡死',
+        cancellationRequested: '已请求取消',
+      },
+    },
+    log: {
+      heading: '日志',
+      lead: '平台产生的技术证据，原样呈现，用于贴进工单。',
+      bounded: (shown: number, total: number) => `仅显示最近 ${shown} 行，共 ${total} 行。`,
+      empty: '这次迁移运行还没有产生日志。',
+    },
+    /**
+     * 取消 — 「a user-requested terminal stop of a migration run that preserves … target
+     * data and diagnostic evidence」, with 「discard」, 「delete」 and 「rollback」 under its
+     * `_Avoid_`. The consequences are stated before the operator commits to them, and the
+     * counts in them are read from the platform rather than guessed at in the browser.
+     */
+    cancel: {
+      action: '取消迁移运行',
+      heading: '取消迁移运行',
+      lead: '取消之前，先看清它会做什么、不会做什么。',
+      inFlight: (count: number) => `会停止 ${count} 个仍在进行中的表迁移单元。`,
+      terminal: (count: number) =>
+        `已经终局的 ${count} 个表迁移单元不受影响，它们的技术结果保持不变。`,
+      preserved: '已经写入目标的数据与诊断证据都会保留：取消不是丢弃，也不回滚。',
+      terminalStop:
+        '取消是终局性的停止：这次迁移运行不会恢复，未完成的表需要新的迁移运行重新迁移。',
+      confirmAction: '确认取消迁移运行',
+      dismissAction: '返回',
+      alreadyRequested: '这次迁移运行已经收到取消请求。',
+      unavailable: '这次迁移运行已经结束，没有可以取消的东西。',
+    },
   },
   connections: {
     title: '数据源',
