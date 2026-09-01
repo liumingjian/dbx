@@ -31,6 +31,8 @@ export const routePatterns = {
   migrationTaskRuns: '/tasks/:taskId/runs',
   migrationRun: '/runs/:runId',
   tableMigrationUnit: '/runs/:runId/tables/:unitId',
+  /** 校验报告 — the wizard's sixth stage, seen from the 迁移运行 it concludes (#40). */
+  validationReport: '/runs/:runId/validation',
   databaseConnections: '/connections',
   settings: '/settings',
   /** Design reference surface: the 32px Chinese density sample from ADR-0014. */
@@ -106,4 +108,6 @@ export const paths = {
   migrationRun: (runId: string) => carrySearch(buildPath(routePatterns.migrationRun, { runId })),
   tableMigrationUnit: (runId: string, unitId: string) =>
     carrySearch(buildPath(routePatterns.tableMigrationUnit, { runId, unitId })),
+  validationReport: (runId: string) =>
+    carrySearch(buildPath(routePatterns.validationReport, { runId })),
 } as const;

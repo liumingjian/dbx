@@ -3,6 +3,7 @@ import type {
   AddCredentialVersionRequest,
   MigrationDraftPatch,
   PruneColumnRequest,
+  RecordValidationDispositionRequest,
   RecordMappingRuleRequest,
   RegisterDatabaseConnectionRequest,
   WriteFreezeDeclaration,
@@ -266,6 +267,41 @@ export const handlers = [
       return evidence ? HttpResponse.json(evidence) : notFound();
     },
   ),
+
+  /**
+   * 校验报告 (#40): the run's technical conclusions, its 迁移范围, and the 校验处置
+   * recorded against it — one read, one instant.
+   *
+   * Faulted with `validationExecutions` rather than with the run, so the report's own
+   * loading and error states are reachable from a URL without also breaking 运行监控.
+   */
+  http.get(`${API_BASE}/migration-runs/:id/validation-report`, async ({ params }) => {
+    const faulted = await applyTransportFault('validationExecutions');
+    if (faulted) return faulted;
+    const report = getMockContext().store.getValidationReport(String(params.id));
+    return report ? HttpResponse.json(report) : notFound();
+  }),
+
+  /**
+   * Recording a 校验处置: a POST that **appends a decision** and returns the report.
+   *
+   * Deliberately not a PATCH of the 校验执行, and there is no endpoint anywhere that could
+   * be one. 「Accepting risk may close the workflow but never changes the technical
+   * validation result to passed」 (`CONTEXT.md`), so the HTTP surface offers no way to
+   * express the thing the domain forbids.
+   */
+  http.post(`${API_BASE}/migration-runs/:id/validation-dispositions`, async ({ params, request }) => {
+    const faulted = await applyTransportFault('validationExecutions');
+    if (faulted) return faulted;
+    const body = (await request.json()) as RecordValidationDispositionRequest;
+    const result = getMockContext().store.recordValidationDisposition(String(params.id), body);
+    if (result.ok) {
+      return HttpResponse.json(result.report, { status: 201 });
+    }
+    return result.code === 'NOT_FOUND'
+      ? notFound()
+      : apiError(409, result.code, 'The validation disposition was not recorded.');
+  }),
 
   // What a 取消 would stop, read before it is requested rather than described in a dialog.
   http.get(`${API_BASE}/migration-runs/:id/cancellation`, async ({ params }) => {

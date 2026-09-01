@@ -999,6 +999,172 @@ export const messages = {
     },
   },
   /**
+   * 校验报告 (#40) — the artefact a DBA submits to a change review.
+   *
+   * Every sentence here defends one distinction, because a report that blurs any of them
+   * is worse than no report at all:
+   *
+   *  - **校验执行 vs 校验处置.** 「Accepting risk may close the workflow but never changes
+   *    the technical validation result to passed」, and 「Manual pass, overridden result」
+   *    sits under 校验处置's `_Avoid_`. So the two are named separately everywhere, the
+   *    technical conclusion is never qualified by a disposition, and no string here ever
+   *    says a disposed result passed.
+   *  - **技术结论 vs 预检排除项.** 「没迁」 and 「迁了但没过」 are different facts about a
+   *    table, and only one of them is a result.
+   *  - **`NOT_APPLICABLE` vs `NOT_RUN` vs a real failure.** A check the plan marked not
+   *    applicable, a check the plan did not enable, and a check that failed are three
+   *    things; a DBA must not be sent chasing the first two.
+   *
+   * The enum literals — the five 校验项, the three exclusion reasons, the conclusions — are
+   * rendered as literals for want of a `_中文_` line in `CONTEXT.md`, following the
+   * precedent batch 1 set for preflight conclusions. Each carries an explanatory sentence
+   * built from words `CONTEXT.md` does define.
+   */
+  validation: {
+    title: '校验报告',
+    lead: '校验执行给出技术结论；校验处置是操作员对失败或无法判定结果的决定。接受风险可以关闭流程，但不会把技术结论改写为 PASS。',
+    openAction: '查看校验报告',
+    backToRun: '返回运行监控',
+    observedAt: (at: string) => `报告观测时间 ${at}`,
+    runLabel: '迁移运行',
+    statusLabel: '迁移运行状态',
+    loading: '正在读取校验报告。',
+    error: {
+      title: '校验报告读取失败',
+      body: '这次读取没有取到。稍后重试，或确认 DBX 后端是否可达。',
+    },
+    notFound: {
+      title: '找不到这次迁移运行',
+      body: '这个迁移运行标识在当前数据里不存在。请从迁移任务的迁移运行列表重新进入。',
+    },
+    empty: {
+      title: '这次迁移运行还没有表迁移单元',
+      body: '迁移运行刚刚开始时还没有表迁移单元；校验执行在写入完成之后才开始。',
+    },
+    scope: {
+      heading: '本次迁移运行的选定范围',
+      databases: (source: string, target: string) => `源 ${source} → 目标 ${target}`,
+      selected: (count: number) => `选定表数 ${count}`,
+      excluded: (count: number) => `排除表数 ${count}`,
+      baseline: (at: string) => `源基线捕获于 ${at}`,
+      covers: '下面的技术结论只覆盖这些选定的表。',
+    },
+    exclusions: {
+      heading: '预检排除项',
+      statement:
+        '这些表不在本次迁移运行的迁移范围里：它们没有迁移，也没有校验执行，因此没有技术结论。「没迁」与「迁了但没过」是两回事。',
+      none: '本次迁移运行没有排除任何表。',
+      listLabel: '预检排除项',
+      unitLabel: '张',
+      columns: { sourceTable: '源表', reason: '排除原因' },
+      reasons: {
+        OPERATOR_EXCLUDED: 'OPERATOR_EXCLUDED',
+        PREFLIGHT_UNSUPPORTED: 'PREFLIGHT_UNSUPPORTED',
+        PREFLIGHT_INCONCLUSIVE: 'PREFLIGHT_INCONCLUSIVE',
+      },
+      reasonDetails: {
+        OPERATOR_EXCLUDED: '操作员在迁移范围里显式排除了这张表；显式排除是可复核的例外。',
+        PREFLIGHT_UNSUPPORTED: '这张表的预检结论是 UNSUPPORTED，只有 SUPPORTED 的预检可以继续。',
+        PREFLIGHT_INCONCLUSIVE: '预检无法确认这张表是否可迁移，不能被确认掉。',
+      },
+    },
+    inFlight: {
+      heading: '校验尚未跑完',
+      body: (concluded: number, total: number) =>
+        `${total} 张表里有 ${concluded} 张的校验执行已经给出结论。报告不给出总体结论：半成品的结论会被当成结论用。`,
+    },
+    concluded: {
+      heading: '校验执行已全部结束',
+      body: '本次迁移运行选定范围内的每一张表都有了自己的校验执行结论。',
+    },
+    summary: {
+      heading: '技术结论分布',
+      note: '按校验执行本身的结论计数，与是否记录了校验处置无关。',
+      itemsHeading: '校验项分布',
+      itemsNote:
+        'NOT_APPLICABLE 是校验计划判定这一项对这张表不适用，NOT_RUN 是校验计划没有启用这一项或校验执行没有发生——两者都不是失败，不需要去追。',
+      countOf: (label: string, count: number) => `${label} ${count}`,
+    },
+    rows: {
+      heading: '逐表校验结论',
+      listLabel: '逐表校验结论',
+      unitLabel: '张',
+      columns: {
+        sourceTable: '源表',
+        targetTable: '目标表',
+        conclusion: '校验执行技术结论',
+        items: '校验项',
+        disposition: '校验处置',
+        unitOutcome: '表迁移单元技术结果',
+        evidence: '证据',
+      },
+      itemsOf: (parts: readonly string[]) => parts.join(' · '),
+      noExecution: '没有校验执行',
+      noOutcome: '尚无技术结果',
+      evidenceAction: '打开证据',
+      planVersion: (version: number) => `校验计划 v${version}`,
+      empty: {
+        title: '没有匹配项',
+        body: '当前筛选下没有表迁移单元。切换回「全部」可以看到本次迁移运行的所有表。',
+      },
+    },
+    filters: {
+      heading: '筛选校验结论',
+      all: '全部',
+      unresolved: '只看未通过',
+      disposed: '只看已记录校验处置',
+    },
+    checks: {
+      ROW_COUNT: 'ROW_COUNT',
+      PRIMARY_KEY_TERMINAL_VALUE: 'PRIMARY_KEY_TERMINAL_VALUE',
+      NULL_CONSTRAINT_CONFORMANCE: 'NULL_CONSTRAINT_CONFORMANCE',
+      VALUE_CHECKSUM_SAMPLE: 'VALUE_CHECKSUM_SAMPLE',
+      LARGE_RECORD_VALUE_INTEGRITY: 'LARGE_RECORD_VALUE_INTEGRITY',
+    },
+    /**
+     * 校验处置 — 「an operator's audited decision about a failed or inconclusive validation
+     * result」. Never a status of the table, never a conclusion, never a pass.
+     */
+    disposition: {
+      heading: '校验处置',
+      statement:
+        '校验处置是对失败或无法判定的技术结论所做的、有责任人的决定。它可以关闭流程，但不会把技术结论改写为 PASS：上面的技术结论在记录处置前后完全一样。',
+      recorded: '已记录校验处置',
+      none: '未记录校验处置',
+      action: '记录校验处置',
+      openFor: (sourceTable: string) => `记录 ${sourceTable} 的校验处置`,
+      listLabel: '已记录的校验处置',
+      recordedAt: (at: string) => `记录时间 ${at}`,
+      operatorLabel: '责任人',
+      reasonLabel: '理由',
+      acceptedChecks: (checks: string) => `接受风险的校验项：${checks}`,
+      technicalResultUnchanged: (conclusion: string) => `技术结论仍然是 ${conclusion}`,
+      noneRecorded: '本次迁移运行还没有记录任何校验处置。',
+      modal: {
+        title: '记录校验处置',
+        body: (sourceTable: string, conclusion: string) =>
+          `${sourceTable} 的校验执行技术结论是 ${conclusion}。记录校验处置会关闭这张表的流程，但不会改变这个技术结论，也不会把它变成 PASS。`,
+        operatorLabel: '责任人',
+        operatorHelper: '写下对这次决定负责的人，不是角色或团队。',
+        reasonLabel: '理由',
+        reasonHelper: '写下为什么可以接受这个技术结论。理由会随报告一起进入审计记录。',
+        confirm: '记录校验处置',
+        cancel: '关闭',
+        incomplete: '需要填写理由与责任人之后才能记录。',
+        failed: '这次记录没有成功。稍后重试，或确认 DBX 后端是否可达。',
+      },
+    },
+    export: {
+      heading: '导出',
+      copyAction: '复制报告',
+      exportAction: '导出报告',
+      copied: '报告已复制到剪贴板。',
+      copyFailed: '这个浏览器不允许复制到剪贴板，请改用导出。',
+      fileNameOf: (runId: string) => `${runId}-validation-report.txt`,
+      documentTitle: '校验报告',
+    },
+  },
+  /**
    * The migration boundaries of `CONTEXT.md`, as product vocabulary.
    *
    * These words used to live under `densitySample`, which made the design reference page

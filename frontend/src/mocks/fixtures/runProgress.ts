@@ -13,6 +13,8 @@ import type {
   TableMigrationUnit,
   TableWriteContract,
   TableWriteContractColumn,
+  ScopeExclusion,
+  ValidationConclusion,
 } from '@/contract';
 import type { ControllableClock } from '../clock';
 import type { SeedPlan } from '../scenarios';
@@ -74,6 +76,51 @@ export const STUCK_THRESHOLD_MOCK_MS = 10 * OBSERVATION_INTERVAL_MOCK_MS;
  */
 export const SEEDED_RUN_ELAPSED_QUANTA = 40;
 
+/** How many tables of the 迁移任务 the seeded run's 迁移范围 leaves out. */
+export const EXCLUDED_TABLE_COUNT = 3;
+
+/**
+ * The reasons the seeded exclusions carry, one of each.
+ *
+ * 「显式排除是可复核的例外」 and 「只有 SUPPORTED 的预检可以继续」 are different reasons for
+ * the same absence, and a 校验报告 that flattened them would lose the difference between a
+ * decision and a refusal.
+ */
+const EXCLUSION_REASONS: readonly ScopeExclusion['reason'][] = [
+  'OPERATOR_EXCLUDED',
+  'PREFLIGHT_UNSUPPORTED',
+  'PREFLIGHT_INCONCLUSIVE',
+];
+
+/**
+ * How far along the two 校验报告 scenarios are seeded.
+ *
+ * Lead decision D22 again: 「校验 INCONCLUSIVE」 and 「已记录校验处置」 are states about the
+ * *end* of a run, and a review link has to land on them on first paint rather than waiting
+ * out a migration. Both scenarios are therefore seeded past every unit's validation, which
+ * is also why the default scenario keeps its own forty quanta — a report that is honestly
+ * 进行中 is a state of its own, and seeding every run to the end would take it away.
+ */
+export const VALIDATED_RUN_ELAPSED_QUANTA = 130;
+
+/** How far into the run a scenario's seeded 迁移运行 already is. */
+export function seededRunElapsedQuanta(runPlan: SeedPlan['runPlan']): number {
+  return runPlan === 'inconclusive-validation' || runPlan === 'accepted-risk'
+    ? VALIDATED_RUN_ELAPSED_QUANTA
+    : SEEDED_RUN_ELAPSED_QUANTA;
+}
+
+/**
+ * One 表迁移单元's 校验执行 identifier.
+ *
+ * A single retained attempt per unit in this mock: ADR-0004 makes a rerun a **new**
+ * 表迁移单元 rather than a second attempt against the old one, so nothing here needs to
+ * pretend a unit accumulates executions.
+ */
+export function validationExecutionIdOf(unitId: string): string {
+  return `${unitId}-validation-1`;
+}
+
 /** How long a 取消 takes to reach the units it stops, in observation quanta. */
 const CANCELLATION_DRAIN_QUANTA = 1;
 
@@ -94,7 +141,7 @@ function mulberry32(seed: number): () => number {
 }
 
 /** What one 表迁移单元 does over the life of the run, in observation quanta. */
-interface UnitPlan {
+export interface UnitPlan {
   readonly id: string;
   readonly sourceTable: string;
   readonly targetTable: string;
@@ -105,8 +152,23 @@ interface UnitPlan {
   readonly transferStartsAt: number;
   readonly transferEndsAt: number;
   readonly validationEndsAt: number;
-  /** The outcome the unit reaches if nothing interrupts it. */
-  readonly outcome: TableMigrationOutcome;
+  /**
+   * The outcome the unit reaches if nothing interrupts it, or **null when reaching one
+   * needs a person**.
+   *
+   * A table whose 校验执行 did not conclude `PASS` is not finished: 迁移完成 is 「write
+   * complete and all enabled validation checks have passed」 (`CONTEXT.md`), so DBX may not
+   * hand it an outcome of its own. It waits in 校验中 until a 校验处置 closes the workflow,
+   * at which point `withDispositions` gives it `COMPLETED_WITH_ACCEPTED_RISK` — which is
+   * emphatically not `SUCCEEDED`, and which leaves every validation item untouched.
+   */
+  readonly outcome: TableMigrationOutcome | null;
+  /** What this unit's 校验执行 concludes. `NOT_RUN` when the write never completed. */
+  readonly validationConclusion: ValidationConclusion;
+  /** Whether the source table has the monotonic primary key one check needs. */
+  readonly hasMonotonicPrimaryKey: boolean;
+  /** ADR-0003's 大记录表, which is what makes one check applicable at all. */
+  readonly largeRecordTable: boolean;
   /** The quantum at which the unit fails outright, if it does. */
   readonly failsAt: number | null;
   /** The quantum at which the unit simply stops moving, if it does. `卡死`'s subject. */
@@ -121,6 +183,14 @@ interface UnitPlan {
 
 export interface RunPlan {
   readonly units: readonly UnitPlan[];
+  /**
+   * The tables of the 迁移任务 this run did **not** cover.
+   *
+   * They are part of the plan rather than of the units because 「没迁」 is a fact about the
+   * 迁移范围, not a technical result: a 校验报告 that listed them beside the conclusions
+   * would tell a change reviewer that a table was checked when it never was.
+   */
+  readonly exclusions: readonly ScopeExclusion[];
   /** The quantum at which the seeded scenario asks for a 取消, if it does. */
   readonly seededCancellationAt: number | null;
   readonly rootCauseDomain: StuckDiagnosis['rootCauseDomain'];
@@ -171,13 +241,25 @@ export function buildRunPlan({
   tables: knownTables,
 }: RunPlanOptions): RunPlan {
   const random = mulberry32(seed ^ 0x5f5e0ff);
-  const tables =
+  // Three tables beyond the run's own window, so the 迁移范围 this run covers is visibly
+  // narrower than the database it came from and the 校验报告 has real exclusions to name.
+  const generated =
     knownTables === undefined || knownTables.length === 0
-      ? generateSourceTables({ seed, count: unitCount, sourceDatabase }).map((table) => ({
+      ? generateSourceTables({ seed, count: unitCount + EXCLUDED_TABLE_COUNT, sourceDatabase })
+      : [];
+  const tables =
+    generated.length > 0
+      ? generated.slice(0, unitCount).map((table) => ({
           name: table.name,
           exactRowCount: Math.max(1_000, Math.round(table.estimatedRowCount * 0.97) + 137),
         }))
-      : knownTables.slice(0, unitCount);
+      : knownTables?.slice(0, unitCount) ?? [];
+  const exclusions: readonly ScopeExclusion[] = generated
+    .slice(unitCount)
+    .map((table, index) => ({
+      sourceTable: table.name,
+      reason: EXCLUSION_REASONS[index % EXCLUSION_REASONS.length] as ScopeExclusion['reason'],
+    }));
 
   // The stalled unit and the units scheduled alongside it. Fixed indices rather than
   // random ones so 「某表卡死」 always names the same table in the same scenario.
@@ -203,8 +285,27 @@ export function buildRunPlan({
     const stalls = runPlan === 'stuck-table' && index === stalledIndex;
     const blocked = runPlan === 'stuck-table' && blockedIndices.has(index);
 
-    const outcome: TableMigrationOutcome =
-      runPlan === 'accepted-risk' ? 'COMPLETED_WITH_ACCEPTED_RISK' : fails ? 'FAILED' : 'SUCCEEDED';
+    // Which tables the 校验执行 cannot pass. Fixed indices rather than random ones, so a
+    // review link always names the same tables in the same scenario.
+    const validationFalters = index % 4 === 2;
+    const validationConclusion: ValidationConclusion = fails
+      ? // The write never completed, so no attempt was ever made. 「没跑」 is not a failure,
+        // and it is not 「进行中」 either.
+        'NOT_RUN'
+        : runPlan === 'inconclusive-validation' && validationFalters
+          ? 'INCONCLUSIVE'
+          : runPlan === 'accepted-risk' && validationFalters
+            ? 'FAIL'
+            : 'PASS';
+
+    // 迁移完成 is 「write complete and all enabled validation checks have passed」. A table
+    // whose validation concluded anything else is therefore *not* finished, and DBX refuses
+    // to invent an outcome for it: it waits for a 校验处置.
+    const outcome: TableMigrationOutcome | null = fails
+      ? 'FAILED'
+      : validationConclusion === 'PASS'
+        ? 'SUCCEEDED'
+        : null;
 
     return {
       id: `${MONITORED_RUN_ID}-unit-${index + 1}`,
@@ -216,6 +317,11 @@ export function buildRunPlan({
       transferEndsAt,
       validationEndsAt: transferEndsAt + 2,
       outcome,
+      validationConclusion,
+      // Every third table has no monotonic primary key, which is what makes one check
+      // `NOT_APPLICABLE` rather than failed — a distinction ADR-0004 forbids collapsing.
+      hasMonotonicPrimaryKey: index % 3 !== 2,
+      largeRecordTable: index % 5 === 0,
       failsAt: fails ? transferStartsAt + 6 + Math.floor(random() * 8) : null,
       stallsAt: stalls ? transferStartsAt + 4 : null,
       blockedByStall: blocked,
@@ -228,6 +334,7 @@ export function buildRunPlan({
 
   return {
     units,
+    exclusions,
     seededCancellationAt: runPlan === 'operator-cancellation' ? 25 : null,
     // Retained whole; the interface presents both platform domains as 迁移平台.
     rootCauseDomain: 'KAFKA_CONNECT',
@@ -239,7 +346,7 @@ export function runPlanBaselineEntries(plan: RunPlan): readonly SourceBaselineEn
   return plan.units.map((unit) => ({
     sourceTable: unit.sourceTable,
     exactRowCount: unit.baselineRowCount,
-    terminalPrimaryKeyValue: String(unit.baselineRowCount),
+    terminalPrimaryKeyValue: unit.hasMonotonicPrimaryKey ? String(unit.baselineRowCount) : null,
   }));
 }
 
@@ -282,19 +389,32 @@ function unitStateAt(
   const finishedNaturallyBefore = (limit: number): boolean =>
     naturalTerminalAt <= limit && (failsAt === null || failsAt >= limit);
 
+  /**
+   * Where the unit stands once its own work is over.
+   *
+   * A unit whose 校验执行 did not conclude `PASS` has no outcome to be given, so it stays
+   * in 校验中 rather than being rounded to the nearest terminal one. That is the state a
+   * 校验处置 exists to end, and rendering it as anything else would either invent a failure
+   * or invent a pass.
+   */
+  const settled = (): UnitState =>
+    unit.outcome === null
+      ? { phase: 'VALIDATING', outcome: null, frozenAt: unit.transferEndsAt }
+      : { phase: 'TERMINAL', outcome: unit.outcome, frozenAt: unit.transferEndsAt };
+
   if (failsAt !== null && q >= failsAt) {
     return { phase: 'TERMINAL', outcome: 'FAILED', frozenAt: failsAt };
   }
 
   if (cancelledAt !== null && q >= cancelledAt + CANCELLATION_DRAIN_QUANTA) {
     return finishedNaturallyBefore(cancelledAt)
-      ? { phase: 'TERMINAL', outcome: unit.outcome, frozenAt: unit.transferEndsAt }
+      ? settled()
       : { phase: 'TERMINAL', outcome: 'CANCELLED', frozenAt: cancelledAt };
   }
 
   if (stuckAt !== null && unit.blockedByStall && q >= stuckAt) {
     return finishedNaturallyBefore(stuckAt)
-      ? { phase: 'TERMINAL', outcome: unit.outcome, frozenAt: unit.transferEndsAt }
+      ? settled()
       : { phase: 'TERMINAL', outcome: 'BLOCKED_BY_BOX_FAILURE', frozenAt: stuckAt };
   }
 
@@ -316,7 +436,7 @@ function unitStateAt(
   if (q < unit.validationEndsAt) {
     return { phase: 'VALIDATING', outcome: null, frozenAt: unit.transferEndsAt };
   }
-  return { phase: 'TERMINAL', outcome: unit.outcome, frozenAt: unit.transferEndsAt };
+  return settled();
 }
 
 /** The cumulative read fraction this unit had reported by quantum `q`. */
@@ -489,6 +609,55 @@ function contractOf(run: MigrationRun, unit: UnitPlan): TableWriteContract {
   };
 }
 
+/**
+ * The quantum at which this unit's 校验执行 started, or null when there was never one.
+ *
+ * 「A 校验执行 is one retained attempt to execute a 校验计划 **after write completion**」
+ * (`CONTEXT.md`). So a table whose write failed, was cancelled before it finished, was
+ * stopped alongside another, or simply stopped moving has **no** execution at all — which
+ * is a different fact from an execution that ran and did not pass, and the report keeps
+ * the two apart.
+ */
+export function validationStartQuantum(unit: UnitPlan, state: UnitState, q: number): number | null {
+  if (unit.failsAt !== null || unit.stallsAt !== null) {
+    return null;
+  }
+  const stoppedAt =
+    state.outcome === 'CANCELLED' || state.outcome === 'BLOCKED_BY_BOX_FAILURE'
+      ? (state.frozenAt ?? 0)
+      : null;
+  if (stoppedAt !== null && stoppedAt < unit.transferEndsAt) {
+    return null;
+  }
+  return q >= unit.transferEndsAt ? unit.transferEndsAt : null;
+}
+
+/**
+ * The plan as it stands once operators have recorded 校验处置 against it.
+ *
+ * A disposition 「may close the workflow but never changes the technical validation result
+ * to passed」, and this function is that sentence in code: the only thing it can touch is a
+ * unit's **workflow outcome**, and the outcome it grants is `COMPLETED_WITH_ACCEPTED_RISK`
+ * — never `SUCCEEDED`. The 校验执行 and its items are projected elsewhere, from the plan
+ * alone, and no argument to this function could reach them.
+ */
+export function withDispositions(
+  plan: RunPlan,
+  disposedUnitIds: ReadonlySet<string>,
+): RunPlan {
+  if (disposedUnitIds.size === 0) {
+    return plan;
+  }
+  return {
+    ...plan,
+    units: plan.units.map((unit) =>
+      unit.outcome === null && disposedUnitIds.has(unit.id)
+        ? { ...unit, outcome: 'COMPLETED_WITH_ACCEPTED_RISK' as const }
+        : unit,
+    ),
+  };
+}
+
 function unitOf(
   run: MigrationRun,
   unit: UnitPlan,
@@ -548,7 +717,10 @@ function unitOf(
           lastProgressAt: movement === null ? null : at(movement),
         }
       : null,
-    latestValidationExecutionId: null,
+    // Filled here rather than left null (#40): 校验报告 is entered from the unit, and a
+    // unit that has completed its write has a retained attempt to point at.
+    latestValidationExecutionId:
+      validationStartQuantum(unit, state, q) === null ? null : validationExecutionIdOf(unit.id),
   };
 }
 
@@ -591,6 +763,15 @@ function terminalQuantum(
   if (stuckAt !== null) {
     // A 卡死 run has stopped moving but has not ended: DBX preserves target data and
     // diagnostic evidence and waits for a decision, so there is no end time to state.
+    return null;
+  }
+  // A run ends when its units do. One table still waiting for a 校验处置 keeps the run
+  // open, which is exactly what 写冻结 requires: the commitment 「must remain valid …
+  // until every selected table reaches a validation terminal state or execution stops」.
+  const everyUnitTerminal = plan.units.every(
+    (unit) => unitStateAt(unit, q, cancelledAt, stuckAt).phase === 'TERMINAL',
+  );
+  if (!everyUnitTerminal) {
     return null;
   }
   const last = Math.max(...plan.units.map((unit) => unit.validationEndsAt));
@@ -750,10 +931,11 @@ function buildLog(
 }
 
 /** The seeded 迁移运行's start instant: far enough back to be past its own turning point. */
-export function seededRunStartedAt(clock: ControllableClock): IsoTimestamp {
-  return new Date(
-    clock.now() - SEEDED_RUN_ELAPSED_QUANTA * OBSERVATION_INTERVAL_MOCK_MS,
-  ).toISOString();
+export function seededRunStartedAt(
+  clock: ControllableClock,
+  elapsedQuanta: number = SEEDED_RUN_ELAPSED_QUANTA,
+): IsoTimestamp {
+  return new Date(clock.now() - elapsedQuanta * OBSERVATION_INTERVAL_MOCK_MS).toISOString();
 }
 
 export interface SeededMonitoredRun {
@@ -782,7 +964,7 @@ export function seedMonitoredRun(
   const sourceDatabase = 'orders';
   const targetSchema = 'orders_live';
   const plan = buildRunPlan({ seed, runPlan: seedPlan.runPlan, sourceDatabase });
-  const startedAt = seededRunStartedAt(clock);
+  const startedAt = seededRunStartedAt(clock, seededRunElapsedQuanta(seedPlan.runPlan));
   const accountableOperator = 'zhang.wei';
 
   const run: MigrationRun = {
@@ -807,7 +989,9 @@ export function seedMonitoredRun(
     },
     sourceBaseline: { capturedAt: startedAt, entries: runPlanBaselineEntries(plan) },
     selectedTableCount: plan.units.length,
-    excludedTableCount: 2,
+    // The count and the named exclusions come from one place, so the 校验报告 cannot say
+    // 「排除 2 张」 above a list of three.
+    excludedTableCount: plan.exclusions.length,
     cancellationRequestedAt: null,
   };
 

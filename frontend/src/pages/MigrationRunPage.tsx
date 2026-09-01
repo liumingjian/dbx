@@ -218,6 +218,11 @@ export function MigrationRunPage() {
             <CarbonLink as={Link} to={paths.migrationTaskRuns(run.taskId)}>
               {messages.run.backAction}
             </CarbonLink>
+            {' · '}
+            {/* 校验报告 is the stage after this one (#40), and it belongs to this run. */}
+            <CarbonLink as={Link} to={paths.validationReport(run.id)}>
+              {messages.validation.openAction}
+            </CarbonLink>
           </p>
         </section>
 
