@@ -1,5 +1,6 @@
 import type {
   DraftMappingRule,
+  PreflightFindingCode,
   DraftTableConfiguration,
   DraftTableWorkspace,
   MappingException,
@@ -495,14 +496,18 @@ function supplementalSqlOf(
 function objectTreeOf(
   columns: readonly SourceColumn[],
   objects: readonly OutOfContractObject[],
+  pruned: ReadonlySet<string>,
 ): readonly TableObjectNode[] {
   const nodes: TableObjectNode[] = columns.map((column) => ({
     id: `column:${column.name}`,
     kind: 'COLUMN',
     name: column.name,
     detail: column.sourceType,
-    inWritableContract: true,
+    // A pruned column is outside the write contract by the operator's decision, and stays
+    // listed so the decision is reviewable and reversible (ADR-0003).
+    inWritableContract: !pruned.has(column.name),
     hasMappingException: column.exception !== null,
+    pruned: pruned.has(column.name),
   }));
   const primaryKey = columns.filter((column) => column.primaryKey).map((column) => column.name);
   nodes.push({
@@ -512,6 +517,7 @@ function objectTreeOf(
     detail: primaryKey.join(', '),
     inWritableContract: true,
     hasMappingException: false,
+    pruned: false,
   });
   for (const object of objects) {
     nodes.push({
@@ -522,36 +528,216 @@ function objectTreeOf(
       // Outside the live v1 contract: preserved as 补建 SQL, not migrated.
       inWritableContract: false,
       hasMappingException: false,
+      pruned: false,
     });
   }
   return nodes;
 }
 
-function preflightOf(table: SourceTableSummary, evaluatedAt: string): Preflight {
-  const findings: PreflightFinding[] = [];
-  if (table.largeRecordTable && table.largestValueBytes !== null) {
-    findings.push({
-      code: 'LARGE_RECORD_VALUE',
-      sourceColumn: null,
-      blocking: table.largestValueBytes > 20_971_520,
-      detail: `${table.largestValueBytes} bytes`,
-    });
+/**
+ * ADR-0003's two boundaries, as exact byte counts.
+ *
+ * 「A table becomes a large record table when either boundary exceeds 1 MiB」 and the v1
+ * support envelope is 20 MiB per individual value and per row payload. They are written
+ * out here because the interface quotes both figures back to the operator.
+ */
+export const LARGE_RECORD_TABLE_BYTES = 1_048_576;
+export const LARGE_RECORD_ENVELOPE_BYTES = 20_971_520;
+
+/**
+ * The residual maximum once the column carrying the large value has been pruned.
+ *
+ * A fixed, small figure rather than a re-derivation: the point being modelled is ADR-0003's
+ * rule that DBX 「reruns preflight against the approved selected columns」, so what matters
+ * is that the measurement is taken again over what is actually selected.
+ */
+const ORDINARY_VALUE_BYTES = 4_096;
+
+/** The column the table's largest source value lives in. Deterministic, like everything here. */
+function largeValueColumnOf(columns: readonly SourceColumn[]): string | null {
+  const wide = columns.find(
+    (column) =>
+      !column.primaryKey &&
+      (column.automaticTargetType === 'bytea' ||
+        column.automaticTargetType === 'text' ||
+        column.automaticTargetType === 'jsonb'),
+  );
+  if (wide !== undefined) {
+    return wide.name;
   }
+  const last = [...columns].reverse().find((column) => !column.primaryKey);
+  return last?.name ?? null;
+}
+
+/**
+ * Which coordinates a value-domain block is found on.
+ *
+ * A blocking finding has to name a column, or ADR-0003's second exit — 「裁剪超限字段后
+ * 重新预检」 — has nothing to act on. The primary key is never chosen: a table cannot be
+ * migrated without it, so offering to cut it would be offering an exit that does not exist.
+ */
+function valueDomainColumnsOf(
+  seed: number,
+  table: SourceTableSummary,
+  columns: readonly SourceColumn[],
+): readonly string[] {
+  const candidates = columns.filter(
+    (column) => !column.primaryKey && column.name !== ZERO_DATE_COLUMN,
+  );
+  if (candidates.length === 0) {
+    return [];
+  }
+  const chosen: string[] = [];
   for (let index = 0; index < table.preflightBlockingFindingCount; index += 1) {
-    findings.push({
-      code: 'VALUE_DOMAIN_OUT_OF_RANGE',
-      sourceColumn: null,
-      blocking: true,
-      detail: `finding ${index + 1}`,
-    });
+    const start = hashOf(`${seed}:${table.name}:finding:${index}`) % candidates.length;
+    for (let step = 0; step < candidates.length; step += 1) {
+      const name = (candidates[(start + step) % candidates.length] as SourceColumn).name;
+      if (!chosen.includes(name)) {
+        chosen.push(name);
+        break;
+      }
+    }
   }
+  return chosen;
+}
+
+/** Why a scan could not conclude. A technical literal, as ADR-0003 words it. */
+function inconclusiveReasonOf(seed: number, table: SourceTableSummary): string {
+  const reasons = ['QUERY_TIMEOUT', 'PERMISSION_DENIED', 'CONNECTION_LOST'] as const;
+  return reasons[hashOf(`${seed}:${table.name}:reason`) % reasons.length] as string;
+}
+
+function finding(
+  code: PreflightFindingCode,
+  sourceColumn: string | null,
+  blocking: boolean,
+  detail: string,
+): PreflightFinding {
+  return { code, sourceColumn, blocking, detail };
+}
+
+interface PreflightInputs {
+  readonly seed: number;
+  readonly table: SourceTableSummary;
+  /** Every source column, pruned ones included. */
+  readonly columns: readonly SourceColumn[];
+  readonly pruned: ReadonlySet<string>;
+  readonly rules: ReadonlyMap<string, MappingRule>;
+  readonly evaluatedAt: string;
+  /** True while the scan is running again and has not concluded yet. */
+  readonly inFlight: boolean;
+}
+
+/**
+ * The 预检, computed from the source facts, the 映射规则 in force and the selected columns.
+ *
+ * **This is what makes a rerun mean something.** ADR-0011 says 「A mapping change creates a
+ * new draft and reruns every affected preflight」 and ADR-0003 says 「Excluding one field
+ * does not waive the row check: DBX reruns preflight against the approved selected
+ * columns」. Both are only true if the conclusion is a *function* of those inputs rather
+ * than a stored label, so it is derived here every time and never cached against the table.
+ *
+ * Two of the rules are the product's judgement rather than arithmetic:
+ *
+ *  - a `NOT NULL` rule on a zero-date column is a blocking finding, because the source
+ *    holds values the target would reject — that is exactly what the 「保持 NOT NULL；零
+ *    日期值在预检阶段被判为阻断」 wording already promises;
+ *  - an inconclusive scan stays inconclusive no matter what is pruned. ADR-0003:
+ *    「cannot be overridden into a runnable table」.
+ */
+function preflightOf({
+  seed,
+  table,
+  columns,
+  pruned,
+  rules,
+  evaluatedAt,
+  inFlight,
+}: PreflightInputs): Preflight {
+  if (inFlight) {
+    // No conclusion, no findings, no measurement: the scan is running, and reporting the
+    // previous answer beside a 「进行中」 label is how a stale conclusion stays on screen.
+    return {
+      conclusion: null,
+      evaluatedAt: null,
+      findings: [],
+      largeRecordTable: false,
+      largestValueBytes: null,
+      largestRowBytes: null,
+    };
+  }
+
+  const selected = columns.filter((column) => !pruned.has(column.name));
+  const findings: PreflightFinding[] = [];
+
+  const carrier = largeValueColumnOf(columns);
+  const carrierSelected = carrier !== null && !pruned.has(carrier);
+  const largestValueBytes =
+    table.largestValueBytes === null
+      ? null
+      : carrierSelected
+        ? table.largestValueBytes
+        : ORDINARY_VALUE_BYTES;
+  const largestRowBytes =
+    largestValueBytes === null ? null : largestValueBytes + ORDINARY_VALUE_BYTES;
+
+  if (largestValueBytes !== null && largestValueBytes > LARGE_RECORD_ENVELOPE_BYTES) {
+    findings.push(finding('LARGE_RECORD_VALUE', carrier, true, String(largestValueBytes)));
+  } else {
+    if (largestValueBytes !== null && largestValueBytes > LARGE_RECORD_TABLE_BYTES) {
+      findings.push(finding('LARGE_RECORD_VALUE', carrier, false, String(largestValueBytes)));
+    }
+    if (largestRowBytes !== null && largestRowBytes > LARGE_RECORD_ENVELOPE_BYTES) {
+      findings.push(finding('LARGE_RECORD_ROW', null, true, String(largestRowBytes)));
+    } else if (largestRowBytes !== null && largestRowBytes > LARGE_RECORD_TABLE_BYTES) {
+      findings.push(finding('LARGE_RECORD_ROW', null, false, String(largestRowBytes)));
+    }
+  }
+
+  const sourceOverEnvelope =
+    table.largestValueBytes !== null && table.largestValueBytes > LARGE_RECORD_ENVELOPE_BYTES;
+  if (table.preflightConclusion === 'UNSUPPORTED' && !sourceOverEnvelope) {
+    for (const column of valueDomainColumnsOf(seed, table, columns)) {
+      if (!pruned.has(column)) {
+        findings.push(
+          finding('VALUE_DOMAIN_OUT_OF_RANGE', column, true, `${column} @ ${table.sourceDatabase}`),
+        );
+      }
+    }
+  }
+
+  const zeroDate = selected.find((column) => column.name === ZERO_DATE_COLUMN);
+  if (zeroDate !== undefined) {
+    const rule = rules.get(`${ZERO_DATE_COLUMN}:NULLABILITY`);
+    if (rule?.targetValue === 'NOT NULL') {
+      findings.push(
+        finding('ZERO_DATE_VALUE_REJECTED', ZERO_DATE_COLUMN, true, "'0000-00-00 00:00:00'"),
+      );
+    }
+  }
+
+  const inconclusive = table.preflightConclusion === 'INCONCLUSIVE';
+  if (inconclusive) {
+    findings.push(
+      finding('ENVELOPE_SCAN_INCONCLUSIVE', null, true, inconclusiveReasonOf(seed, table)),
+    );
+  }
+
   return {
-    conclusion: table.preflightConclusion,
+    conclusion: inconclusive
+      ? 'INCONCLUSIVE'
+      : findings.some((entry) => entry.blocking)
+        ? 'UNSUPPORTED'
+        : 'SUPPORTED',
     evaluatedAt,
     findings,
-    largeRecordTable: table.largeRecordTable,
-    largestValueBytes: table.largestValueBytes,
-    largestRowBytes: table.largestValueBytes === null ? null : table.largestValueBytes + 4096,
+    // Still a 大记录表 only if a boundary is still exceeded once the selected columns are
+    // the ones actually measured.
+    largeRecordTable:
+      (largestValueBytes !== null && largestValueBytes > LARGE_RECORD_TABLE_BYTES) ||
+      (largestRowBytes !== null && largestRowBytes > LARGE_RECORD_TABLE_BYTES),
+    largestValueBytes,
+    largestRowBytes,
   };
 }
 
@@ -560,58 +746,30 @@ export interface TableWorkspaceOptions {
   readonly table: SourceTableSummary;
   readonly targetSchema: string;
   readonly userRules: readonly DraftMappingRule[];
+  /** The columns the operator has cut out of this table's selected columns. */
+  readonly prunedColumns: readonly string[];
+  /** True while this table's 预检 is being rerun and has not concluded yet. */
+  readonly preflightInFlight: boolean;
   /** The clock's reading, so 「重新生成于」 is a fact that moves rather than a constant. */
   readonly generatedAt: string;
 }
 
-/**
- * The per-table summary: cheap enough to answer for every table in a 1200-table 迁移范围.
- *
- * It deliberately does not generate columns. `requiresZeroDateDecision` and the fixed
- * `deleted_at` coordinate are what let the summary and the full workspace agree about
- * whether a contract exists without building one.
- */
-export function draftTableConfigurationOf({
+/** Everything both the summary and the full workspace derive from, assembled once. */
+function assemble({
   seed,
   table,
   userRules,
-}: Omit<TableWorkspaceOptions, 'generatedAt' | 'targetSchema'>): DraftTableConfiguration {
-  const zeroDate = requiresZeroDateDecision(seed, table);
-  const decided =
-    !zeroDate ||
-    userRules.some(
-      (rule) => rule.sourceColumn === ZERO_DATE_COLUMN && rule.action === 'NULLABILITY',
-    );
-  return {
-    sourceTable: table.name,
-    // Identifiers are preserved character-for-character (ADR-0011): the target table is
-    // the source table's name, never a normalised or prefixed variant.
-    targetTable: table.name,
-    preflightConclusion: table.preflightConclusion,
-    blockingFindingCount: table.preflightBlockingFindingCount,
-    largeRecordTable: table.largeRecordTable,
-    mappingExceptionCount: table.mappingExceptionCount,
-    undecidedMappingExceptionCount: decided ? 0 : 1,
-    // ADR-0011: the contract records an approval revision. Version 1 is the automatic
-    // assembly; every recorded user rule produces a new one.
-    contractVersion: decided ? 1 + userRules.length : null,
-  };
-}
-
-export function draftTableWorkspaceOf({
-  seed,
-  table,
-  targetSchema,
-  userRules,
+  prunedColumns,
+  preflightInFlight,
   generatedAt,
-}: TableWorkspaceOptions): DraftTableWorkspace {
+}: Omit<TableWorkspaceOptions, 'targetSchema'>) {
   const columns = sourceColumnsOf(seed, table);
-  const objects = outOfContractObjectsOf(table, columns);
-
+  const pruned = new Set(prunedColumns);
   const rules = new Map<string, MappingRule>();
   const exceptions: MappingException[] = [];
+
   for (const column of columns) {
-    if (column.exception === null) {
+    if (column.exception === null || pruned.has(column.name)) {
       continue;
     }
     const rule = ruleInForce(column, userRules);
@@ -628,16 +786,91 @@ export function draftTableWorkspaceOf({
     });
   }
 
+  const preflight = preflightOf({
+    seed,
+    table,
+    columns,
+    pruned,
+    rules,
+    evaluatedAt: generatedAt,
+    inFlight: preflightInFlight,
+  });
+
+  return { columns, pruned, rules, exceptions, preflight };
+}
+
+/**
+ * The per-table summary: cheap enough to answer for every table in a 1200-table 迁移范围.
+ *
+ * It derives from exactly the same assembly the full workspace does, rather than from a
+ * cheaper approximation of it. An approximation is how a stage's gate and the workspace
+ * beside it end up disagreeing about whether a table may proceed, and a gate that
+ * disagrees with the screen is worse than no gate.
+ */
+export function draftTableConfigurationOf({
+  seed,
+  table,
+  userRules,
+  prunedColumns,
+  preflightInFlight,
+  generatedAt,
+}: Omit<TableWorkspaceOptions, 'targetSchema'>): DraftTableConfiguration {
+  const { exceptions, preflight } = assemble({
+    seed,
+    table,
+    userRules,
+    prunedColumns,
+    preflightInFlight,
+    generatedAt,
+  });
+  const undecided = exceptions.filter((exception) => exception.rule === null).length;
+  return {
+    sourceTable: table.name,
+    // Identifiers are preserved character-for-character (ADR-0011): the target table is
+    // the source table's name, never a normalised or prefixed variant.
+    targetTable: table.name,
+    preflightConclusion: preflight.conclusion,
+    blockingFindingCount: preflight.findings.filter((entry) => entry.blocking).length,
+    largeRecordTable: preflight.largeRecordTable,
+    prunedColumnCount: prunedColumns.length,
+    mappingExceptionCount: exceptions.length,
+    undecidedMappingExceptionCount: undecided,
+    // ADR-0011: the contract records an approval revision. Version 1 is the automatic
+    // assembly; every recorded user rule and every pruned column produces a new one.
+    contractVersion: undecided > 0 ? null : 1 + userRules.length + prunedColumns.length,
+  };
+}
+
+export function draftTableWorkspaceOf({
+  seed,
+  table,
+  targetSchema,
+  userRules,
+  prunedColumns,
+  preflightInFlight,
+  generatedAt,
+}: TableWorkspaceOptions): DraftTableWorkspace {
+  const { columns, pruned, rules, exceptions, preflight } = assemble({
+    seed,
+    table,
+    userRules,
+    prunedColumns,
+    preflightInFlight,
+    generatedAt,
+  });
+  const selected = columns.filter((column) => !pruned.has(column.name));
+  const objects = outOfContractObjectsOf(table, selected);
+
   const undecided = exceptions.some((exception) => exception.rule === null);
   const contract: TableWriteContract | null = undecided
     ? null
     : {
-        version: 1 + userRules.length,
+        version: 1 + userRules.length + prunedColumns.length,
         generatedAt,
         // Nothing is approved inside a 迁移草稿: approval is 执行确认 (#37).
         approvedAt: null,
-        columns: contractColumnsOf(columns, rules),
-        targetDdl: targetDdlOf(targetSchema, table, columns, rules),
+        columns: contractColumnsOf(selected, rules),
+        targetDdl: targetDdlOf(targetSchema, table, selected, rules),
         supplementalSql: supplementalSqlOf(targetSchema, table, objects),
       };
 
@@ -646,10 +879,13 @@ export function draftTableWorkspaceOf({
     targetTable: table.name,
     sourceDatabase: table.sourceDatabase,
     targetSchema,
-    sourceDdl: sourceDdlOf(table, columns, objects),
-    objectTree: objectTreeOf(columns, objects),
+    // The source table as MySQL reports it: pruning is a DBX decision about what to write,
+    // and never a claim about what the source contains.
+    sourceDdl: sourceDdlOf(table, columns, outOfContractObjectsOf(table, columns)),
+    objectTree: objectTreeOf(columns, objects, pruned),
     mappingExceptions: exceptions,
-    preflight: preflightOf(table, generatedAt),
+    preflight,
+    prunedColumns: columns.filter((column) => pruned.has(column.name)).map((column) => column.name),
     tableWriteContract: contract,
   };
 }

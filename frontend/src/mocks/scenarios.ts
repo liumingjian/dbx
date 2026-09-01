@@ -179,7 +179,10 @@ const definitions: readonly ScenarioDefinition[] = [
     seed: 20260902,
     clockRate: DEFAULT_CLOCK_RATE,
     draftPersistence: 'memory',
-    seedPlan: { ...standardSeedPlan, preflight: 'blocked' },
+    // The 迁移草稿 is seeded already parked at 逐表配置与预检 so the blocked state is
+    // reachable on first paint. Gate 2 is about what a DBA cannot do at that stage, and a
+    // review link has to land on it rather than require the wizard to be walked first.
+    seedPlan: { ...standardSeedPlan, migrationDrafts: 'ready-for-tables', preflight: 'blocked' },
     transport: {},
     covers: ['blocked'],
   }),

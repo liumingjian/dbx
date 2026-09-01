@@ -105,6 +105,70 @@ describe('messages module', () => {
     expect(messages.wizard.tables.ruleOrigins.USER).toBe('USER');
   });
 
+  it('never offers to acknowledge a 预检', () => {
+    // `Preflight`'s `_Avoid_` line names 「warning acknowledgement」 outright, and #30's
+    // story 41 turns it into a requirement: a blocking or inconclusive preflight cannot be
+    // confirmed away. So every sentence the blocked operator is given is an exit, and the
+    // copy says in as many words that there is no fourth one.
+    const preflight = messages.wizard.tables.preflight;
+    expect(preflight.exits.noFourth).toContain('不能被确认掉');
+    expect(preflight.exits.noFourth).toContain('不能被关闭');
+    for (const sentence of [
+      preflight.overEnvelopeTitle('order_item', 'payload', '20,971,521'),
+      preflight.inconclusiveTitle('QUERY_TIMEOUT'),
+      preflight.unsupportedTitle('order_item'),
+    ]) {
+      expect(sentence).toMatch(/不能忽略/);
+      expect(sentence).not.toContain('确认继续');
+    }
+  });
+
+  it('states ADR-0003 three exits, in ADR-0003 own words', () => {
+    // The sentence is fixed by the ADR character for character, so it is copied rather
+    // than paraphrased; the three exits are the ones it names.
+    const overEnvelope = messages.wizard.tables.preflight.overEnvelopeTitle(
+      'order_item',
+      'payload',
+      '20,971,521',
+    );
+    expect(overEnvelope).toContain('超过 DBX v1 的 20 MiB（20,971,520 字节）上限');
+    expect(overEnvelope).toContain(
+      '请选择排除此表、裁剪超限字段后重新预检，或中止并在源端缩减数据',
+    );
+
+    const exits = messages.wizard.tables.preflight.exits;
+    expect(exits.fixSource.title).toBe('修正源');
+    expect(exits.pruneColumn.title).toContain('裁剪超限字段');
+    expect(exits.excludeTable.title).toBe('显式排除该表');
+    // 「裁掉一个字段不豁免整行检查」 — ADR-0003 says so explicitly, and hiding it would
+    // make the second exit look stronger than it is.
+    expect(exits.pruneColumn.body).toContain('不豁免整行检查');
+  });
+
+  it('never calls 无法判定 a warning', () => {
+    // #30: drawing INCONCLUSIVE as a caution teaches a DBA to read it as 「有点风险但可以
+    // 过」. ADR-0003 gives it its own sentence, which is a statement about what DBX could
+    // not establish rather than about how risky the table is.
+    const inconclusive = messages.wizard.tables.preflight.inconclusiveTitle('QUERY_TIMEOUT');
+    expect(inconclusive).toContain('无法确认是否可迁移');
+    expect(inconclusive).not.toContain('警告');
+    expect(inconclusive).not.toContain('风险');
+    expect(messages.conclusion.labels.INCONCLUSIVE).toBe('INCONCLUSIVE');
+  });
+
+  it('says a running 预检 is running rather than leaving the pane silent', () => {
+    // Story 48: a scan that takes time must not be readable as a frozen interface.
+    expect(messages.wizard.tables.preflight.inFlight).toContain('预检进行中');
+    expect(messages.wizard.tables.preflight.inFlight).toContain('界面没有卡死');
+  });
+
+  it('explains Gate 2 with the conclusion as its enum literal', () => {
+    const reason = messages.wizard.gates.preflightNotSupported(2, 'order_item', 'INCONCLUSIVE');
+    expect(reason).toContain('INCONCLUSIVE');
+    expect(reason).toContain('只有 SUPPORTED 的预检可以继续');
+    expect(reason).toContain('显式排除该表');
+  });
+
   it('keeps the two selection scopes verbally distinct', () => {
     // ADR-0015 leaves cross-page selection semantics to DBX. "Select all" that silently
     // means "this page" is the mistake the wording exists to prevent.

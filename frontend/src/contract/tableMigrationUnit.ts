@@ -30,9 +30,39 @@ export type TableMigrationOutcome =
 /** Preflight concludes exactly one of these; only `SUPPORTED` may proceed (`CONTEXT.md`). */
 export type PreflightConclusion = 'SUPPORTED' | 'UNSUPPORTED' | 'INCONCLUSIVE';
 
+/**
+ * The closed set of things an exact preflight can find.
+ *
+ * A closed union rather than a free string, for the same reason `MappingExceptionReason`
+ * is one: the wording belongs in `src/messages` with the rest of the interface's copy, and
+ * a code is what keeps the mock, the contract and that copy from drifting apart. Every
+ * member is a case ADR-0003 or ADR-0011 names explicitly.
+ */
+export type PreflightFindingCode =
+  /** ADR-0003: one source value above the 20 MiB 大记录包络, measured exactly. */
+  | 'LARGE_RECORD_VALUE'
+  /** ADR-0003: the row's total pre-serialization payload. Pruning a field never waives it. */
+  | 'LARGE_RECORD_ROW'
+  /** A source value domain that does not fit the target type the contract would write. */
+  | 'VALUE_DOMAIN_OUT_OF_RANGE'
+  /** ADR-0011: a zero-date value under a `NOT NULL` rule the operator chose. */
+  | 'ZERO_DATE_VALUE_REJECTED'
+  /**
+   * ADR-0003: timeout, cancellation or missing permission — 「any other inability to prove
+   * the envelope is an `INCONCLUSIVE` preflight and cannot be overridden into a runnable
+   * table」.
+   */
+  | 'ENVELOPE_SCAN_INCONCLUSIVE';
+
 export interface PreflightFinding {
   /** Stable code; the interface renders wording for it, never the raw code alone. */
-  readonly code: string;
+  readonly code: PreflightFindingCode;
+  /**
+   * The source coordinate the finding names, or `null` when it is about the whole table.
+   *
+   * This is what decides whether ADR-0003's second exit — 「裁剪超限字段后重新预检」 — is
+   * available at all: a finding that names no column cannot be resolved by cutting one.
+   */
   readonly sourceColumn: string | null;
   /** Whether this finding on its own prevents approval. */
   readonly blocking: boolean;
@@ -45,7 +75,17 @@ export interface PreflightFinding {
  * be acknowledged away.
  */
 export interface Preflight {
-  readonly conclusion: PreflightConclusion;
+  /**
+   * The conclusion reached, or `null` while the exact scan is still running.
+   *
+   * `null` is 「still running」 and never 「fine so far」. ADR-0003 makes preflight an exact
+   * scan that can take real time, so a view has to be able to say 「进行中」 rather than
+   * show a stale judgement or an empty pane that reads as a frozen interface; and every
+   * gate treats an absent conclusion the way it treats an unsatisfied one, because an
+   * unknown safety fact is not a satisfied one.
+   */
+  readonly conclusion: PreflightConclusion | null;
+  /** When the current conclusion was reached. Null while it is being re-established. */
   readonly evaluatedAt: IsoTimestamp | null;
   readonly findings: readonly PreflightFinding[];
   /** ADR-0003: a source value or row larger than 1 MiB makes this a 大记录表. */

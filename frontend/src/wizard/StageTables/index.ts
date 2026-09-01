@@ -10,4 +10,12 @@ export { DdlPane } from './DdlPane';
 export { FindingsPane } from './FindingsPane';
 export { MappingExceptions } from './MappingExceptions';
 export { ObjectTreePane } from './ObjectTreePane';
+export { PreflightPane } from './PreflightPane';
+export {
+  preflightBlocks,
+  preflightIndicatorConclusion,
+  preflightNoticeKind,
+  prunableColumnsOf,
+  type PreflightNoticeKind,
+} from './preflightExits';
 export { tokeniseSql, type SqlToken, type SqlTokenKind } from './sqlHighlight';

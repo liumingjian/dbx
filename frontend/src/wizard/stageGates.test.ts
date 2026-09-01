@@ -87,6 +87,7 @@ function draft(overrides: Partial<MigrationDraft> = {}): MigrationDraft {
     scopeKind: 'SELECTED_TABLES',
     selectedTables: [],
     excludedTables: [],
+    prunedColumns: [],
     mappingRules: [],
     completedStages: [],
     ...overrides,
@@ -107,6 +108,7 @@ function configuration(overrides: Partial<DraftTableConfiguration> = {}): DraftT
     preflightConclusion: 'SUPPORTED',
     blockingFindingCount: 0,
     largeRecordTable: false,
+    prunedColumnCount: 0,
     mappingExceptionCount: 0,
     undecidedMappingExceptionCount: 0,
     contractVersion: 1,
@@ -217,6 +219,89 @@ describe('wizard stage gating', () => {
     expect(evaluateStageGate('tables', unread)).toEqual({
       blocked: true,
       reason: messages.wizard.gates.tableConfigurationsUnread,
+    });
+  });
+
+  it('is Gate 2: an UNSUPPORTED 预检 cannot be approved', () => {
+    // `CONTEXT.md` on 预检: 「only `SUPPORTED` may proceed」. The reason names the table and
+    // the conclusion — as the enum literal, as everywhere else in DBX — and the three
+    // exits, because a constraint that cannot say what would resolve it is a dead end.
+    const blocked = context(
+      { ...configured, selectedTables: ['order_item', 'order_event'] },
+      [source, target],
+      [
+        configuration(),
+        configuration({
+          sourceTable: 'order_event',
+          preflightConclusion: 'UNSUPPORTED',
+          blockingFindingCount: 2,
+        }),
+      ],
+    );
+    expect(evaluateStageGate('tables', blocked)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.preflightNotSupported(1, 'order_event', 'UNSUPPORTED'),
+    });
+    expect(isStageReachable('confirm', blocked)).toBe(false);
+  });
+
+  it('is Gate 2: an INCONCLUSIVE 预检 cannot be approved either', () => {
+    // The row of the mapping table #30 calls the most important one, stated as a gate:
+    // 「无法判定」 is not a softer 「无法迁移」, and it does not pass.
+    const blocked = context(
+      { ...configured, selectedTables: ['order_item'] },
+      [source, target],
+      [configuration({ preflightConclusion: 'INCONCLUSIVE' })],
+    );
+    expect(evaluateStageGate('tables', blocked)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.preflightNotSupported(1, 'order_item', 'INCONCLUSIVE'),
+    });
+  });
+
+  it('will not let a 预检 that has not concluded stand in for one that has', () => {
+    // `null` is 「the scan is still running」. An unknown safety fact is not a satisfied one.
+    const running = context(
+      { ...configured, selectedTables: ['order_item'] },
+      [source, target],
+      [configuration({ preflightConclusion: null, contractVersion: 2 })],
+    );
+    expect(evaluateStageGate('tables', running)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.preflightInFlight(1, 'order_item'),
+    });
+  });
+
+  it('refuses a SUPPORTED conclusion that still carries a blocking 发现', () => {
+    const contradictory = context(
+      { ...configured, selectedTables: ['order_item'] },
+      [source, target],
+      [configuration({ blockingFindingCount: 1 })],
+    );
+    expect(evaluateStageGate('tables', contradictory)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.preflightBlockingFindings(1, 'order_item'),
+    });
+  });
+
+  it('names the 预检 before the 表写入契约 when a table fails both', () => {
+    // Deciding a mapping does not make an UNSUPPORTED table migratable, so reporting the
+    // contract first would send the operator to do work that changes nothing.
+    const both = context(
+      { ...configured, selectedTables: ['order_item'] },
+      [source, target],
+      [
+        configuration({
+          preflightConclusion: 'UNSUPPORTED',
+          blockingFindingCount: 1,
+          contractVersion: null,
+          undecidedMappingExceptionCount: 1,
+        }),
+      ],
+    );
+    expect(evaluateStageGate('tables', both)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.preflightNotSupported(1, 'order_item', 'UNSUPPORTED'),
     });
   });
 

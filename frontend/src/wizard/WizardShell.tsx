@@ -66,7 +66,7 @@ export function WizardShell({ stage, context, onDiscard, children }: WizardShell
       width="full"
       actions={
         <>
-          <Button kind="ghost" onClick={() => navigate(paths.migrationTasks)}>
+          <Button kind="ghost" onClick={() => navigate(paths.migrationTasks())}>
             {messages.wizard.exitAction}
           </Button>
           <Button kind="danger--ghost" onClick={() => setConfirmingDiscard(true)}>

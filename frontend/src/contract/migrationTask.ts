@@ -57,6 +57,19 @@ export interface DraftMappingRule extends MappingRule {
 }
 
 /**
+ * One column the operator cut out of a table's selected columns.
+ *
+ * ADR-0003's second exit from a blocked 预检. Part of the draft's per-table configuration,
+ * so it survives a refresh with the rest of it and so 执行确认 can summarise it: a table
+ * migrating with fewer columns than its source has is a decision, not an implementation
+ * detail.
+ */
+export interface DraftPrunedColumn {
+  readonly sourceTable: string;
+  readonly sourceColumn: string;
+}
+
+/**
  * An unapproved, discardable working set of wizard selections and per-table configuration
  * that has not yet become a migration task (`CONTEXT.md`). It produces no migration run,
  * is never referenced as audit evidence, and may be deleted without trace.
@@ -87,6 +100,8 @@ export interface MigrationDraft {
    * stored here. It is also why these survive a refresh with the rest of the draft.
    */
   readonly mappingRules: readonly DraftMappingRule[];
+  /** The columns cut out of the draft's tables, keyed by table (ADR-0003). */
+  readonly prunedColumns: readonly DraftPrunedColumn[];
   readonly completedStages: readonly MigrationDraftStage[];
 }
 

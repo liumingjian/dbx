@@ -191,6 +191,20 @@ export const messages = {
       tableConfigurationsUnread: '还没有读到逐表配置与预检，暂时无法判断能否进入下一阶段。',
       contractNotGenerated: (count: number, example: string) =>
         `迁移范围内还有 ${count} 张表没有生成表写入契约（例如 ${example}）。请在逐表配置里决定它们的映射例外。`,
+      /**
+       * Gate 2 (#30 §15.4): 预检结论为 UNSUPPORTED 或 INCONCLUSIVE 的表不能被批准.
+       *
+       * `CONTEXT.md` on 预检: 「only `SUPPORTED` may proceed」, and its `_Avoid_` line names
+       * 「warning acknowledgement」 — so the sentence names the three exits rather than
+       * offering a way past. The conclusion is rendered as the enum literal, as everywhere
+       * else in DBX (lead decision D13).
+       */
+      preflightInFlight: (count: number, example: string) =>
+        `迁移范围内还有 ${count} 张表的预检正在进行（例如 ${example}）。预检得出结论前不能进入下一阶段。`,
+      preflightNotSupported: (count: number, example: string, conclusion: string) =>
+        `迁移范围内有 ${count} 张表的预检结论不是 SUPPORTED（例如 ${example}：${conclusion}）。只有 SUPPORTED 的预检可以继续。请修正源后重新预检、裁剪超限字段后重跑预检，或显式排除该表。`,
+      preflightBlockingFindings: (count: number, example: string) =>
+        `迁移范围内有 ${count} 张表带着阻断发现（例如 ${example}）。阻断发现不能被确认掉，只能被解决或让该表退出迁移范围。`,
       stageNotYetDelivered: '本阶段将在后续批次交付，暂时无法继续。',
       stageBelongsToRun: '本阶段属于迁移运行，执行确认之后才会出现。',
     },
@@ -291,6 +305,8 @@ export const messages = {
       outOfContractNotice:
         '标为补建 SQL 的对象不在 v1 可写表边界内：DBX 交付脚本，但不在迁移过程中执行。',
       largeRecordTable: '大记录表',
+      prunedColumn: '已裁剪',
+      prunedColumnCount: (count: number) => `已裁剪 ${count} 个字段`,
       chooseTable: '在对象树里选择一张表，查看它的源 DDL、目标 DDL 与发现。',
       sourceDdlTitle: '源 DDL（MySQL 8.0）',
       targetDdlTitle: '目标 DDL（PostgreSQL 15）',
@@ -307,6 +323,80 @@ export const messages = {
         body: '还有映射例外没有决定。表写入契约是完整的写入意图，缺一项就不生成，DDL 也不会呈现半份。',
       },
       findingsLabel: '发现',
+      /**
+       * 预检 (#36) — the place the product's judgement is most concentrated.
+       *
+       * Two rules govern every string below. `CONTEXT.md` lists 「warning acknowledgement」
+       * under 预检's `_Avoid_`, so nothing here offers to acknowledge, confirm or ignore a
+       * conclusion — the only words on offer are the three exits. And `INCONCLUSIVE` is
+       * never called a warning: ADR-0003 gives it its own sentence, 「无法确认是否可迁移」,
+       * which is a different statement from 「无法迁移」 and from any caution.
+       *
+       * The two quoted sentences are ADR-0003's own, character for character. It fixes the
+       * exact wording of the over-limit and inconclusive reviews, so they are copied rather
+       * than paraphrased.
+       */
+      preflight: {
+        label: '预检',
+        conclusionLabel: '预检结论',
+        evaluatedAt: (moment: string) => `评估于 ${moment}`,
+        /** Story 48: a scan that takes time must not be read as a frozen interface. */
+        inFlight: '预检进行中：DBX 正在对选定列做精确扫描，界面没有卡死。',
+        inFlightNotice: '重跑期间不显示上一次的结论——过期的结论比没有结论更危险。',
+        findingsLabel: '预检发现',
+        noFindings: '本表的预检没有发现。',
+        blocking: '阻断',
+        nonBlocking: '不阻断',
+        /** ADR-0003: 大记录表 is a fact about bytes, and the interface states the bytes. */
+        largeRecordTable: '大记录表',
+        largestValue: (bytes: string) => `最大单值 ${bytes} 字节`,
+        largestRow: (bytes: string) => `最大行 ${bytes} 字节`,
+        envelope: '大记录包络上限为 20 MiB（20,971,520 字节）；超过 1 MiB 即为大记录表。',
+        /**
+         * A finding is rendered as its stable code plus a sentence. `CONTEXT.md` carries no
+         * `_中文_` for these codes, so the literal is shown (lead decision D13) and the
+         * sentence explains it, exactly as 映射例外 already does.
+         */
+        codes: {
+          LARGE_RECORD_VALUE: '单个源值的精确字节数。超过 20 MiB 上限即无法迁移。',
+          LARGE_RECORD_ROW: '整行序列化前载荷的精确字节数。裁掉一个字段不豁免整行检查。',
+          VALUE_DOMAIN_OUT_OF_RANGE: '源值域超出表写入契约将写入的目标类型可以承载的范围。',
+          ZERO_DATE_VALUE_REJECTED: '按当前映射规则保持 NOT NULL，源端的零日期值在目标端会被拒绝。',
+          ENVELOPE_SCAN_INCONCLUSIVE: 'DBX 未能完成 20 MiB 精确预检，因此无法判定这张表。',
+        },
+        /** ADR-0003 fixes this sentence for a value above the 大记录包络. */
+        overEnvelopeTitle: (table: string, coordinate: string, bytes: string) =>
+          `无法迁移：表 ${table} 的 ${coordinate} 最大为 ${bytes} 字节，超过 DBX v1 的 20 MiB（20,971,520 字节）上限。请选择排除此表、裁剪超限字段后重新预检，或中止并在源端缩减数据；不能忽略此限制继续迁移。`,
+        /** ADR-0003 fixes this sentence for a scan that could not conclude. */
+        inconclusiveTitle: (reason: string) =>
+          `无法确认是否可迁移：DBX 未能完成 20 MiB 精确预检（${reason}）。修复权限、超时或连接问题后重试；不能忽略此检查继续迁移。`,
+        /** The same shape, for a block that is not about the envelope. */
+        unsupportedTitle: (table: string) =>
+          `无法迁移：表 ${table} 的预检结论是 UNSUPPORTED。请按下面三条出路之一处理；不能忽略此结论继续迁移。`,
+        exits: {
+          heading: '面对阻断，有三条出路',
+          /** The whole point of the panel: there is no fourth exit, and no acknowledgement. */
+          noFourth: '没有第四条出路：预检结论不能被确认掉，被阻断的状态也不能被关闭。',
+          fixSource: {
+            title: '修正源',
+            body: '在源端缩减数据、修复权限或超时之后重新预检。DBX 不改源端数据，也不会替你放宽结论。',
+            action: '重新预检',
+          },
+          pruneColumn: {
+            title: '裁剪超限字段后重跑预检',
+            body: '把阻断发现指名的字段裁出本表的选定列，DBX 按裁剪后的选定列重跑预检。裁掉一个字段不豁免整行检查。',
+            action: (column: string) => `裁剪字段 ${column}`,
+            restoreAction: (column: string) => `撤销裁剪 ${column}`,
+            prunedHeading: '已裁剪字段',
+            unavailable: '本表的阻断发现没有指名字段，裁剪解决不了它。',
+          },
+          excludeTable: {
+            title: '显式排除该表',
+            body: '显式排除是可复核的例外：这张表不迁移，也不会被计为校验失败。',
+            action: '显式排除该表',
+          },
+        },
+      },
       mappingListLabel: '映射例外',
       /** A mapping rule is counted in 条, as 迁移范围 already counts them. */
       mappingUnitLabel: '条',

@@ -2,6 +2,7 @@ import { http, HttpResponse, delay } from 'msw';
 import type {
   AddCredentialVersionRequest,
   MigrationDraftPatch,
+  PruneColumnRequest,
   RecordMappingRuleRequest,
   RegisterDatabaseConnectionRequest,
 } from '@/contract';
@@ -143,6 +144,33 @@ export const handlers = [
     const workspace = getMockContext().store.recordMappingRule(String(params.id), body);
     return workspace ? HttpResponse.json(workspace) : notFound();
   }),
+
+  // ADR-0003's second exit: cutting an offending column out of the selected columns. It
+  // is a change to what the contract would write, so it reruns the table's 预检 rather
+  // than editing a conclusion — there is no endpoint anywhere that accepts one.
+  http.post(`${API_BASE}/migration-drafts/:id/pruned-columns`, async ({ params, request }) => {
+    const faulted = await applyTransportFault('draftTableConfigurations');
+    if (faulted) return faulted;
+    const body = (await request.json()) as PruneColumnRequest;
+    const workspace = getMockContext().store.pruneColumn(String(params.id), body);
+    return workspace ? HttpResponse.json(workspace) : notFound();
+  }),
+
+  // ADR-0003's first exit: the operator fixed the source outside DBX and asks for a fresh
+  // reading. A rerun is a new evaluation, which is why it is a POST to a collection of
+  // runs and not a PATCH of the conclusion.
+  http.post(
+    `${API_BASE}/migration-drafts/:id/tables/:sourceTable/preflight-runs`,
+    async ({ params }) => {
+      const faulted = await applyTransportFault('draftTableConfigurations');
+      if (faulted) return faulted;
+      const workspace = getMockContext().store.rerunPreflight(
+        String(params.id),
+        String(params.sourceTable),
+      );
+      return workspace ? HttpResponse.json(workspace) : notFound();
+    },
+  ),
 
   http.get(`${API_BASE}/migration-tasks`, async () => {
     const faulted = await applyTransportFault('migrationTasks');

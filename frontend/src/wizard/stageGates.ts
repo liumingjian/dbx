@@ -120,14 +120,63 @@ function scopeGate({ draft }: WizardGateContext): StageGateResult {
  * still undecided. A table in the 迁移范围 with no contract has nothing for 执行确认 to
  * summarise and nothing for a 结构证明 to compare against, so the wizard stops here.
  *
- * **#36 attaches Gate 2 immediately below**: a table whose 预检 concluded `UNSUPPORTED`
- * or `INCONCLUSIVE` may not be approved. Everything it needs is already in
- * `tableConfigurations` — `preflightConclusion` and `blockingFindingCount` per table — so
- * the clause is added here and nowhere else.
+ * **This is also Gate 2** (#36): 「`UNSUPPORTED` 或 `INCONCLUSIVE` 的预检不能被批准」.
+ * `CONTEXT.md` states it as a property of 预检 itself — 「only `SUPPORTED` may proceed」 —
+ * and ADR-0011 repeats it for approval. The three preflight clauses are evaluated *before*
+ * #35's contract clause, in the order a safety sequence reads: an unfinished scan is not a
+ * conclusion, a conclusion that is not `SUPPORTED` cannot be approved whatever its mapping
+ * says, and only then is an undecided mapping worth mentioning. Deciding a mapping does not
+ * make an `UNSUPPORTED` table migratable, so naming the contract first would send the
+ * operator to do work that changes nothing.
+ *
+ * None of these clauses can be satisfied by a click. The exits are stage three's — fix the
+ * source and rerun, cut the offending column and rerun, or take the table out of the
+ * 迁移范围 — and every one of them changes a fact rather than a judgement.
  */
 function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult {
   if (tableConfigurations === null) {
     return blockedBy(messages.wizard.gates.tableConfigurationsUnread);
+  }
+
+  // A conclusion that has not been reached is not a conclusion in DBX's favour.
+  const running = tableConfigurations.filter(
+    (configuration) => configuration.preflightConclusion === null,
+  );
+  const firstRunning = running[0];
+  if (firstRunning !== undefined) {
+    return blockedBy(
+      messages.wizard.gates.preflightInFlight(running.length, firstRunning.sourceTable),
+    );
+  }
+
+  // Gate 2 itself.
+  const notSupported = tableConfigurations.filter(
+    (configuration) => configuration.preflightConclusion !== 'SUPPORTED',
+  );
+  const firstNotSupported = notSupported[0];
+  if (firstNotSupported !== undefined) {
+    return blockedBy(
+      messages.wizard.gates.preflightNotSupported(
+        notSupported.length,
+        firstNotSupported.sourceTable,
+        firstNotSupported.preflightConclusion ?? '',
+      ),
+    );
+  }
+
+  // A `SUPPORTED` conclusion carrying blocking findings would be a contradiction, and the
+  // gate refuses the contradiction rather than picking whichever half it likes better.
+  const withBlockingFindings = tableConfigurations.filter(
+    (configuration) => configuration.blockingFindingCount > 0,
+  );
+  const firstBlocked = withBlockingFindings[0];
+  if (firstBlocked !== undefined) {
+    return blockedBy(
+      messages.wizard.gates.preflightBlockingFindings(
+        withBlockingFindings.length,
+        firstBlocked.sourceTable,
+      ),
+    );
   }
 
   const withoutContract = tableConfigurations.filter(
@@ -139,8 +188,6 @@ function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult
       messages.wizard.gates.contractNotGenerated(withoutContract.length, first.sourceTable),
     );
   }
-
-  // #36: Gate 2 — 预检结论为 UNSUPPORTED 或 INCONCLUSIVE 的表不能被批准 — goes here.
 
   return passes;
 }

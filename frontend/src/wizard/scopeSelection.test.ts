@@ -23,6 +23,7 @@ function draft(overrides: Partial<MigrationDraft> = {}): MigrationDraft {
     selectedTables: [],
     mappingRules: [],
     excludedTables: [],
+    prunedColumns: [],
     completedStages: [],
     ...overrides,
   };
