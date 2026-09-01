@@ -3,6 +3,7 @@ import { AppShell } from '@/shell/AppShell';
 import { DatabaseConnectionsPage } from '@/pages/DatabaseConnectionsPage';
 import { DensitySamplePage } from '@/pages/DensitySamplePage';
 import { MigrationRunPage } from '@/pages/MigrationRunPage';
+import { MigrationTaskRunsPage } from '@/pages/MigrationTaskRunsPage';
 import { MigrationTasksPage } from '@/pages/MigrationTasksPage';
 import { MigrationWizardStagePage } from '@/pages/MigrationWizardStagePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -17,6 +18,7 @@ export const routes = [
       { index: true, element: <Navigate to={paths.migrationTasks} replace /> },
       { path: routePatterns.migrationTasks, element: <MigrationTasksPage /> },
       { path: routePatterns.wizardStage, element: <MigrationWizardStagePage /> },
+      { path: routePatterns.migrationTaskRuns, element: <MigrationTaskRunsPage /> },
       { path: routePatterns.migrationRun, element: <MigrationRunPage /> },
       { path: routePatterns.tableMigrationUnit, element: <TableMigrationUnitPage /> },
       { path: routePatterns.databaseConnections, element: <DatabaseConnectionsPage /> },
