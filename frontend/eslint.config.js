@@ -34,6 +34,35 @@ export default tseslint.config(
               message:
                 'Import the DbxTable boundary instead (ADR-0015): the table substrate must not leak into business code.',
             },
+            // ADR-0016: the mocks sit *behind* the contract, and the product is meant to
+            // survive their removal unchanged. Product code that reaches into `src/mocks`
+            // inverts that — the scenario registry, the fixtures and the store are test
+            // infrastructure, not a module the application may depend on.
+            {
+              group: ['@/mocks', '@/mocks/*'],
+              message:
+                'Product code must not import mock infrastructure (ADR-0016). Read what you need from the URL or the contract; see `src/api/queryKeys.ts`.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // The mock boundary has to be started by something, and the tests have to be able to
+    // reach the fixtures and the scenario registry they assert against. This is the whole
+    // of that exemption; the ban above holds for every other file.
+    files: ['src/main.tsx', 'src/test/**', '**/*.test.*'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@carbon/ibm-products', '@carbon/ibm-products/*', 'react-table'],
+              message:
+                'Import the DbxTable boundary instead (ADR-0015): the table substrate must not leak into business code.',
+            },
           ],
         },
       ],

@@ -102,6 +102,21 @@ export function selectionSnapshot(
  * 1200-row selector the expensive mistake is a stray 「当前页全选」 after twenty minutes of
  * individual ticking, and there is no other way back from it.
  */
+/**
+ * The selection and the way back from it, held as **one** value.
+ *
+ * Two `useState` cells would mean writing the second from inside the first's updater, and
+ * an updater must be pure: React 18 StrictMode (`src/main.tsx`) double-invokes them, and
+ * `v7_startTransition` (`src/routes/router.tsx`) can re-invoke one belonging to a render
+ * that was discarded. Either way the undo stack would gain an entry per invocation while
+ * the scope gained one change, and 撤销 would only half-undo — silently, and only under
+ * the seams that actually double-invoke.
+ */
+interface SelectionState {
+  readonly scope: DbxSelectionScope;
+  readonly history: readonly DbxSelectionScope[];
+}
+
 export function useDbxSelection(
   matchingIds: readonly DbxRowId[],
   /**
@@ -112,16 +127,17 @@ export function useDbxSelection(
    */
   initialScope: DbxSelectionScope = emptySelection,
 ): DbxSelectionModel {
-  const [scope, setScope] = useState<DbxSelectionScope>(initialScope);
-  const [history, setHistory] = useState<readonly DbxSelectionScope[]>([]);
+  const [state, setState] = useState<SelectionState>({ scope: initialScope, history: [] });
+  const { scope, history } = state;
 
   const change = useCallback((next: (current: DbxSelectionScope) => DbxSelectionScope) => {
-    setScope((current) => {
-      const updated = next(current);
-      if (updated !== current) {
-        setHistory((entries) => [...entries, current]);
-      }
-      return updated;
+    // One pure updater over one value: invoking it twice produces the same result as
+    // invoking it once.
+    setState((current) => {
+      const updated = next(current.scope);
+      return updated === current.scope
+        ? current
+        : { scope: updated, history: [...current.history, current.scope] };
     });
   }, []);
 
@@ -141,13 +157,11 @@ export function useDbxSelection(
       clear: () => change(() => emptySelection),
       canUndo: history.length > 0,
       undo: () => {
-        setHistory((entries) => {
-          const previous = entries[entries.length - 1];
-          if (previous === undefined) {
-            return entries;
-          }
-          setScope(previous);
-          return entries.slice(0, -1);
+        setState((current) => {
+          const previous = current.history[current.history.length - 1];
+          return previous === undefined
+            ? current
+            : { scope: previous, history: current.history.slice(0, -1) };
         });
       },
     }),
