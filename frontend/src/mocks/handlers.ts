@@ -6,6 +6,7 @@ import type {
   RecordValidationDispositionRequest,
   RecordMappingRuleRequest,
   RegisterDatabaseConnectionRequest,
+  StartRemigrationRequest,
   WriteFreezeDeclaration,
 } from '@/contract';
 import { API_BASE } from '@/api/http';
@@ -305,6 +306,47 @@ export const handlers = [
         : apiError(409, result.code, 'The validation disposition was not recorded.');
     },
   ),
+
+  /**
+   * What a 重新迁移 of this 迁移运行 could cover (#41).
+   *
+   * A GET, because reading which tables are still undetermined changes nothing. It is
+   * faulted with `validationExecutions` because that is where its facts come from: the
+   * candidates are the 校验报告's own rows, and an offer that could load while the report
+   * behind it could not would be describing something nobody can see.
+   */
+  http.get(`${API_BASE}/migration-runs/:id/remigration`, async ({ params }) => {
+    const faulted = await applyTransportFault('validationExecutions');
+    if (faulted) return faulted;
+    const offer = getMockContext().store.describeRemigration(String(params.id));
+    return offer ? HttpResponse.json(offer) : notFound();
+  }),
+
+  /**
+   * Starting a 重新迁移: a POST that **creates a new 迁移运行**.
+   *
+   * Deliberately not a PATCH, a `POST …/retry`, or anything else addressed at the run
+   * being migrated again — 「a rerun is a new migration run」, and there is no endpoint
+   * anywhere that could reopen a 表迁移单元 or amend an earlier result. The resource this
+   * creates belongs to the 迁移任务; the run in the path is only the evidence it was
+   * chosen from.
+   *
+   * The refusals are the platform's own, restated here for a request that never went past
+   * the interface: a table that has a result may not be migrated again as though it had
+   * failed, and a run whose connections do not answer does not start.
+   */
+  http.post(`${API_BASE}/migration-runs/:id/remigrations`, async ({ params, request }) => {
+    const faulted = await applyTransportFault('validationExecutions');
+    if (faulted) return faulted;
+    const body = (await request.json()) as StartRemigrationRequest;
+    const result = getMockContext().store.startRemigration(String(params.id), body);
+    if (result.ok) {
+      return HttpResponse.json({ task: result.task, run: result.run }, { status: 201 });
+    }
+    return result.code === 'NOT_FOUND'
+      ? notFound()
+      : apiError(409, result.code, 'The re-migration was not started.');
+  }),
 
   // What a 取消 would stop, read before it is requested rather than described in a dialog.
   http.get(`${API_BASE}/migration-runs/:id/cancellation`, async ({ params }) => {

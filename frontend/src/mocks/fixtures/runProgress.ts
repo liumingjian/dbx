@@ -217,6 +217,15 @@ export interface RunPlanOptions {
   readonly seed: number;
   readonly runPlan: SeedPlan['runPlan'];
   readonly sourceDatabase: string;
+  /**
+   * The 迁移运行 these units belong to, which is what names them.
+   *
+   * A 表迁移单元 belongs to exactly one 迁移运行 — 「a rerun creates a new table migration
+   * unit rather than changing the old unit's result」 — so two runs must never produce the
+   * same unit identifier. Deriving the id from the run is what makes a per-table deep link
+   * name one table of one attempt rather than a coordinate that two attempts share.
+   */
+  readonly runId?: string;
   readonly unitCount?: number;
   /**
    * The tables this run actually covers, when they are already known.
@@ -237,6 +246,7 @@ export function buildRunPlan({
   seed,
   runPlan,
   sourceDatabase,
+  runId = MONITORED_RUN_ID,
   unitCount = MONITORED_UNIT_COUNT,
   tables: knownTables,
 }: RunPlanOptions): RunPlan {
@@ -306,7 +316,7 @@ export function buildRunPlan({
         : null;
 
     return {
-      id: `${MONITORED_RUN_ID}-unit-${index + 1}`,
+      id: `${runId}-unit-${index + 1}`,
       sourceTable: table.name,
       targetTable: table.name,
       baselineRowCount,
@@ -988,6 +998,33 @@ export function seedMonitoredRun(
     // 「排除 2 张」 above a list of three.
     excludedTableCount: plan.exclusions.length,
     cancellationRequestedAt: null,
+    origin: { kind: 'INITIAL' },
+    // Established at this run's own start, like every run's. A 重新迁移 of it establishes
+    // its own set at its own instant rather than inheriting these (#41).
+    establishedEvidence: {
+      connectionChecks: [
+        {
+          role: 'SOURCE',
+          connectionId: 'conn-mysql-orders',
+          outcome: 'SUCCEEDED',
+          checkedAt: startedAt,
+        },
+        {
+          role: 'TARGET',
+          connectionId: 'conn-pg-analytics',
+          outcome: 'SUCCEEDED',
+          checkedAt: startedAt,
+        },
+      ],
+      tables: plan.units.map((unit) => ({
+        sourceTable: unit.sourceTable,
+        // Only a `SUPPORTED` 预检 may be approved, so every admitted table has one.
+        preflightConclusion: 'SUPPORTED' as const,
+        preflightConcludedAt: startedAt,
+        contractVersion: 1,
+        contractGeneratedAt: startedAt,
+      })),
+    },
   };
 
   const task: MigrationTask = {

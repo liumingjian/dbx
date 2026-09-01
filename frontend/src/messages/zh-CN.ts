@@ -86,11 +86,27 @@ export const messages = {
       columns: {
         id: '迁移运行',
         status: '状态',
+        origin: '来源',
         startedAt: '开始时间',
         endedAt: '结束时间',
         selectedTableCount: '选定表数',
         excludedTableCount: '排除表数',
+        validationReport: '校验报告',
       },
+      /**
+       * 「迁移任务下并列展示历次迁移运行及其结论」 (#41).
+       *
+       * A run is either the one 执行确认 generated or a 重新迁移 of an earlier one, and the
+       * history says which — otherwise a reader cannot tell how many rounds the migration
+       * took, and a 18-table second run beside a 1164-table first one looks like a mistake
+       * rather than the narrower scope it is.
+       */
+      origins: {
+        initial: '首次迁移',
+        remigrationOf: (runId: string) => `重新迁移（对 ${runId}）`,
+      },
+      rounds: (count: number) =>
+        `该迁移任务共有 ${count} 次迁移运行。每一次都是独立的不可变执行尝试，都可以通过自己的 URL 直接回访。`,
       inFlight: '进行中',
       openAction: '打开迁移运行',
       backAction: '返回迁移任务',
@@ -640,6 +656,59 @@ export const messages = {
     targetLabel: '目标',
     statusLabel: '迁移运行状态',
     backAction: '返回迁移运行列表',
+    /**
+     * Where this 迁移运行 came from, and what it does *not* cover (#41).
+     *
+     * 「其报告写明该范围，不把部分重跑当成整个迁移任务的成功」 is ADR-0006's requirement in
+     * one line, and this is where the interface keeps it: the run's own selected scope is
+     * stated beside the 迁移任务's, so a three-table re-migration can never be read as a
+     * fresh attempt at the whole task.
+     */
+    origin: {
+      heading: '本次迁移运行的来源',
+      initial: '这是执行确认生成的首个迁移运行。',
+      remigrationOf: (runId: string) =>
+        `这是一次重新迁移：它是新的迁移运行，没有修改也没有重试迁移运行 ${runId}。`,
+      previousRunAction: '查看上一次迁移运行',
+      scope: (runCount: number, taskCount: number) =>
+        `本次迁移运行的选定表数是 ${runCount} 张；迁移任务的选定表数是 ${taskCount} 张。本次迁移运行只覆盖它自己的选定范围，不是整个迁移任务的重跑。`,
+      /**
+       * While the 迁移任务 has not been read yet.
+       *
+       * Falling back to the run's own count for both numbers would print 「N 张 / N 张」 —
+       * which is the one sentence this line exists to prevent, and it would be a claim
+       * nobody made rather than a fact nobody has yet.
+       */
+      scopeWithoutTask: (runCount: number) =>
+        `本次迁移运行的选定表数是 ${runCount} 张。迁移任务的选定表数还没有读到，因此这里先不与它比较。`,
+    },
+    /**
+     * 「新运行重新执行连接检查、预检、写冻结确认、源基线与表写入契约」 (#41).
+     *
+     * Five statements about five instants, printed with those instants. An operator who
+     * cannot see when the evidence was established has no way to tell a fresh reading from
+     * an inherited one — and inherited evidence is exactly what ADR-0006 forbids.
+     */
+    establishedEvidence: {
+      heading: '本次迁移运行重新建立的证据',
+      statement:
+        '每次迁移运行都为自己重新建立证据：上一次迁移运行的结论不会被带到这一次。下面每一条都写出它自己的时间。',
+      connectionHeading: '连接检查',
+      connectionOf: (role: string, connectionId: string, outcome: string, at: string) =>
+        `${role} 数据库连接 ${connectionId}：${outcome}，检查时间 ${at}`,
+      roles: { SOURCE: '源', TARGET: '目标' },
+      notChecked: '尚未检查',
+      preflightHeading: '预检与表写入契约',
+      preflightOf: (table: string, conclusion: string, version: number, at: string) =>
+        `${table}：预检 ${conclusion}，表写入契约 v${version}，读取时间 ${at}`,
+      preflightNone: '本次迁移运行没有保留逐表的预检读数。',
+      freezeHeading: '写冻结确认',
+      freezeOf: (operator: string, confirmedAt: string, expiresAt: string) =>
+        `责任人 ${operator}，确认时间 ${confirmedAt}，时限至 ${expiresAt}`,
+      baselineHeading: '源基线',
+      baselineOf: (at: string, count: number) => `捕获于 ${at}，共 ${count} 张表的精确行数`,
+      baselineNone: '本次迁移运行没有保留源基线的逐表条目。',
+    },
     matrix: {
       heading: '进度矩阵',
       totals: (read: string, written: string, baseline: string) =>
@@ -934,7 +1003,12 @@ export const messages = {
      * interface shows the literal rather than inventing a translation — the precedent
      * batch 1 set for preflight conclusions.
      */
-    checkOutcomes: { succeeded: 'SUCCEEDED', failed: 'FAILED', notRun: 'NOT_RUN' },
+    /**
+     * Keyed by the `ConnectionCheckOutcome` literal itself, so every reader — 数据源, and
+     * the evidence a 迁移运行 established for itself (#41) — renders one wording from one
+     * table rather than each keeping a map of its own.
+     */
+    checkOutcomes: { SUCCEEDED: 'SUCCEEDED', FAILED: 'FAILED', NOT_RUN: 'NOT_RUN' },
     recheckAction: '重新校验',
     /** Credential versions are immutable, so maintaining one adds a version. */
     addCredentialVersionAction: '新建凭据版本',
@@ -1248,6 +1322,81 @@ export const messages = {
       pageRange: (current: number, total: number) => `第 ${current} 页，共 ${total} 页`,
     },
     loading: '正在读取。',
+  },
+  /**
+   * 重新迁移 (#41): migrating again the tables an earlier 迁移运行 left undetermined.
+   *
+   * The wording carries one distinction the operator must not lose: **a re-migration is a
+   * new 迁移运行**, not a retry of the old one. `CONTEXT.md` lists 「retry in place」 under
+   * 迁移运行's `_Avoid_`, so nothing here says 重试 about a run, nothing says 「恢复」, and
+   * the copy states in as many words what the new run establishes for itself.
+   *
+   * The second distinction is 预检排除项: they are not offered as candidates and the
+   * section says why, because a table that never migrated has no technical conclusion and
+   * offering it as though it had failed would invent one.
+   */
+  remigration: {
+    heading: '重新迁移',
+    statement:
+      '重新迁移创建新的迁移运行，不修改也不重试原有的迁移运行：历史记录保持不可变。新的迁移运行会重新做连接检查、预检、写冻结确认、源基线与表写入契约，不沿用上一次的证据。',
+    scopeNotice: (runCount: number, taskCount: number) =>
+      `上一次迁移运行的选定表数是 ${runCount} 张，迁移任务的选定表数是 ${taskCount} 张。新的迁移运行只覆盖你在这里选中的表。`,
+    candidatesHeading: '可重新迁移的表',
+    candidatesStatement:
+      '这些表的技术结果是失败或未定：校验执行结论是 FAIL、INCONCLUSIVE 或 NOT_RUN，或者因关联失败而阻塞。校验执行结论是 PASS 的表不在这里——它们已经有了自己的技术结论。',
+    exclusionsNotice:
+      '预检排除项不会出现在这里：它们没有迁移，也没有校验执行，因此没有技术结论，不能当成失败的表重新迁移。',
+    listLabel: '可重新迁移的表',
+    /** A source table is counted in 张 (see #34). */
+    unitLabel: '张',
+    columns: {
+      sourceTable: '源表',
+      targetTable: '目标表',
+      conclusion: '上次校验执行结论',
+      unitOutcome: '上次技术结果',
+      preflight: '本次预检结论',
+      contractVersion: '表写入契约版本',
+    },
+    noOutcome: '技术结果未定',
+    ineligible: {
+      heading: '现在不能重新迁移的表',
+      statement:
+        '这些表刚刚重新读过预检，结论不是 SUPPORTED，或者还没有可批准的表写入契约。只有 SUPPORTED 的预检可以继续。它们仍然列在这里，因为它们正是需要处理的表。',
+      none: '没有这样的表。',
+      of: (table: string, conclusion: string) => `${table}：本次预检结论 ${conclusion}`,
+      noContract: '没有可批准的表写入契约',
+    },
+    empty: {
+      title: '这次迁移运行没有需要重新迁移的表',
+      body: '只有技术结果失败或未定的表才是重新迁移的候选。校验执行还没跑完时，这里也会是空的——未完的校验不是失败。',
+    },
+    loading: '正在读取可重新迁移的表。',
+    error: {
+      title: '可重新迁移的表读取失败',
+      body: '这次读取没有取到。稍后重试，或确认 DBX 后端是否可达。',
+    },
+    action: '发起重新迁移',
+    selectedCount: (count: number) => `已选 ${count} 张表`,
+    selectFirst: '先选中要重新迁移的表。',
+    modal: {
+      title: '发起重新迁移',
+      body: (count: number, sourceDatabase: string) =>
+        `将对 ${sourceDatabase} 里的 ${count} 张表创建一次新的迁移运行。原有的迁移运行不会被修改，也不会被重试；它的技术结论保持原样。`,
+      freezeNotice:
+        '新的迁移运行会捕获新的源基线，因此需要一次新的写冻结确认：写冻结有责任人和时限，不是一个永久勾选。DBX 记录这个承诺，但不由 DBX 强制执行。',
+      operatorLabel: '责任人',
+      operatorHelper: '写冻结的责任人姓名，不是角色。',
+      durationLabel: '写冻结时限（小时）',
+      durationHelper: '从新的迁移运行创建的那一刻算起。',
+      changeReferenceLabel: '变更单号（可选）',
+      changeReferenceHelper: '安排这次写冻结所依据的外部变更记录。',
+      challengeLabel: (sourceDatabase: string) => `键入源 database 名称 ${sourceDatabase} 以确认`,
+      challengeHelper: '重新迁移会对生产库开始一次新的迁移运行，因此启动动作需要明确意图。',
+      incomplete: '责任人、写冻结时限与源 database 名称都填写之后才能发起。',
+      confirm: '发起重新迁移',
+      cancel: '关闭',
+      failed: '这次重新迁移没有发起成功。请稍后重试。',
+    },
   },
   common: {
     retry: '重试',

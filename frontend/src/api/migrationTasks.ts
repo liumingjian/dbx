@@ -36,6 +36,9 @@ export function useMigrationTask(taskId: string) {
   return useQuery({
     queryKey: migrationTaskKeys.one(taskId),
     queryFn: () => getJson<MigrationTask>(`/migration-tasks/${encodeURIComponent(taskId)}`),
+    // A page may ask before it knows which task it is looking at; an empty identifier is
+    // 「not yet」 rather than a request worth making.
+    enabled: taskId !== '',
   });
 }
 

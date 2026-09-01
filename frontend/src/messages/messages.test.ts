@@ -34,9 +34,9 @@ describe('messages module', () => {
 
   it('shows connection check outcomes as the enum literal', () => {
     // As with preflight conclusions, CONTEXT.md carries no `_中文_` for these.
-    expect(messages.connections.checkOutcomes.succeeded).toBe('SUCCEEDED');
-    expect(messages.connections.checkOutcomes.failed).toBe('FAILED');
-    expect(messages.connections.checkOutcomes.notRun).toBe('NOT_RUN');
+    expect(messages.connections.checkOutcomes.SUCCEEDED).toBe('SUCCEEDED');
+    expect(messages.connections.checkOutcomes.FAILED).toBe('FAILED');
+    expect(messages.connections.checkOutcomes.NOT_RUN).toBe('NOT_RUN');
   });
 
   it('says 没有匹配项 rather than 没有数据 when a filter emptied a table', () => {
