@@ -47,7 +47,7 @@ async function openMonitor(page: Page, scenario: string): Promise<void> {
 async function openFailedTableEvidence(page: Page): Promise<void> {
   await openMonitor(page, 'partial-table-failure');
   await page.getByRole('tab', { name: '只看失败' }).click();
-  await matrix(page).getByText('FAILED').first().click();
+  await matrix(page).getByText('迁移失败').first().click();
   await expect(drawer(page)).toBeVisible();
 }
 
@@ -121,7 +121,7 @@ test.describe('证据让 DBA 判断是源问题还是目标问题', () => {
     // 诊断 and 错误事件 are separate sections, because they are separate things: an
     // observed fact, and a versioned interpretation of it (ADR-0005).
     const diagnosis = panel.getByRole('region', { name: '诊断', exact: true });
-    await expect(diagnosis).toContainText('根因域 SOURCE_DATABASE');
+    await expect(diagnosis).toContainText('根因域 源数据库');
     await expect(diagnosis).toContainText('源数据库');
     await expect(diagnosis).toContainText('影响');
     await expect(diagnosis).toContainText('建议动作');
@@ -142,7 +142,7 @@ test.describe('证据让 DBA 判断是源问题还是目标问题', () => {
     await expect(panel).toBeVisible({ timeout: FIRST_PAINT_MS });
 
     // The same screen, the other side of the migration. This contrast is the whole point.
-    await expect(panel).toContainText('根因域 TARGET_DATABASE');
+    await expect(panel).toContainText('根因域 目标数据库');
     await expect(panel).toContainText('目标数据库');
   });
 

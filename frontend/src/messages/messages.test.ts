@@ -14,11 +14,40 @@ describe('messages module', () => {
     expect(messages.conclusion.labels.STUCK).toBe('卡死');
   });
 
-  it('shows preflight conclusions as the enum literal, not an invented translation', () => {
-    // CONTEXT.md carries no `_中文_` for these, and #30 writes them in English too.
-    expect(messages.conclusion.labels.SUPPORTED).toBe('SUPPORTED');
-    expect(messages.conclusion.labels.UNSUPPORTED).toBe('UNSUPPORTED');
-    expect(messages.conclusion.labels.INCONCLUSIVE).toBe('INCONCLUSIVE');
+  it('words every conclusion it renders, and never as an enum literal', () => {
+    // #42: every user-visible string traces to a `_中文_` line in CONTEXT.md. The three
+    // preflight conclusions are the ones the whole safety sequence turns on.
+    expect(messages.conclusion.labels.SUPPORTED).toBe('可迁移');
+    expect(messages.conclusion.labels.UNSUPPORTED).toBe('不可迁移');
+    expect(messages.conclusion.labels.INCONCLUSIVE).toBe('无法判定');
+    for (const label of Object.values(messages.conclusion.labels)) {
+      expect(label).not.toMatch(/^[A-Z_]+$/);
+    }
+  });
+
+  it('keeps 不适用 and 未执行 apart, and neither of them a failure', () => {
+    // A DBA must not chase a check that never needed to run, and must not read either as
+    // a failure. `CONTEXT.md` gives them separate entries for that reason.
+    expect(messages.conclusion.labels.NOT_APPLICABLE).toBe('不适用');
+    expect(messages.conclusion.labels.NOT_RUN).toBe('未执行');
+    expect(messages.conclusion.labels.NOT_APPLICABLE).not.toBe(messages.conclusion.labels.NOT_RUN);
+    for (const label of [
+      messages.conclusion.labels.NOT_APPLICABLE,
+      messages.conclusion.labels.NOT_RUN,
+    ]) {
+      expect(label).not.toContain('失败');
+      expect(label).not.toContain('错误');
+    }
+  });
+
+  it('never lets 无法判定 read as a softened warning', () => {
+    // The whole spec turns on 「无法判定」 not being heard as 「有点风险但可以过」, so the
+    // word shares nothing with 未通过 and carries no hedge.
+    const inconclusive = messages.conclusion.labels.INCONCLUSIVE;
+    expect(inconclusive).toBe('无法判定');
+    expect(inconclusive).not.toContain('风险');
+    expect(inconclusive).not.toContain('警告');
+    expect(inconclusive).not.toBe(messages.conclusion.labels.FAIL);
   });
 
   it('keeps 数据源 the navigation area and 数据库连接 the endpoint', () => {
@@ -32,11 +61,12 @@ describe('messages module', () => {
     expect(messages.connections.credentialVersionLabel).toBe('凭据版本');
   });
 
-  it('shows connection check outcomes as the enum literal', () => {
-    // As with preflight conclusions, CONTEXT.md carries no `_中文_` for these.
-    expect(messages.connections.checkOutcomes.SUCCEEDED).toBe('SUCCEEDED');
-    expect(messages.connections.checkOutcomes.FAILED).toBe('FAILED');
-    expect(messages.connections.checkOutcomes.NOT_RUN).toBe('NOT_RUN');
+  it('words a 连接校验 outcome, and never calls an unchecked connection broken', () => {
+    expect(messages.connections.checkOutcomes.SUCCEEDED).toBe('校验通过');
+    expect(messages.connections.checkOutcomes.FAILED).toBe('校验失败');
+    // An absence of evidence, never evidence of a problem (`CONTEXT.md`).
+    expect(messages.connections.checkOutcomes.NOT_RUN).toBe('尚未校验');
+    expect(messages.connections.checkOutcomes.NOT_RUN).not.toContain('失败');
   });
 
   it('says 没有匹配项 rather than 没有数据 when a filter emptied a table', () => {
@@ -98,11 +128,10 @@ describe('messages module', () => {
     expect(messages.wizard.tables.outOfContractNotice).toContain('不在迁移过程中执行');
   });
 
-  it('shows a 映射规则 origin as the enum literal', () => {
-    // As with preflight conclusions: CONTEXT.md carries no `_中文_` for these, so the
-    // interface renders the literal rather than inventing a translation.
-    expect(messages.wizard.tables.ruleOrigins.PLATFORM).toBe('PLATFORM');
-    expect(messages.wizard.tables.ruleOrigins.USER).toBe('USER');
+  it('says who decided a 映射规则, in words', () => {
+    // 「whether DBX or the user produced it; user rules override automatic rules」.
+    expect(messages.wizard.tables.ruleOrigins.PLATFORM).toBe('DBX 自动生成');
+    expect(messages.wizard.tables.ruleOrigins.USER).toBe('用户指定');
   });
 
   it('never offers to acknowledge a 预检', () => {
@@ -115,7 +144,7 @@ describe('messages module', () => {
     expect(preflight.exits.noFourth).toContain('不能被关闭');
     for (const sentence of [
       preflight.overEnvelopeTitle('order_item', 'payload', '20,971,521'),
-      preflight.inconclusiveTitle('QUERY_TIMEOUT'),
+      preflight.inconclusiveTitle(preflight.inconclusiveReasons.QUERY_TIMEOUT),
       preflight.unsupportedTitle('order_item'),
     ]) {
       expect(sentence).toMatch(/不能忽略/);
@@ -149,11 +178,14 @@ describe('messages module', () => {
     // #30: drawing INCONCLUSIVE as a caution teaches a DBA to read it as 「有点风险但可以
     // 过」. ADR-0003 gives it its own sentence, which is a statement about what DBX could
     // not establish rather than about how risky the table is.
-    const inconclusive = messages.wizard.tables.preflight.inconclusiveTitle('QUERY_TIMEOUT');
+    const preflightCopy = messages.wizard.tables.preflight;
+    const inconclusive = preflightCopy.inconclusiveTitle(
+      preflightCopy.inconclusiveReasons.QUERY_TIMEOUT,
+    );
     expect(inconclusive).toContain('无法确认是否可迁移');
     expect(inconclusive).not.toContain('警告');
     expect(inconclusive).not.toContain('风险');
-    expect(messages.conclusion.labels.INCONCLUSIVE).toBe('INCONCLUSIVE');
+    expect(messages.conclusion.labels.INCONCLUSIVE).toBe('无法判定');
   });
 
   it('says a running 预检 is running rather than leaving the pane silent', () => {
@@ -162,10 +194,14 @@ describe('messages module', () => {
     expect(messages.wizard.tables.preflight.inFlight).toContain('界面没有卡死');
   });
 
-  it('explains Gate 2 with the conclusion as its enum literal', () => {
-    const reason = messages.wizard.gates.preflightNotSupported(2, 'order_item', 'INCONCLUSIVE');
-    expect(reason).toContain('INCONCLUSIVE');
-    expect(reason).toContain('只有 SUPPORTED 的预检可以继续');
+  it('explains Gate 2 in the conclusions own wording', () => {
+    const reason = messages.wizard.gates.preflightNotSupported(
+      2,
+      'order_item',
+      messages.conclusion.labels.INCONCLUSIVE,
+    );
+    expect(reason).toContain('无法判定');
+    expect(reason).toContain('只有结论为可迁移的预检可以继续');
     expect(reason).toContain('显式排除该表');
   });
 
@@ -246,9 +282,49 @@ describe('messages module', () => {
       expect(label.toLowerCase()).not.toContain('kafka');
       expect(label).not.toContain('箱');
     }
-    // Everything else keeps the enum literal, for want of a `_中文_` line.
-    expect(messages.run.phases.TRANSFERRING).toBe('TRANSFERRING');
-    expect(messages.run.outcomes.SUCCEEDED).toBe('SUCCEEDED');
+    // #42: everything else is worded too, so no phase, outcome or domain is a literal.
+    expect(messages.run.phases.TRANSFERRING).toBe('传输中');
+    // `SUCCEEDED` is exactly the boundary `Migration complete` defines, so it carries that
+    // term's wording rather than a second word for the same fact.
+    expect(messages.run.outcomes.SUCCEEDED).toBe('迁移完成');
+    expect(messages.run.outcomes.SUCCEEDED).toBe(messages.phase.migrationComplete);
+    for (const label of [
+      ...Object.values(messages.run.phases),
+      ...Object.values(messages.run.outcomes),
+      ...Object.values(messages.run.rootCauseDomains),
+      ...Object.values(messages.tasks.runStatuses),
+    ]) {
+      expect(label).not.toMatch(/^[A-Z_]+$/);
+    }
+  });
+
+  it('never spends 取消 on a unit that merely stopped', () => {
+    // `CONTEXT.md` gives 取消 to a person's terminal stop of a 迁移运行. A unit that
+    // stopped without a result of its own is a different fact, and shares no word with it.
+    expect(messages.run.outcomes.CANCELLED).toBe('因运行取消而停止');
+    expect(messages.tasks.runStatuses.CANCELLED).toBe('已取消');
+    expect(messages.run.outcomes.CANCELLED).not.toBe(messages.tasks.runStatuses.CANCELLED);
+    // 已排除未迁移 is the other undetermined outcome, and neither reads as a failure.
+    expect(messages.run.outcomes.SKIPPED).toBe('已排除未迁移');
+    for (const outcome of [messages.run.outcomes.CANCELLED, messages.run.outcomes.SKIPPED]) {
+      expect(outcome).not.toContain('失败');
+    }
+  });
+
+  it('keeps the DBX 根因域 apart from the 迁移平台 one', () => {
+    // `PLATFORM` is DBX's own logic; `Kafka Connect` and `Kafka` present as 迁移平台. One
+    // word for both would tell the operator the opposite of what the evidence says.
+    expect(messages.run.rootCauseDomains.PLATFORM).toBe('DBX 自身');
+    expect(messages.run.rootCauseDomains.PLATFORM).not.toBe(messages.run.rootCauseDomains.KAFKA);
+  });
+
+  it('does not word a run status that ends in completion as a bare 完成', () => {
+    // Three of the eight end in completion, and a reader scanning a list must be able to
+    // tell them apart at a glance.
+    expect(messages.tasks.runStatuses.COMPLETED).toBe('全部完成');
+    expect(messages.tasks.runStatuses.COMPLETED_WITH_FAILURES).toBe('完成，有失败');
+    expect(messages.tasks.runStatuses.COMPLETED_WITH_ACCEPTED_RISK).toBe('完成，已接受风险');
+    expect(messages.tasks.runStatuses.ATTENTION_REQUIRED).toBe('需要人工处理');
   });
 
   it('presents both execution-platform 根因域 values as the single 迁移平台 domain', () => {
@@ -300,12 +376,15 @@ describe('messages module', () => {
     // hangs from, so it is asserted as copy and not only as behaviour.
     const disposition = messages.validation.disposition;
     expect(disposition.heading).toBe('校验处置');
-    expect(disposition.statement).toContain('不会把技术结论改写为 PASS');
+    expect(disposition.statement).toContain('不会把技术结论改写为通过');
     expect(disposition.statement).toContain('责任人');
     expect(disposition.statement).toContain('关闭流程');
-    expect(disposition.modal.body('order_item', 'FAIL')).toContain('不会改变这个技术结论');
-    expect(disposition.modal.body('order_item', 'FAIL')).not.toContain('通过');
-    expect(disposition.technicalResultUnchanged('FAIL')).toBe('技术结论仍然是 FAIL');
+    const failLabel = messages.conclusion.labels.FAIL;
+    expect(disposition.modal.body('order_item', failLabel)).toContain('不会改变这个技术结论');
+    // The denial has to survive 通过 becoming the word for `PASS`: the sentence says the
+    // disposition does not turn the result into one, and never says the table passed.
+    expect(disposition.modal.body('order_item', failLabel)).toContain('不会把它变成通过');
+    expect(disposition.technicalResultUnchanged(failLabel)).toBe('技术结论仍然是未通过');
     // The decision asks for the two things that make it audited.
     expect(disposition.modal.operatorLabel).toBe('责任人');
     expect(disposition.modal.reasonLabel).toBe('理由');
@@ -319,19 +398,22 @@ describe('messages module', () => {
     // 「显式排除是可复核的例外」, and 「只有 SUPPORTED 的预检可以继续」 — two different reasons.
     expect(exclusions.reasonDetails.OPERATOR_EXCLUDED).toContain('显式排除');
     expect(exclusions.reasonDetails.PREFLIGHT_UNSUPPORTED).toContain(
-      '只有 SUPPORTED 的预检可以继续',
+      '只有结论为可迁移的预检可以继续',
     );
+    // A table that was never migrated has no technical conclusion, so no reason may read
+    // as a failure.
+    for (const reason of Object.values(exclusions.reasons)) {
+      expect(reason).not.toContain('失败');
+    }
     expect(exclusions.reasonDetails.PREFLIGHT_INCONCLUSIVE).toContain('不能被确认掉');
   });
 
-  it('says NOT_APPLICABLE and NOT_RUN are not failures to chase', () => {
+  it('says 不适用 and 未执行 are not failures to chase', () => {
     const note = messages.validation.summary.itemsNote;
-    expect(note).toContain('NOT_APPLICABLE');
-    expect(note).toContain('NOT_RUN');
+    expect(note).toContain(messages.conclusion.labels.NOT_APPLICABLE);
+    expect(note).toContain(messages.conclusion.labels.NOT_RUN);
     expect(note).toContain('都不是失败');
-    // As everywhere else, the states themselves are the enum literal.
-    expect(messages.conclusion.labels.NOT_APPLICABLE).toBe('NOT_APPLICABLE');
-    expect(messages.conclusion.labels.NOT_RUN).toBe('NOT_RUN');
+    expect(note).not.toMatch(/NOT_APPLICABLE|NOT_RUN/);
   });
 
   it('refuses to present a half-finished 校验 as a conclusion', () => {
@@ -340,11 +422,46 @@ describe('messages module', () => {
     expect(inFlight.body(7, 12)).toContain('不给出总体结论');
   });
 
-  it('shows the 校验项 as the enum literal', () => {
-    // CONTEXT.md carries no `_中文_` for the checks of a 校验计划, so the interface renders
-    // the literal rather than inventing a translation.
-    expect(messages.validation.checks.ROW_COUNT).toBe('ROW_COUNT');
-    expect(messages.validation.checks.VALUE_CHECKSUM_SAMPLE).toBe('VALUE_CHECKSUM_SAMPLE');
+  it('names each 校验项 by what it compares', () => {
+    expect(messages.validation.checks.ROW_COUNT).toBe('行数比对');
+    // A sample never claims full value equality, and the name says sample.
+    expect(messages.validation.checks.VALUE_CHECKSUM_SAMPLE).toBe('抽样值比对');
+    for (const label of Object.values(messages.validation.checks)) {
+      expect(label).not.toMatch(/^[A-Z_]+$/);
+    }
+  });
+
+  it('never leaves a rendered value set as its persisted literal', () => {
+    // #42's own claim, asserted over every value vocabulary the interface renders. Each of
+    // these sets has its wording in `CONTEXT.md`; a literal here means one was missed.
+    const sets = [
+      messages.conclusion.labels,
+      messages.tasks.runStatuses,
+      messages.run.phases,
+      messages.run.outcomes,
+      messages.run.rootCauseDomains,
+      messages.run.evidence.diagnosis.sourceKinds,
+      messages.connections.checkOutcomes,
+      messages.connections.register.tlsModes,
+      messages.wizard.tables.ruleOrigins,
+      messages.wizard.tables.preflight.codeLabels,
+      messages.wizard.tables.preflight.inconclusiveReasons,
+      messages.validation.checks,
+      messages.validation.exclusions.reasons,
+    ];
+    for (const set of sets) {
+      for (const label of Object.values(set)) {
+        expect(label).not.toMatch(/^[A-Z][A-Z_]*$/);
+      }
+    }
+  });
+
+  it('says how much a 诊断 is worth trusting, in words', () => {
+    const kinds = messages.run.evidence.diagnosis.sourceKinds;
+    expect(kinds.STRUCTURED).toBe('DBX 直接判定');
+    expect(kinds.EXTERNAL_TRANSLATION).toBe('外部信号翻译');
+    // 「An unknown or conflicting diagnosis must not invent a cause」.
+    expect(kinds.SYSTEM_FALLBACK).toBe('兜底判定');
   });
 
   it('names the bound and the true total when a list is bounded', () => {

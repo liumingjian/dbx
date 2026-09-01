@@ -13,9 +13,9 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  *
  * The other subjects here are the three separations the report exists to keep:
  *
- *  - `PASS` / `FAIL` / `INCONCLUSIVE` as three conclusions, not two and a caveat;
+ *  - 通过 / 未通过 / 无法判定 as three conclusions, not two and a caveat;
  *  - technical results against 预检排除项 — 「没迁」 and 「迁了但没过」;
- *  - `NOT_APPLICABLE` against `NOT_RUN` against a real failure.
+ *  - 不适用 against 未执行 against a real failure.
  *
  * Everything asserted is domain language: the glossary's own words and the enum literals.
  * Never a Carbon class, never a DOM shape.
@@ -57,13 +57,13 @@ test.describe('Gate 8：技术结论与校验处置在视觉与语义上都可�
   test('a recorded 校验处置 leaves the technical conclusion exactly where it was', async ({
     page,
   }) => {
-    // 「校验 INCONCLUSIVE」, straight from the URL: nothing has to be performed first.
+    // 「校验无法判定」, straight from the URL: nothing has to be performed first.
     await openReport(page, 'inconclusive-validation');
     await page.getByRole('tab', { name: '只看未通过' }).click();
 
     const table = reportTable(page);
-    await expect(table).toContainText('INCONCLUSIVE');
-    const conclusionsBefore = await table.getByText('INCONCLUSIVE').count();
+    await expect(table).toContainText('无法判定');
+    const conclusionsBefore = await table.getByText('无法判定', { exact: true }).count();
     expect(conclusionsBefore).toBeGreaterThan(0);
 
     // The decision is an action of its own, named as itself and offered per table.
@@ -89,17 +89,18 @@ test.describe('Gate 8：技术结论与校验处置在视觉与语义上都可�
     await expect(table).toContainText('li.na');
     const disposition = panel(page, '校验处置');
     await expect(disposition).toContainText('责任人 li.na');
-    await expect(disposition).toContainText('技术结论仍然是 INCONCLUSIVE');
+    await expect(disposition).toContainText('技术结论仍然是无法判定');
     await expect(disposition).toContainText('逐行复核');
 
     // And the technical conclusion is still exactly what the 校验执行 concluded.
-    await expect(table).toContainText('INCONCLUSIVE');
-    expect(await table.getByText('INCONCLUSIVE').count()).toBe(conclusionsBefore);
-    // The one thing the whole audit chain rests on: no laundering into a pass.
-    await expect(unresolvedRow(page)).not.toContainText('PASS');
+    await expect(table).toContainText('无法判定');
+    expect(await table.getByText('无法判定', { exact: true }).count()).toBe(conclusionsBefore);
+    // The one thing the whole audit chain rests on: no laundering into a pass. `exact`,
+    // because 未通过 contains 通过 — the row may hold neither, and must hold no 通过.
+    await expect(unresolvedRow(page).getByText('通过', { exact: true })).toHaveCount(0);
   });
 
-  test('a disposed FAIL is still a FAIL, and the run does not read as succeeded', async ({
+  test('a disposed 未通过 is still 未通过, and the run does not read as succeeded', async ({
     page,
   }) => {
     await openReport(page, 'accepted-risk');
@@ -107,21 +108,21 @@ test.describe('Gate 8：技术结论与校验处置在视觉与语义上都可�
 
     const table = reportTable(page);
     // The three columns are three separate facts: a technical conclusion, a decision, and
-    // a workflow outcome. `COMPLETED_WITH_ACCEPTED_RISK` beside a `FAIL` is the report
-    // working, not a contradiction.
-    await expect(table).toContainText('FAIL');
+    // a workflow outcome. 完成，已接受风险 beside a 未通过 is the report working, not a
+    // contradiction — and neither of them is 迁移完成.
+    await expect(table).toContainText('未通过');
     await expect(table).toContainText('已记录校验处置');
-    await expect(table).toContainText('COMPLETED_WITH_ACCEPTED_RISK');
-    await expect(table).not.toContainText('SUCCEEDED');
+    await expect(table).toContainText('完成，已接受风险');
+    await expect(table).not.toContainText('迁移完成');
 
-    await expect(panel(page, '校验处置')).toContainText('技术结论仍然是 FAIL');
-    // The count, too: a disposed FAIL is counted as a FAIL and never quietly moved.
-    await expect(panel(page, '技术结论分布')).toContainText('FAIL');
+    await expect(panel(page, '校验处置')).toContainText('技术结论仍然是未通过');
+    // The count, too: a disposed 未通过 is counted as one and never quietly moved.
+    await expect(panel(page, '技术结论分布')).toContainText('未通过');
   });
 
   test('states the rule in words, beside the decision it governs', async ({ page }) => {
     await openReport(page, 'accepted-risk');
-    await expect(page.getByText('不会把技术结论改写为 PASS').first()).toBeVisible();
+    await expect(page.getByText('不会把技术结论改写为通过').first()).toBeVisible();
   });
 });
 
@@ -140,21 +141,22 @@ test.describe('三个结论、预检排除项、以及三种「没跑」', () =>
     const exclusions = panel(page, '预检排除项');
     await expect(exclusions).toContainText('它们没有迁移，也没有校验执行');
     // Each exclusion says which kind of absence it is.
-    await expect(exclusions).toContainText('OPERATOR_EXCLUDED');
-    await expect(exclusions).toContainText('PREFLIGHT_UNSUPPORTED');
-    await expect(exclusions).toContainText('PREFLIGHT_INCONCLUSIVE');
-    await expect(exclusions).toContainText('只有 SUPPORTED 的预检可以继续');
+    await expect(exclusions).toContainText('操作员显式排除');
+    await expect(exclusions).toContainText('预检判定不可迁移');
+    await expect(exclusions).toContainText('预检无法判定');
+    await expect(exclusions).toContainText('只有结论为可迁移的预检可以继续');
   });
 
-  test('separates NOT_APPLICABLE, NOT_RUN and a real failure', async ({ page }) => {
+  test('separates 不适用, 未执行 and a real failure', async ({ page }) => {
     await openReport(page, 'accepted-risk');
     const items = panel(page, '技术结论分布');
-    await expect(items).toContainText('NOT_APPLICABLE');
-    await expect(items).toContainText('NOT_RUN');
+    await expect(items).toContainText('不适用');
+    await expect(items).toContainText('未执行');
     await expect(items).toContainText('都不是失败');
-    // All three judgements are stated, including one nobody reached.
-    for (const conclusion of ['PASS', 'FAIL', 'INCONCLUSIVE']) {
-      await expect(items).toContainText(conclusion);
+    // All three judgements are stated, including one nobody reached. Anchored, because
+    // 未通过 contains 通过 and an unanchored match would let one stand for the other.
+    for (const conclusion of ['通过', '未通过', '无法判定']) {
+      await expect(items.getByText(new RegExp(`^${conclusion} \\d+$`)).first()).toBeVisible();
     }
   });
 
@@ -162,7 +164,7 @@ test.describe('三个结论、预检排除项、以及三种「没跑」', () =>
     await openReport(page, 'partial-table-failure');
     const table = reportTable(page);
     await expect(table).toContainText('没有校验执行');
-    await expect(table).toContainText('FAILED');
+    await expect(table).toContainText('迁移失败');
   });
 });
 
@@ -204,9 +206,9 @@ test.describe('报告是可以带走的东西', () => {
     expect(file.suggestedFilename()).toContain(runId);
     expect(text).toContain('校验报告');
     expect(text).toContain('本次迁移运行的选定范围');
-    expect(text).toContain('校验执行技术结论 FAIL');
+    expect(text).toContain('校验执行技术结论 未通过');
     expect(text).toContain('校验处置 已记录校验处置');
-    expect(text).toContain('技术结论仍然是 FAIL');
+    expect(text).toContain('技术结论仍然是未通过');
     expect(text).toContain('预检排除项');
   });
 
@@ -217,7 +219,7 @@ test.describe('报告是可以带走的东西', () => {
     await expect(page.getByText('报告已复制到剪贴板。')).toBeVisible();
 
     const copied = await page.evaluate(() => navigator.clipboard.readText());
-    expect(copied).toContain('校验执行技术结论 FAIL');
+    expect(copied).toContain('校验执行技术结论 未通过');
     expect(copied).toContain('校验处置 已记录校验处置');
   });
 });

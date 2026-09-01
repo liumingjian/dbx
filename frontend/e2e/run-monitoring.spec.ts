@@ -169,7 +169,7 @@ test.describe('卡死 has its own presentation, distinct from 「慢」', () => 
     await expect(stuck).toContainText('根因域 迁移平台');
 
     // The run has not ended: DBX preserves the target data and the evidence and waits.
-    await expect(page.getByText('ATTENTION_REQUIRED').first()).toBeVisible();
+    await expect(page.getByText('需要人工处理').first()).toBeVisible();
   });
 
   test('can be filtered for on its own, and the stalled table carries no technical result', async ({
@@ -185,7 +185,7 @@ test.describe('卡死 has its own presentation, distinct from 「慢」', () => 
     await expect(matrix.getByText('卡死').first()).toBeVisible();
     await expect(matrix.getByText('尚无技术结果').first()).toBeVisible();
     await expect(matrix.getByText('因关联失败而阻塞').first()).toBeVisible();
-    await expect(matrix).not.toContainText('SUCCEEDED');
+    await expect(matrix).not.toContainText('迁移完成');
   });
 });
 
@@ -194,15 +194,15 @@ test.describe('「部分表失败」', () => {
     await openMonitor(page, 'partial-table-failure');
 
     const matrix = panel(page, '进度矩阵');
-    await expect(matrix.getByText('FAILED').first()).toBeVisible();
-    await expect(matrix.getByText('SUCCEEDED').first()).toBeVisible();
+    await expect(matrix.getByText('迁移失败').first()).toBeVisible();
+    await expect(matrix.getByText('迁移完成').first()).toBeVisible();
 
     await page.getByRole('tab', { name: '只看失败' }).click();
-    await expect(matrix.getByText('FAILED').first()).toBeVisible();
-    await expect(matrix).not.toContainText('SUCCEEDED');
+    await expect(matrix.getByText('迁移失败').first()).toBeVisible();
+    await expect(matrix).not.toContainText('迁移完成');
 
     await page.getByRole('tab', { name: '全部' }).click();
-    await expect(matrix.getByText('SUCCEEDED').first()).toBeVisible();
+    await expect(matrix.getByText('迁移完成').first()).toBeVisible();
   });
 });
 
@@ -242,12 +242,14 @@ test.describe('取消进行中的运行', () => {
 
     // The run stops: its projected status becomes a cancellation, and the cancel control
     // gives way to a statement that there is nothing left to cancel.
-    await expect(page.getByText(/^CANCELL/).first()).toBeVisible({ timeout: 30_000 });
+    // 取消中 while it converges, 已取消 once it has: both are the run's own 取消, which is
+    // the one place `CONTEXT.md` allows that word.
+    await expect(page.getByText(/^(取消中|已取消)$/).first()).toBeVisible({ timeout: 30_000 });
   });
 
   test('「操作员取消」 is reachable by URL, already stopped', async ({ page }) => {
     await openMonitor(page, 'operator-cancellation');
-    await expect(page.getByText('CANCELLED').first()).toBeVisible();
+    await expect(page.getByText('已取消').first()).toBeVisible();
     await expect(page.getByText('这次迁移运行已经结束，没有可以取消的东西。')).toBeVisible();
   });
 });

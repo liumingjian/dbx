@@ -139,12 +139,12 @@ test.describe('阶段一：连接与数据库', () => {
   test('reports a chosen 数据库连接 that is no longer usable straight away', async ({ page }) => {
     await startDraft(page);
     await chooseSource(page);
-    // 分析库（预发）'s 最近校验 is FAILED in the seeded fixture.
+    // 分析库（预发）'s 最近校验 failed in the seeded fixture.
     await chooseTarget(page, '分析库（预发）');
 
     const target = page.getByRole('region', { name: '目标端' });
     await expect(target).toContainText('这个数据库连接现在不可用');
-    await expect(target).toContainText('FAILED');
+    await expect(target).toContainText('校验失败');
 
     const url = page.url();
     await page.getByRole('button', { name: '下一步' }).click();

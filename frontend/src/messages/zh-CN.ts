@@ -208,12 +208,12 @@ export const messages = {
       contractNotGenerated: (count: number, example: string) =>
         `迁移范围内还有 ${count} 张表没有生成表写入契约（例如 ${example}）。请在逐表配置里决定它们的映射例外。`,
       /**
-       * Gate 2 (#30 §15.4): 预检结论为 UNSUPPORTED 或 INCONCLUSIVE 的表不能被批准.
+       * Gate 2 (#30 §15.4): 预检结论为不可迁移或无法判定的表不能被批准.
        *
        * `CONTEXT.md` on 预检: 「only `SUPPORTED` may proceed」, and its `_Avoid_` line names
        * 「warning acknowledgement」 — so the sentence names the three exits rather than
-       * offering a way past. The conclusion is rendered as the enum literal, as everywhere
-       * else in DBX (lead decision D13).
+       * offering a way past. The conclusion is named in its own `_中文_` wording, which the
+       * caller resolves through `messages.conclusion.labels`.
        */
       preflightInFlight: (count: number, example: string) =>
         `迁移范围内还有 ${count} 张表的预检正在进行（例如 ${example}）。预检得出结论前不能进入下一阶段。`,
@@ -266,7 +266,6 @@ export const messages = {
       chooseDatabase: '请选择数据库',
       endpointLabel: '端点',
       latestCheckLabel: '最近校验',
-      neverChecked: '尚未校验',
       manageConnectionsLink: '前往数据源',
       unusableTitle: '这个数据库连接现在不可用',
       /** Worded apart from the gate's sentence so the two never print the same line twice. */
@@ -622,9 +621,10 @@ export const messages = {
    * property of 箱 itself — 「Never. A box is an internal scheduling detail, and the
    * operator is not required to understand the execution platform」 — and gives the two
    * phase literals named after it their own entries: `WAITING_FOR_BOX` is 等待调度 and
-   * `BLOCKED_BY_BOX_FAILURE` is 因关联失败而阻塞. Those two are used; the literals are not
-   * rendered. Every other phase and outcome has no `_中文_` line, so the interface shows
-   * the enum literal rather than inventing a translation.
+   * `BLOCKED_BY_BOX_FAILURE` is 因关联失败而阻塞. Every other phase, outcome and 根因域 has
+   * its own `_中文_` line too (#42), so nothing in this namespace renders a literal — and
+   * the unit outcome `CANCELLED` is 因运行取消而停止 rather than 取消, which belongs to the
+   * run and to the person who asked for it.
    *
    * **卡死 is a diagnosis, not a degree of slowness.** `CONTEXT.md` puts 「slow」 and
    * 「timed out」 under its `_Avoid_`, so the wording never grades it: it states the
@@ -1019,7 +1019,6 @@ export const messages = {
     endpointLabel: '端点',
     credentialVersionLabel: '凭据版本',
     latestCheckLabel: '最近校验',
-    neverChecked: '尚未校验',
     /**
      * Keyed by the `ConnectionCheckOutcome` literal itself, so every reader — 数据源, and
      * the evidence a 迁移运行 established for itself (#41) — renders one wording from one
@@ -1107,10 +1106,9 @@ export const messages = {
    *    applicable, a check the plan did not enable, and a check that failed are three
    *    things; a DBA must not be sent chasing the first two.
    *
-   * The enum literals — the five 校验项, the three exclusion reasons, the conclusions — are
-   * rendered as literals for want of a `_中文_` line in `CONTEXT.md`, following the
-   * precedent batch 1 set for preflight conclusions. Each carries an explanatory sentence
-   * built from words `CONTEXT.md` does define.
+   * The five 校验项, the three exclusion reasons and the conclusions are all `_中文_` lines
+   * in `CONTEXT.md` (#42), each still carrying the explanatory sentence that states the
+   * exact fact behind the name.
    */
   validation: {
     title: '校验报告',
@@ -1230,7 +1228,7 @@ export const messages = {
       operatorLabel: '责任人',
       reasonLabel: '理由',
       acceptedChecks: (checks: string) => `接受风险的校验项：${checks}`,
-      technicalResultUnchanged: (conclusion: string) => `技术结论仍然是 ${conclusion}`,
+      technicalResultUnchanged: (conclusion: string) => `技术结论仍然是${conclusion}`,
       noneRecorded: '本次迁移运行还没有记录任何校验处置。',
       modal: {
         title: '记录校验处置',

@@ -52,7 +52,9 @@ describe('a table’s evidence is restored from its own URL', () => {
     const diagnosis = await drawerRegion(messages.run.evidence.diagnosis.heading);
 
     expect(diagnosis).toHaveTextContent(
-      messages.run.evidence.diagnosis.rootCauseDomain('SOURCE_DATABASE'),
+      messages.run.evidence.diagnosis.rootCauseDomain(
+        messages.run.rootCauseDomains.SOURCE_DATABASE,
+      ),
     );
     expect(diagnosis).toHaveTextContent(
       messages.run.evidence.diagnosis.codes['DBX-SOURCE-PERMISSION-DENIED'].summary,
@@ -65,7 +67,9 @@ describe('a table’s evidence is restored from its own URL', () => {
     openAt(targetProblemUnitId, 'partial-table-failure');
 
     expect(await drawerRegion(messages.run.evidence.diagnosis.heading)).toHaveTextContent(
-      messages.run.evidence.diagnosis.rootCauseDomain('TARGET_DATABASE'),
+      messages.run.evidence.diagnosis.rootCauseDomain(
+        messages.run.rootCauseDomains.TARGET_DATABASE,
+      ),
     );
   });
 

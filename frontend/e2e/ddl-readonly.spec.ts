@@ -158,7 +158,7 @@ test.describe('Gate 4: DDL 只读', () => {
     // the rule now attributed to the operator rather than to the platform.
     await expect(contract).toContainText('表写入契约 v2');
     await expect(contract.locator('pre')).not.toHaveText(before);
-    await expect(findings).toContainText('USER');
+    await expect(findings).toContainText('用户指定');
   });
 
   test('copies the whole statement, not a selection', async ({ page, context }) => {
@@ -198,10 +198,11 @@ test.describe('Gate 4: DDL 只读', () => {
 
     // And the stage says so rather than letting the draft walk on to 执行确认. In a
     // 迁移范围 this wide the reason the footer states is the earlier one in the safety
-    // sequence — a 预检 that is not SUPPORTED (Gate 2, #36) — because deciding this
-    // mapping would not make those tables migratable. Either way the draft does not move.
+    // sequence — a 预检 whose conclusion is not 可迁移 (Gate 2, #36) — because deciding
+    // this mapping would not make those tables migratable. Either way the draft does not
+    // move.
     const url = page.url();
-    await expect(page.getByText(/只有 SUPPORTED 的预检可以继续/)).toBeVisible();
+    await expect(page.getByText(/只有结论为可迁移的预检可以继续/)).toBeVisible();
     await page.getByRole('button', { name: '下一步' }).click();
     await expect(page).toHaveURL(url);
   });

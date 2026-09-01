@@ -21,12 +21,14 @@ import type { TableMigrationPhase, TableMigrationUnit } from './tableMigrationUn
  * `SOURCE_DATABASE` and `TARGET_DATABASE` are distinct, and the two execution-platform
  * domains are presented as the single 迁移平台 (`CONTEXT.md`, Gate 7).
  *
- * **ADR-0005's ten-value classification phase is deliberately not modelled here.** One of
- * its values — `CONNECTOR_PROVISIONING` — is named after the execution platform, and
- * lead decision D10 forbids shipping operator-facing wording for such a literal until the
- * lead has landed it in `CONTEXT.md`. What an 错误事件 carries instead is the
- * `TableMigrationPhase` DBX observed the table in, which already has a Gate-7-safe
- * presentation. The gap is reported rather than papered over.
+ * **ADR-0005's ten-value classification phase is deliberately not modelled here**, and
+ * `CONTEXT.md` now says why: 「Diagnosis classification phase」 carries
+ * `_Operator-facing_: Never`. One of its values — `CONNECTOR_PROVISIONING` — is named
+ * after the execution platform, which Gate 7 keeps off the interface, and the rest would
+ * put a second, differently-cut phase vocabulary beside 阶段 without telling the operator
+ * anything they could act on. What an 错误事件 carries instead is the
+ * `TableMigrationPhase` DBX observed the table in, which every value of the classification
+ * maps into. The classification stays in the diagnostic evidence, for support.
  */
 
 /** Where a diagnosis came from (ADR-0005). The catalog is shared by all three. */

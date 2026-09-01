@@ -65,11 +65,7 @@ export function DatabaseConnectionCard({
               conclusion={connectionCheckConclusion(latestCheck.outcome)}
               label={messages.connections.checkOutcomes[latestCheck.outcome]}
             />
-            {latestCheck.checkedAt === null ? (
-              <span className="dbx-connection__check-time">
-                {messages.connections.neverChecked}
-              </span>
-            ) : (
+            {latestCheck.checkedAt === null ? null : (
               <span className="dbx-connection__check-time">
                 <Identifier>{formatTimestamp(latestCheck.checkedAt)}</Identifier>
               </span>

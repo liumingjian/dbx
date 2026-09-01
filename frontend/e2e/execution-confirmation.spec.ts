@@ -89,9 +89,10 @@ test.describe('执行确认 shows the whole scope before anything starts', () =>
     // would be approved rather than implying something still editable.
     await expect(scope).toContainText(/本次将批准 \d+ 份表写入契约，共 [\d,]+ 列/);
     await expect(scope).toContainText('启动后不再改动');
-    // Every table in the 迁移范围 carries a SUPPORTED 预检 — that is the only way a draft
-    // reaches this stage at all — and each one names the contract version it would approve.
-    await expect(scope.getByText('SUPPORTED').first()).toBeVisible();
+    // Every table in the 迁移范围 carries a 可迁移 预检 — that is the only way a draft
+    // reaches this stage at all — and each one names the contract version it would
+    // approve. `exact`, because 不可迁移 contains 可迁移 as a substring.
+    await expect(scope.getByText('可迁移', { exact: true }).first()).toBeVisible();
     await expect(scope.getByText(/^v\d+$/).first()).toBeVisible();
 
     // 「显式排除是可复核的例外」: an excluded table is still shown, by name.
@@ -112,7 +113,7 @@ test.describe('执行确认 shows the whole scope before anything starts', () =>
     await expect(notice).toContainText('会随这次迁移一起被带走');
 
     const findings = panel(page, '未解决的发现');
-    await expect(findings).toContainText('LARGE_RECORD_VALUE');
+    await expect(findings).toContainText('大记录单值');
     await expect(findings).toContainText('超过 20 MiB 上限');
 
     // Prominence, stated as an ordering rather than as a colour: the findings stand above

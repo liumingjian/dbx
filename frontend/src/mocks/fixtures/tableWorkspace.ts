@@ -603,13 +603,18 @@ function valueDomainColumnsOf(
 }
 
 /** Why a scan could not conclude — one of the three conditions ADR-0003 names. */
-function inconclusiveReasonOf(seed: number, table: SourceTableSummary): PreflightInconclusiveReason {
+function inconclusiveReasonOf(
+  seed: number,
+  table: SourceTableSummary,
+): PreflightInconclusiveReason {
   const reasons: readonly PreflightInconclusiveReason[] = [
     'QUERY_TIMEOUT',
     'PERMISSION_DENIED',
     'CONNECTION_LOST',
   ];
-  return reasons[hashOf(`${seed}:${table.name}:reason`) % reasons.length] as PreflightInconclusiveReason;
+  return reasons[
+    hashOf(`${seed}:${table.name}:reason`) % reasons.length
+  ] as PreflightInconclusiveReason;
 }
 
 function finding(
