@@ -282,12 +282,12 @@ export function MigrationRunPage() {
           <RunLogPanel snapshot={snapshot} />
         </Theme>
 
-          <CancelRunModal
-            runId={run.id}
-            open={cancelOpen}
-            onClose={() => setCancelOpen(false)}
-            onRequested={progress.refresh}
-          />
+        <CancelRunModal
+          runId={run.id}
+          open={cancelOpen}
+          onClose={() => setCancelOpen(false)}
+          onRequested={progress.refresh}
+        />
       </Page>
       <EvidenceOutlet />
     </>

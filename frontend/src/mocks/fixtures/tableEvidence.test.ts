@@ -33,7 +33,10 @@ function storeOf(scenarioId: string) {
     clock,
     draftPersistence: createMemoryDraftPersistence(),
   });
-  return { store, advance: (quanta: number) => clock.advance(quanta * OBSERVATION_INTERVAL_MOCK_MS) };
+  return {
+    store,
+    advance: (quanta: number) => clock.advance(quanta * OBSERVATION_INTERVAL_MOCK_MS),
+  };
 }
 
 function snapshotOf(scenarioId: string, quanta = 0): RunProgressSnapshot {
@@ -42,10 +45,7 @@ function snapshotOf(scenarioId: string, quanta = 0): RunProgressSnapshot {
   return store.getRunProgress(MONITORED_RUN_ID) as RunProgressSnapshot;
 }
 
-function evidenceIn(
-  snapshot: RunProgressSnapshot,
-  unitId: string,
-): TableMigrationUnitEvidence {
+function evidenceIn(snapshot: RunProgressSnapshot, unitId: string): TableMigrationUnitEvidence {
   const evidence = buildTableMigrationUnitEvidence(snapshot, unitId);
   expect(evidence).toBeDefined();
   return evidence as TableMigrationUnitEvidence;

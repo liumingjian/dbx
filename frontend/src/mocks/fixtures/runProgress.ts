@@ -435,11 +435,41 @@ export function projectRunProgress({
  * is derived; here it is a record being read back.
  */
 const CONTRACT_COLUMNS: readonly TableWriteContractColumn[] = [
-  { sourceColumn: 'id', sourceType: 'BIGINT UNSIGNED', targetColumn: 'id', targetType: 'numeric(20,0)', mappingRuleId: null },
-  { sourceColumn: 'reference_code', sourceType: 'VARCHAR(64)', targetColumn: 'reference_code', targetType: 'character varying(64)', mappingRuleId: null },
-  { sourceColumn: 'created_at', sourceType: 'DATETIME(3)', targetColumn: 'created_at', targetType: 'timestamp(3) without time zone', mappingRuleId: null },
-  { sourceColumn: 'settled_at', sourceType: 'DATETIME(3)', targetColumn: 'settled_at', targetType: 'timestamp(3) without time zone', mappingRuleId: null },
-  { sourceColumn: 'payload', sourceType: 'JSON', targetColumn: 'payload', targetType: 'jsonb', mappingRuleId: null },
+  {
+    sourceColumn: 'id',
+    sourceType: 'BIGINT UNSIGNED',
+    targetColumn: 'id',
+    targetType: 'numeric(20,0)',
+    mappingRuleId: null,
+  },
+  {
+    sourceColumn: 'reference_code',
+    sourceType: 'VARCHAR(64)',
+    targetColumn: 'reference_code',
+    targetType: 'character varying(64)',
+    mappingRuleId: null,
+  },
+  {
+    sourceColumn: 'created_at',
+    sourceType: 'DATETIME(3)',
+    targetColumn: 'created_at',
+    targetType: 'timestamp(3) without time zone',
+    mappingRuleId: null,
+  },
+  {
+    sourceColumn: 'settled_at',
+    sourceType: 'DATETIME(3)',
+    targetColumn: 'settled_at',
+    targetType: 'timestamp(3) without time zone',
+    mappingRuleId: null,
+  },
+  {
+    sourceColumn: 'payload',
+    sourceType: 'JSON',
+    targetColumn: 'payload',
+    targetType: 'jsonb',
+    mappingRuleId: null,
+  },
 ];
 
 function contractOf(run: MigrationRun, unit: UnitPlan): TableWriteContract {
@@ -452,9 +482,7 @@ function contractOf(run: MigrationRun, unit: UnitPlan): TableWriteContract {
     columns,
     targetDdl: [
       `CREATE TABLE "${run.targetSchema}"."${unit.targetTable}" (`,
-      columns
-        .map((column) => `  "${column.targetColumn}" ${column.targetType}`)
-        .join(',\n'),
+      columns.map((column) => `  "${column.targetColumn}" ${column.targetType}`).join(',\n'),
       ');',
     ].join('\n'),
     supplementalSql: null,

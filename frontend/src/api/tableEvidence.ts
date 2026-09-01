@@ -20,10 +20,7 @@ export const tableEvidenceKeys = {
     dbxQueryKey('migration-runs', runId, 'table-migration-units', unitId, 'evidence'),
 };
 
-export function useTableMigrationUnitEvidence(
-  runId: MigrationRunId,
-  unitId: TableMigrationUnitId,
-) {
+export function useTableMigrationUnitEvidence(runId: MigrationRunId, unitId: TableMigrationUnitId) {
   return useQuery({
     queryKey: tableEvidenceKeys.ofUnit(runId, unitId),
     queryFn: () =>
