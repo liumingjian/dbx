@@ -2,10 +2,14 @@ import type {
   AddCredentialVersionRequest,
   CredentialVersion,
   DatabaseConnection,
+  DraftMappingRule,
+  DraftTableConfiguration,
+  DraftTableWorkspace,
   MigrationDraft,
   MigrationDraftPatch,
   MigrationRun,
   MigrationTask,
+  RecordMappingRuleRequest,
   RegisterDatabaseConnectionRequest,
   SourceTableSummary,
 } from '@/contract';
@@ -13,6 +17,7 @@ import type { ControllableClock } from './clock';
 import { seedDatabaseConnections, unreachableConnectionIds } from './fixtures/databaseConnections';
 import { seedMigrationTasks } from './fixtures/migrationTasks';
 import { generateSourceTables } from './fixtures/sourceTables';
+import { draftTableConfigurationOf, draftTableWorkspaceOf } from './fixtures/tableWorkspace';
 import type { DraftPersistence } from './persistence';
 import type { ScenarioDefinition } from './scenarios';
 
@@ -55,6 +60,27 @@ export interface MockStore {
    * 1200-table production schema is reproducible rather than merely large.
    */
   listSourceTables(sourceDatabase: string): SourceTableSummary[];
+
+  /**
+   * The per-table configuration of one 迁移草稿, for every table in its 迁移范围.
+   *
+   * Draft-scoped rather than run-scoped: `CONTEXT.md` puts per-table configuration inside
+   * the definition of a 迁移草稿, and a 表迁移单元 belongs to a 迁移运行 that does not
+   * exist yet. Returns `undefined` when there is no such draft.
+   */
+  listDraftTableConfigurations(draftId: string): DraftTableConfiguration[] | undefined;
+  getDraftTableWorkspace(draftId: string, sourceTable: string): DraftTableWorkspace | undefined;
+  /**
+   * Records one user 映射规则, replacing any rule already in force for that coordinate.
+   *
+   * ADR-0011: a mapping change reassembles the 表写入契约 and reruns every affected
+   * 预检. Both follow from the rule being stored — the contract and the DDL are derived
+   * from it on every read, so there is no second copy that can go stale.
+   */
+  recordMappingRule(
+    draftId: string,
+    request: RecordMappingRuleRequest,
+  ): DraftTableWorkspace | undefined;
 }
 
 export interface MockStoreOptions {
@@ -63,11 +89,15 @@ export interface MockStoreOptions {
   readonly draftPersistence: DraftPersistence;
 }
 
+/** The identifier of the seeded 迁移草稿; see `SeedPlan.migrationDrafts`. */
+export const SEEDED_DRAFT_ID = 'draft-ready-for-tables';
+
 export function createMockStore({
   scenario,
   clock,
   draftPersistence,
 }: MockStoreOptions): MockStore {
+  const seedPlan = scenario.seedPlan;
   const connections = new Map<string, DatabaseConnection>(
     seedDatabaseConnections(scenario.seedPlan, clock).map((entry) => [entry.id, entry]),
   );
@@ -76,9 +106,42 @@ export function createMockStore({
   const tasks = new Map<string, MigrationTask>(seededTasks.tasks.map((task) => [task.id, task]));
   const runs = new Map<string, MigrationRun>(seededTasks.runs.map((run) => [run.id, run]));
   const sourceTablesByDatabase = new Map<string, SourceTableSummary[]>();
+  const sourceTableIndex = new Map<string, Map<string, SourceTableSummary>>();
 
   let drafts: MigrationDraft[] = [...(draftPersistence.read() ?? [])];
   let sequence = 0;
+
+  /**
+   * A 迁移草稿 already parked at 逐表配置与预检, with a fixed identifier.
+   *
+   * It exists so stage three is reachable *on first paint* under a faulted scenario: the
+   * scenario lives in the URL, and client-side navigation drops it, so a stage the
+   * operator would normally walk to cannot be reached in a faulted scenario at all unless
+   * the draft is already there. `SEEDED_DRAFT_ID` is what a review link and #42's coverage
+   * matrix address.
+   */
+  if (seedPlan.migrationDrafts === 'ready-for-tables' && drafts.length === 0) {
+    const now = clock.nowIso();
+    drafts = [
+      {
+        id: SEEDED_DRAFT_ID,
+        name: '',
+        createdAt: now,
+        updatedAt: now,
+        sourceConnectionId: 'conn-mysql-orders',
+        sourceDatabase: 'orders',
+        targetConnectionId: 'conn-pg-analytics',
+        targetSchema: 'orders_migrated',
+        scopeKind: 'SELECTED_TABLES',
+        selectedTables: generateSourceTables({ seed: scenario.seed, sourceDatabase: 'orders' })
+          .slice(0, 40)
+          .map((table) => table.name),
+        excludedTables: [],
+        mappingRules: [],
+        completedStages: ['connections', 'scope'],
+      },
+    ];
+  }
 
   const nextId = (prefix: string): string => {
     sequence += 1;
@@ -91,6 +154,23 @@ export function createMockStore({
 
   const reachable = (connection: DatabaseConnection): boolean =>
     !unreachableConnectionIds.includes(connection.id);
+
+  const sourceTablesOf = (draft: MigrationDraft): ReadonlyMap<string, SourceTableSummary> => {
+    const sourceDatabase = draft.sourceDatabase ?? '';
+    const cached = sourceTableIndex.get(sourceDatabase);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const index = new Map<string, SourceTableSummary>();
+    for (const table of generateSourceTables({ seed: scenario.seed, sourceDatabase })) {
+      index.set(table.name, table);
+    }
+    sourceTableIndex.set(sourceDatabase, index);
+    return index;
+  };
+
+  const rulesOfTable = (draft: MigrationDraft, sourceTable: string): DraftMappingRule[] =>
+    draft.mappingRules.filter((rule) => rule.sourceTable === sourceTable);
 
   return {
     listDatabaseConnections() {
@@ -229,6 +309,7 @@ export function createMockStore({
         scopeKind: 'SELECTED_TABLES',
         selectedTables: [],
         excludedTables: [],
+        mappingRules: [],
         completedStages: [],
         ...patch,
       };
@@ -289,6 +370,92 @@ export function createMockStore({
       const generated = [...generateSourceTables({ seed: scenario.seed, sourceDatabase })];
       sourceTablesByDatabase.set(sourceDatabase, generated);
       return generated;
+    },
+
+    listDraftTableConfigurations(draftId) {
+      const draft = drafts.find((entry) => entry.id === draftId);
+      if (draft === undefined) {
+        return undefined;
+      }
+      const byName = sourceTablesOf(draft);
+      return draft.selectedTables.flatMap((name) => {
+        const table = byName.get(name);
+        return table === undefined
+          ? []
+          : [
+              draftTableConfigurationOf({
+                seed: scenario.seed,
+                table,
+                userRules: rulesOfTable(draft, name),
+              }),
+            ];
+      });
+    },
+
+    getDraftTableWorkspace(draftId, sourceTable) {
+      const draft = drafts.find((entry) => entry.id === draftId);
+      if (draft === undefined) {
+        return undefined;
+      }
+      const table = sourceTablesOf(draft).get(sourceTable);
+      // A table outside the 迁移范围 has no per-table configuration to show: the draft
+      // never asked for it to be migrated.
+      if (table === undefined || !draft.selectedTables.includes(sourceTable)) {
+        return undefined;
+      }
+      return draftTableWorkspaceOf({
+        seed: scenario.seed,
+        table,
+        targetSchema: draft.targetSchema ?? '',
+        userRules: rulesOfTable(draft, sourceTable),
+        // The moment the contract was assembled is the moment the draft last changed, not
+        // the moment it was read: 「重新生成于」 has to move when a 映射规则 is recorded and
+        // stay still when the same table is merely opened again.
+        generatedAt: draft.updatedAt,
+      });
+    },
+
+    recordMappingRule(draftId, request) {
+      const index = drafts.findIndex((entry) => entry.id === draftId);
+      const draft = drafts[index];
+      if (draft === undefined) {
+        return undefined;
+      }
+      const recorded: DraftMappingRule = {
+        id: `${request.sourceColumn}:${request.action}`,
+        sourceTable: request.sourceTable,
+        sourceColumn: request.sourceColumn,
+        action: request.action,
+        targetValue: request.targetValue,
+        // A rule the operator authored. `CONTEXT.md`: user rules override automatic ones.
+        origin: 'USER',
+      };
+      const updated: MigrationDraft = {
+        ...draft,
+        mappingRules: [
+          ...draft.mappingRules.filter(
+            (rule) =>
+              rule.sourceTable !== recorded.sourceTable ||
+              rule.sourceColumn !== recorded.sourceColumn ||
+              rule.action !== recorded.action,
+          ),
+          recorded,
+        ],
+        updatedAt: clock.nowIso(),
+      };
+      drafts = [...drafts.slice(0, index), updated, ...drafts.slice(index + 1)];
+      flushDrafts();
+      const table = sourceTablesOf(updated).get(request.sourceTable);
+      if (table === undefined) {
+        return undefined;
+      }
+      return draftTableWorkspaceOf({
+        seed: scenario.seed,
+        table,
+        targetSchema: updated.targetSchema ?? '',
+        userRules: rulesOfTable(updated, request.sourceTable),
+        generatedAt: updated.updatedAt,
+      });
     },
   };
 }

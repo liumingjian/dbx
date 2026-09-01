@@ -26,6 +26,13 @@ export type MockResource =
   | 'migrationTasks'
   | 'migrationRuns'
   | 'tableMigrationUnits'
+  /**
+   * 逐表配置与预检 (#35): the per-table summaries and single-table workspace of a
+   * 迁移草稿. Faulted apart from `tableMigrationUnits` because a draft has no 迁移运行 and
+   * therefore no 表迁移单元 — and because stage three has to be reachable while the
+   * discovery read behind stage two is healthy.
+   */
+  | 'draftTableConfigurations'
   | 'validationExecutions';
 
 /**
@@ -46,6 +53,17 @@ export type StateCoverage = 'loading' | 'empty' | 'error' | 'blocked' | 'inconcl
 export interface SeedPlan {
   readonly databaseConnections: 'standard' | 'none' | 'unchecked';
   readonly migrationTasks: 'standard' | 'none';
+  /**
+   * Whether the store boots with a 迁移草稿 already parked at 逐表配置与预检.
+   *
+   * A scenario is only reachable while its parameter is on the URL, and client-side
+   * navigation drops it — so a stage the operator would normally *walk* to cannot be
+   * reached in a faulted scenario unless the draft is already there when the page loads.
+   * Seeding one gives stage three (and, later, 执行确认) a deep-linkable entry with a
+   * deterministic identifier. Default scenarios seed none: an empty 迁移任务 page is a
+   * state of its own, and a phantom draft would take it away.
+   */
+  readonly migrationDrafts: 'none' | 'ready-for-tables';
   /**
    * The shape a migration run takes as the clock advances. Consumed from #38 onwards;
    * declared here because the run scenarios ADR-0016 requires are part of *this* registry,
@@ -83,6 +101,7 @@ export interface ScenarioDefinition {
 const standardSeedPlan: SeedPlan = {
   databaseConnections: 'standard',
   migrationTasks: 'standard',
+  migrationDrafts: 'none',
   runPlan: 'all-tables-succeed',
   preflight: 'all-supported',
 };
@@ -131,6 +150,7 @@ const definitions: readonly ScenarioDefinition[] = [
       migrationTasks: { kind: 'pending' },
       migrationRuns: { kind: 'pending' },
       tableMigrationUnits: { kind: 'pending' },
+      draftTableConfigurations: { kind: 'pending' },
       validationExecutions: { kind: 'pending' },
     },
     covers: ['loading'],
@@ -148,6 +168,7 @@ const definitions: readonly ScenarioDefinition[] = [
       migrationTasks: { kind: 'failure', status: 503 },
       migrationRuns: { kind: 'failure', status: 503 },
       tableMigrationUnits: { kind: 'failure', status: 503 },
+      draftTableConfigurations: { kind: 'failure', status: 503 },
       validationExecutions: { kind: 'failure', status: 503 },
     },
     covers: ['error'],
@@ -161,6 +182,28 @@ const definitions: readonly ScenarioDefinition[] = [
     seedPlan: { ...standardSeedPlan, preflight: 'blocked' },
     transport: {},
     covers: ['blocked'],
+  }),
+  // Stage three on its own: the 迁移草稿 and the discovery read behind 迁移范围 stay
+  // healthy, so the wizard can be walked as far as 逐表配置与预检 and left in each state.
+  scenario({
+    id: 'stage-tables-loading',
+    summary: 'The per-table configuration read hangs, holding stage three in its loading state.',
+    seed: 20260901,
+    clockRate: DEFAULT_CLOCK_RATE,
+    draftPersistence: 'memory',
+    seedPlan: { ...standardSeedPlan, migrationDrafts: 'ready-for-tables' },
+    transport: { draftTableConfigurations: { kind: 'pending' } },
+    covers: ['loading'],
+  }),
+  scenario({
+    id: 'stage-tables-error',
+    summary: 'The per-table configuration read fails, so stage three must offer a retry.',
+    seed: 20260901,
+    clockRate: DEFAULT_CLOCK_RATE,
+    draftPersistence: 'memory',
+    seedPlan: { ...standardSeedPlan, migrationDrafts: 'ready-for-tables' },
+    transport: { draftTableConfigurations: { kind: 'failure', status: 503 } },
+    covers: ['error'],
   }),
   scenario({
     id: 'partial-table-failure',

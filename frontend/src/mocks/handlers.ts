@@ -2,6 +2,7 @@ import { http, HttpResponse, delay } from 'msw';
 import type {
   AddCredentialVersionRequest,
   MigrationDraftPatch,
+  RecordMappingRuleRequest,
   RegisterDatabaseConnectionRequest,
 } from '@/contract';
 import { API_BASE } from '@/api/http';
@@ -110,6 +111,37 @@ export const handlers = [
     const body = (await request.json()) as MigrationDraftPatch;
     const updated = getMockContext().store.updateMigrationDraft(String(params.id), body);
     return updated ? HttpResponse.json(updated) : notFound();
+  }),
+
+  // 逐表配置 belongs to the 迁移草稿, so it hangs off the draft rather than off a
+  // 表迁移单元 — there is no 迁移运行 yet, and inventing one would put audit-grade
+  // records behind an unapproved working set.
+  http.get(`${API_BASE}/migration-drafts/:id/table-configurations`, async ({ params }) => {
+    const faulted = await applyTransportFault('draftTableConfigurations');
+    if (faulted) return faulted;
+    const items = getMockContext().store.listDraftTableConfigurations(String(params.id));
+    return items ? HttpResponse.json({ items }) : notFound();
+  }),
+
+  http.get(`${API_BASE}/migration-drafts/:id/tables/:sourceTable`, async ({ params }) => {
+    const faulted = await applyTransportFault('draftTableConfigurations');
+    if (faulted) return faulted;
+    const workspace = getMockContext().store.getDraftTableWorkspace(
+      String(params.id),
+      String(params.sourceTable),
+    );
+    return workspace ? HttpResponse.json(workspace) : notFound();
+  }),
+
+  // A mapping change is a structured 映射规则, never SQL (`CONTEXT.md`). Recording one
+  // reassembles the 表写入契约 and reruns the affected 预检 (ADR-0011), which is why the
+  // response is the regenerated workspace rather than an acknowledgement.
+  http.post(`${API_BASE}/migration-drafts/:id/mapping-rules`, async ({ params, request }) => {
+    const faulted = await applyTransportFault('draftTableConfigurations');
+    if (faulted) return faulted;
+    const body = (await request.json()) as RecordMappingRuleRequest;
+    const workspace = getMockContext().store.recordMappingRule(String(params.id), body);
+    return workspace ? HttpResponse.json(workspace) : notFound();
   }),
 
   http.get(`${API_BASE}/migration-tasks`, async () => {

@@ -14,10 +14,12 @@ import { isWizardStage, paths, type WizardStage } from '@/routes/paths';
 import {
   StageConnections,
   StageScope,
+  StageTables,
   WizardShell,
   resolveStageEntry,
   type WizardGateContext,
 } from '@/wizard';
+import { useDraftTableConfigurations } from '@/api/draftTables';
 import { Page } from './Page';
 import { NotFoundPage } from './NotFoundPage';
 
@@ -44,12 +46,13 @@ export interface WizardStageProps {
  * Which component renders which stage.
  *
  * A stage with no entry renders the "later batch" placeholder, which is honest while its
- * gate (`src/wizard/stageGates.ts`) also says the stage is undelivered. #35 adds `tables`,
- * #37 adds `confirm`, and #38/#40 take over 运行监控 and 校验报告 from the migration run.
+ * gate (`src/wizard/stageGates.ts`) also says the stage is undelivered. #37 adds
+ * `confirm`, and #38/#40 take over 运行监控 and 校验报告 from the migration run.
  */
 const stageContent: Partial<Record<WizardStage, ComponentType<WizardStageProps>>> = {
   connections: StageConnections,
   scope: StageScope,
+  tables: StageTables,
 };
 
 export function MigrationWizardStagePage() {
@@ -57,6 +60,11 @@ export function MigrationWizardStagePage() {
   const navigate = useNavigate();
   const draftQuery = useMigrationDraft(draftId ?? '');
   const connectionsQuery = useDatabaseConnections();
+  // Stage three's gate is a fact about the tables in the 迁移范围, so the summaries are
+  // part of the gate context rather than something the stage alone knows (#35). The page
+  // does not wait for them: `null` is a state the gate answers for, which keeps the shell
+  // rendering while the read is in flight.
+  const tableConfigurationsQuery = useDraftTableConfigurations(draftId ?? '');
   const update = useUpdateMigrationDraft();
   const discard = useDiscardMigrationDraft();
 
@@ -107,6 +115,7 @@ export function MigrationWizardStagePage() {
   const context: WizardGateContext = {
     draft: draftQuery.data,
     connections: connectionsQuery.data ?? [],
+    tableConfigurations: tableConfigurationsQuery.data ?? null,
   };
 
   const permitted = resolveStageEntry(stage, context);

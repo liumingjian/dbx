@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DatabaseConnection, MigrationDraft } from '@/contract';
+import type { DatabaseConnection, DraftTableConfiguration, MigrationDraft } from '@/contract';
 import { messages } from '@/messages';
 import {
   evaluateStageGate,
@@ -87,6 +87,7 @@ function draft(overrides: Partial<MigrationDraft> = {}): MigrationDraft {
     scopeKind: 'SELECTED_TABLES',
     selectedTables: [],
     excludedTables: [],
+    mappingRules: [],
     completedStages: [],
     ...overrides,
   };
@@ -99,9 +100,28 @@ const configured = draft({
   targetSchema: 'orders',
 });
 
-const context = (entry: MigrationDraft, connections = [source, target]): WizardGateContext => ({
+function configuration(overrides: Partial<DraftTableConfiguration> = {}): DraftTableConfiguration {
+  return {
+    sourceTable: 'order_item',
+    targetTable: 'order_item',
+    preflightConclusion: 'SUPPORTED',
+    blockingFindingCount: 0,
+    largeRecordTable: false,
+    mappingExceptionCount: 0,
+    undecidedMappingExceptionCount: 0,
+    contractVersion: 1,
+    ...overrides,
+  };
+}
+
+const context = (
+  entry: MigrationDraft,
+  connections = [source, target],
+  tableConfigurations: readonly DraftTableConfiguration[] | null = [configuration()],
+): WizardGateContext => ({
   draft: entry,
   connections,
+  tableConfigurations,
 });
 
 describe('wizard stage gating', () => {
@@ -134,7 +154,9 @@ describe('wizard stage gating', () => {
   it('advances past 迁移范围 once at least one table is in it', () => {
     const withTables = { ...configured, selectedTables: ['order_item'] };
     expect(evaluateStageGate('scope', context(withTables)).blocked).toBe(false);
-    expect(furthestReachableStage(context(withTables))).toBe('tables');
+    expect(isStageReachable('tables', context(withTables))).toBe(true);
+    // 执行确认 is where this draft now stops, because #37 has not delivered its gate yet.
+    expect(furthestReachableStage(context(withTables))).toBe('confirm');
   });
 
   it('lets the operator back into a completed stage', () => {
@@ -152,6 +174,56 @@ describe('wizard stage gating', () => {
     expect(resolveStageEntry('tables', empty)).toBe('connections');
     expect(resolveStageEntry('validation', empty)).toBe('connections');
     expect(resolveStageEntry('tables', context(configured))).toBe('scope');
+  });
+
+  it('stops 逐表配置与预检 while a table in the 迁移范围 has no 表写入契约', () => {
+    // ADR-0011: a 表写入契约 is the complete single-table write intent, and DBX may not
+    // assemble one while an exception it refuses to decide for the operator — the
+    // *approved* per-column zero-date relaxation — is still open. A table with no contract
+    // has nothing for 执行确认 to summarise and nothing for a 结构证明 to compare against.
+    const withTables = { ...configured, selectedTables: ['order_item', 'order_header'] };
+    const blocked = context(
+      withTables,
+      [source, target],
+      [
+        configuration(),
+        configuration({
+          sourceTable: 'order_header',
+          mappingExceptionCount: 2,
+          undecidedMappingExceptionCount: 1,
+          contractVersion: null,
+        }),
+      ],
+    );
+    expect(evaluateStageGate('tables', blocked)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.contractNotGenerated(1, 'order_header'),
+    });
+    expect(furthestReachableStage(blocked)).toBe('tables');
+    expect(isStageReachable('confirm', blocked)).toBe(false);
+    // Blocked at stage three still means stage three is where the draft stands: a gate
+    // stops the operator leaving a stage, never entering it.
+    expect(resolveStageEntry('tables', blocked)).toBe('tables');
+  });
+
+  it('does not let 逐表配置与预检 pass on evidence it has not read yet', () => {
+    // `null` is 「the summaries are still being read」. Answering 「not blocked」 on missing
+    // evidence is how a safety sequence quietly stops being one.
+    const unread = context(
+      { ...configured, selectedTables: ['order_item'] },
+      [source, target],
+      null,
+    );
+    expect(evaluateStageGate('tables', unread)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.tableConfigurationsUnread,
+    });
+  });
+
+  it('opens 执行确认 once every table in the 迁移范围 carries a 表写入契约', () => {
+    const ready = context({ ...configured, selectedTables: ['order_item'] });
+    expect(evaluateStageGate('tables', ready).blocked).toBe(false);
+    expect(furthestReachableStage(ready)).toBe('confirm');
   });
 
   it('keeps 运行监控 and 校验报告 out of a draft, because a draft produces no 迁移运行', () => {
