@@ -605,7 +605,6 @@ export const messages = {
     lead: '监控以表迁移单元为中心：每张表的阶段、进度、技术结果与观测时间都是这张表自己的记录。',
     runLabel: '运行',
     unitLabel: '表迁移单元',
-    evidenceTitle: '表迁移单元证据',
     loading: '正在读取迁移运行的进度观测。',
     error: {
       title: '迁移运行进度读取失败',
@@ -716,6 +715,142 @@ export const messages = {
       KAFKA: '迁移平台',
       RUNTIME_ENVIRONMENT: 'RUNTIME_ENVIRONMENT',
       PLATFORM: 'PLATFORM',
+    },
+    /**
+     * 单表证据 (#39) — one 表迁移单元's own 错误事件 and the 诊断 made of them.
+     *
+     * ADR-0005's three-way separation is what this copy has to keep intact, because it is
+     * the difference between an interface a DBA can act on and one that merely looks
+     * apologetic: an 错误事件 is an **observed fact**, a 诊断 is a **versioned
+     * interpretation** of it, and the unit's 技术结果 is neither. So the sections are named
+     * separately and the diagnosis states the catalog version it was reached under.
+     *
+     * The one question this drawer exists to answer is 「源问题还是目标问题」, and it is
+     * answered by the 根因域 rather than by tone: 源数据库 and 目标数据库 are distinct
+     * domains, an unidentified failure says outright that no cause was established, and
+     * the execution platform's own domains are presented as 迁移平台 (Gate 7).
+     */
+    evidence: {
+      title: '表迁移单元证据',
+      lead: '错误事件是观测到的事实，诊断是对这些事实的解释。诊断不改变这张表的技术结果。',
+      close: '关闭',
+      loading: '正在读取这张表的证据。',
+      error: {
+        title: '表迁移单元证据读取失败',
+        body: '这次读取没有取到。稍后重试，或确认 DBX 后端是否可达。',
+      },
+      notFound: {
+        title: '找不到这个表迁移单元',
+        body: '这个表迁移单元标识不在这次迁移运行里。请从进度矩阵重新进入。',
+      },
+      identityHeading: '这张表',
+      observedAt: (at: string) => `证据观测时间 ${at}`,
+      phaseLabel: '阶段',
+      outcomeLabel: '技术结果',
+      progressLabel: '进度',
+      /**
+       * 诊断 — 「a versioned interpretation of an error occurrence … An unknown or
+       * conflicting diagnosis must not invent a cause」 (`CONTEXT.md`).
+       */
+      diagnosis: {
+        heading: '诊断',
+        none: {
+          title: '这张表没有需要解释的失败',
+          body: 'DBX 没有为这张表记录错误事件，因此不做诊断。没有结论比臆测的结论更有用。',
+        },
+        code: (code: string) => `诊断代码 ${code}`,
+        catalogVersion: (version: string) => `诊断规则版本 ${version}`,
+        rootCauseDomain: (domain: string) => `根因域 ${domain}`,
+        sourceKind: (kind: string) => `诊断来源 ${kind}`,
+        /**
+         * The three source kinds have no `_中文_` line in `CONTEXT.md`, so they are shown
+         * as the enum literal — the precedent batch 1 set for preflight conclusions
+         * (lead decisions D13/D16/D23/D28/D31).
+         */
+        sourceKinds: {
+          STRUCTURED: 'STRUCTURED',
+          EXTERNAL_TRANSLATION: 'EXTERNAL_TRANSLATION',
+          SYSTEM_FALLBACK: 'SYSTEM_FALLBACK',
+        },
+        affectedHeading: '影响',
+        actionHeading: '建议动作',
+        /**
+         * The catalog, as the operator reads it. Each entry answers ADR-0005's four
+         * questions in order: what happened, where it happened, what is affected, and the
+         * one action recommended. Nothing here names the execution platform.
+         */
+        codes: {
+          'DBX-SOURCE-PERMISSION-DENIED': {
+            summary: '源数据库拒绝了这次读取：当前凭据版本没有读取这张表的权限。',
+            affected: '这张表没有迁移完成；已经写入目标的数据与诊断证据都保留。',
+            action: '在源数据库为该凭据授予这张表的读取权限，再用新的迁移运行重新迁移这张表。',
+          },
+          'DBX-SOURCE-VALUE-UNREPRESENTABLE': {
+            summary: '源数据库里存在目标类型无法表示的值，写入因此终止。',
+            affected: '这张表没有迁移完成；已经写入目标的数据与诊断证据都保留。',
+            action:
+              '在逐表配置与预检里为该列决定映射规则或裁剪该字段，重新预检后用新的迁移运行重新迁移。',
+          },
+          'DBX-TARGET-NOT-NULL-VIOLATION': {
+            summary: '目标数据库拒绝了这次写入：一行数据要写入的目标列不接受空值。',
+            affected: '这张表没有迁移完成；已经写入目标的数据与诊断证据都保留。',
+            action:
+              '在逐表配置与预检里为该列决定空值规则，重新生成表写入契约后用新的迁移运行重新迁移。',
+          },
+          'DBX-TARGET-VALUE-TOO-LONG': {
+            summary: '目标数据库拒绝了这次写入：值超过目标列的长度上限。',
+            affected: '这张表没有迁移完成；已经写入目标的数据与诊断证据都保留。',
+            action:
+              '在逐表配置与预检里为该列决定目标类型，重新生成表写入契约后用新的迁移运行重新迁移。',
+          },
+          'DBX-UNKNOWN': {
+            summary: '没有可信的诊断规则匹配这次失败，DBX 不臆测原因。',
+            affected: '这张表没有迁移完成；已经写入目标的数据与诊断证据都保留。',
+            action: '保留目标数据与证据，导出诊断包并联系支持。',
+          },
+          'DBX-NO-OBSERVABLE-PROGRESS': {
+            summary: '在配置的硬阈值内完全没有可观测进度，这次迁移运行被诊断为卡死。',
+            affected: '这张表停在原地，技术结果未定：DBX 不会为了填满结果而给出责任判断。',
+            action: '由人判断：可以取消这次迁移运行，也可以在排查后用新的迁移运行重新迁移这张表。',
+          },
+          'DBX-STOPPED-BY-RELATED-FAILURE': {
+            summary: '这张表自己没有失败：它随一次关联失败一起停止。',
+            affected: '技术结果未定，而不是失败，因此这张表是重新迁移的候选。',
+            action: '排查关联失败之后，用新的迁移运行重新迁移这张表。',
+          },
+        },
+      },
+      /**
+       * 错误事件 — 「an immutable fact that DBX observed at a phase and scope, retaining
+       * the evidence and correlation needed to explain what happened」 (`CONTEXT.md`).
+       */
+      occurrences: {
+        heading: '错误事件',
+        lead: '观测到的事实，按指纹合并：同一种失败被观测多次时记录首次、最近与次数，而不是重复列出。',
+        empty: '这张表没有错误事件。',
+        observedPhase: (phase: string) => `观测阶段 ${phase}`,
+        firstObservedAt: (at: string) => `首次观测 ${at}`,
+        lastObservedAt: (at: string) => `最近观测 ${at}`,
+        observationCount: (count: number) => `共观测 ${count} 次`,
+        evidenceReference: (reference: string) => `证据引用 ${reference}`,
+        detailHeading: '技术细节',
+      },
+      /**
+       * 表写入契约 and 结构证明: the two facts that decide whether DBX was entitled to
+       * write to the target at all. A DBA judging a target-side failure needs to know
+       * that the structure had been proven — otherwise the failure would be about the
+       * structure rather than about the data.
+       */
+      contract: {
+        heading: '表写入契约与结构证明',
+        version: (version: number) => `表写入契约版本 ${version}`,
+        approvedAt: (at: string) => `批准时间 ${at}`,
+        columnCount: (count: number) => `契约列 ${count} 列`,
+        proven: (at: string) => `结构证明零差异，证明时间 ${at}`,
+        notProven: '结构证明未通过：目标结构与已批准的表写入契约存在差异。',
+        differencesHeading: '差异',
+        none: '这张表还没有开始写入目标，因此还没有表写入契约与结构证明。',
+      },
     },
     stuck: {
       heading: '卡死',

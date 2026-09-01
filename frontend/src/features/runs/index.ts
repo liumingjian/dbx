@@ -9,6 +9,7 @@ export { RunEventStream } from './RunEventStream';
 export { RunLogPanel } from './RunLogPanel';
 export { RunProgressMatrix } from './RunProgressMatrix';
 export { StuckPanel } from './StuckPanel';
+export { TableEvidenceDrawer } from './TableEvidenceDrawer';
 export {
   formatMinutes,
   outcomeLabel,

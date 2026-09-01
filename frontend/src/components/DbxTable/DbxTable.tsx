@@ -1,5 +1,11 @@
 import { useCallback, useId, useMemo, useRef, useState, type ComponentProps } from 'react';
-import { Datagrid, useDatagrid, useInfiniteScroll, useStickyColumn } from '@carbon/ibm-products';
+import {
+  Datagrid,
+  useDatagrid,
+  useInfiniteScroll,
+  useOnRowClick,
+  useStickyColumn,
+} from '@carbon/ibm-products';
 import { Button, Checkbox, ContentSwitcher, Modal, Pagination, Switch } from '@carbon/react';
 import { messages } from '@/messages';
 import { EmptyState, ErrorState } from '@/components/ViewState';
@@ -120,11 +126,19 @@ export function DbxTable<TRow>({
   const initialShape = useRef({
     sticky: columns.some((column) => column.identifying === true),
     virtual: rowWindow.kind === 'virtual',
+    // Row activation is a capability of the table, not a per-render decision: a caller
+    // either navigates from rows or it does not.
+    activatable: onRowActivate !== undefined,
   });
   const plugins = useMemo(() => {
     const chosen = [];
     if (initialShape.current.sticky) chosen.push(useStickyColumn);
     if (initialShape.current.virtual) chosen.push(useInfiniteScroll);
+    // Without this plugin the substrate accepts an `onRowClick` option and never calls it,
+    // which is how row activation can look wired up and do nothing. It is also what makes
+    // an activatable row reachable by keyboard: the plugin gives the row a tab stop and
+    // activates it on Enter.
+    if (initialShape.current.activatable) chosen.push(useOnRowClick);
     return chosen;
   }, []);
 

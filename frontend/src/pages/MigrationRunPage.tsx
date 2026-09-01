@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Button, ContentSwitcher, Link as CarbonLink, Switch, Theme } from '@carbon/react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '@/api/http';
 import { useRunProgress } from '@/api/runProgress';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ViewState';
@@ -46,6 +46,19 @@ import { Page } from './Page';
  *     filter and the cancel control stay in the page's g10. A fully dark monitoring page
  *     was explicitly rejected.
  */
+
+/**
+ * 单表证据, over this page and with its own URL (#39).
+ *
+ * It is a **sibling of the page rather than a child of it**, and rendered at the same
+ * position in every branch below. That is not cosmetic: the run's own read moves from
+ * pending to observed while a drawer may already be open, and an outlet that changed
+ * position between those branches would unmount and remount the drawer — re-fetching its
+ * evidence and throwing away focus — every time the run page changed state underneath it.
+ */
+function EvidenceOutlet() {
+  return <Outlet />;
+}
 
 type UnitFilter = 'all' | 'failed' | 'stuck';
 
@@ -104,6 +117,7 @@ function distributionOf(units: readonly TableMigrationUnit[]): readonly string[]
 
 export function MigrationRunPage() {
   const { runId = '' } = useParams();
+  const navigate = useNavigate();
   const progress = useRunProgress(runId);
   const [filter, setFilter] = useState<UnitFilter>('all');
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -117,9 +131,12 @@ export function MigrationRunPage() {
 
   if (progress.pending) {
     return (
-      <Page title={messages.run.title}>
-        <LoadingState description={messages.run.loading} />
-      </Page>
+      <>
+        <Page title={messages.run.title}>
+          <LoadingState description={messages.run.loading} />
+        </Page>
+        <EvidenceOutlet />
+      </>
     );
   }
 
@@ -129,17 +146,20 @@ export function MigrationRunPage() {
     // succeed. Anything else is a read that failed and can be tried again.
     const missing = progress.error instanceof ApiError && progress.error.status === 404;
     return (
-      <Page title={messages.run.title}>
-        {missing ? (
-          <EmptyState title={messages.run.notFound.title} body={messages.run.notFound.body} />
-        ) : (
-          <ErrorState
-            title={messages.run.error.title}
-            body={messages.run.error.body}
-            onRetry={progress.refresh}
-          />
-        )}
-      </Page>
+      <>
+        <Page title={messages.run.title}>
+          {missing ? (
+            <EmptyState title={messages.run.notFound.title} body={messages.run.notFound.body} />
+          ) : (
+            <ErrorState
+              title={messages.run.error.title}
+              body={messages.run.error.body}
+              onRetry={progress.refresh}
+            />
+          )}
+        </Page>
+        <EvidenceOutlet />
+      </>
     );
   }
 
@@ -147,119 +167,129 @@ export function MigrationRunPage() {
   const cancellable = run.endedAt === null;
 
   return (
-    <Page
-      title={messages.run.title}
-      lead={messages.run.lead}
-      width="full"
-      actions={
-        cancellable ? (
-          <Button kind="danger--tertiary" onClick={() => setCancelOpen(true)}>
-            {messages.run.cancel.action}
-          </Button>
-        ) : (
-          <span className="dbx-run__muted">{messages.run.cancel.unavailable}</span>
-        )
-      }
-    >
-      <section className="dbx-run__identity" aria-label={messages.run.statusLabel}>
-        <p>
-          {messages.run.runLabel} <Identifier>{run.id}</Identifier>
-        </p>
-        <p>
-          <ConclusionIndicator
-            conclusion={migrationRunConclusion(run.status)}
-            label={messages.tasks.runStatuses[run.status]}
-          />
-        </p>
-        <p>
-          {messages.run.sourceLabel} <Identifier>{run.sourceDatabase}</Identifier>
-          {' → '}
-          {messages.run.targetLabel} <Identifier>{run.targetSchema}</Identifier>
-        </p>
-        <p>
-          {messages.run.startedAt} <Identifier>{formatTimestamp(run.startedAt)}</Identifier>
-          {' · '}
-          {messages.run.endedAt}{' '}
-          {run.endedAt === null ? (
-            messages.run.stillRunning
+    <>
+      <Page
+        title={messages.run.title}
+        lead={messages.run.lead}
+        width="full"
+        actions={
+          cancellable ? (
+            <Button kind="danger--tertiary" onClick={() => setCancelOpen(true)}>
+              {messages.run.cancel.action}
+            </Button>
           ) : (
-            <Identifier>{formatTimestamp(run.endedAt)}</Identifier>
-          )}
-        </p>
-        <p>
-          {messages.run.freezeLabel}{' '}
-          {messages.run.freezeSummary(
-            run.writeFreeze.accountableOperator,
-            formatTimestamp(run.writeFreeze.expiresAt),
-          )}
-        </p>
-        <p>
-          <CarbonLink as={Link} to={paths.migrationTaskRuns(run.taskId)}>
-            {messages.run.backAction}
-          </CarbonLink>
-        </p>
-      </section>
+            <span className="dbx-run__muted">{messages.run.cancel.unavailable}</span>
+          )
+        }
+      >
+        <section className="dbx-run__identity" aria-label={messages.run.statusLabel}>
+          <p>
+            {messages.run.runLabel} <Identifier>{run.id}</Identifier>
+          </p>
+          <p>
+            <ConclusionIndicator
+              conclusion={migrationRunConclusion(run.status)}
+              label={messages.tasks.runStatuses[run.status]}
+            />
+          </p>
+          <p>
+            {messages.run.sourceLabel} <Identifier>{run.sourceDatabase}</Identifier>
+            {' → '}
+            {messages.run.targetLabel} <Identifier>{run.targetSchema}</Identifier>
+          </p>
+          <p>
+            {messages.run.startedAt} <Identifier>{formatTimestamp(run.startedAt)}</Identifier>
+            {' · '}
+            {messages.run.endedAt}{' '}
+            {run.endedAt === null ? (
+              messages.run.stillRunning
+            ) : (
+              <Identifier>{formatTimestamp(run.endedAt)}</Identifier>
+            )}
+          </p>
+          <p>
+            {messages.run.freezeLabel}{' '}
+            {messages.run.freezeSummary(
+              run.writeFreeze.accountableOperator,
+              formatTimestamp(run.writeFreeze.expiresAt),
+            )}
+          </p>
+          <p>
+            <CarbonLink as={Link} to={paths.migrationTaskRuns(run.taskId)}>
+              {messages.run.backAction}
+            </CarbonLink>
+          </p>
+        </section>
 
-      {/*
-        The rule, in words, beside the numbers it governs. A DBA who has learned to read a
-        frozen bar as 「卡住了」 is misled by an interface that animates one, and equally
-        misled by one that freezes without saying that an observation has simply not
-        arrived yet.
-      */}
-      <p className="dbx-run__notice">{messages.run.observationNotice}</p>
-      <p className="dbx-run__notice">
-        {messages.run.observedAt(formatTimestamp(snapshot.observedAt))}
-        {' · '}
-        {messages.run.matrix.totals(
-          formatCount(totals.read),
-          formatCount(totals.written),
-          formatCount(totals.baseline),
-        )}
-      </p>
-      <p className="dbx-run__notice">
-        {messages.run.matrix.phaseHeading}：{distributionOf(snapshot.units).join(' · ')}
-      </p>
-      {snapshot.unitTotalCount > snapshot.units.length ? (
+        {/*
+          The rule, in words, beside the numbers it governs. A DBA who has learned to read a
+          frozen bar as 「卡住了」 is misled by an interface that animates one, and equally
+          misled by one that freezes without saying that an observation has simply not
+          arrived yet.
+        */}
+        <p className="dbx-run__notice">{messages.run.observationNotice}</p>
         <p className="dbx-run__notice">
-          {messages.run.matrix.bounded(snapshot.units.length, snapshot.unitTotalCount)}
+          {messages.run.observedAt(formatTimestamp(snapshot.observedAt))}
+          {' · '}
+          {messages.run.matrix.totals(
+            formatCount(totals.read),
+            formatCount(totals.written),
+            formatCount(totals.baseline),
+          )}
         </p>
-      ) : null}
+        <p className="dbx-run__notice">
+          {messages.run.matrix.phaseHeading}：{distributionOf(snapshot.units).join(' · ')}
+        </p>
+        {snapshot.unitTotalCount > snapshot.units.length ? (
+          <p className="dbx-run__notice">
+            {messages.run.matrix.bounded(snapshot.units.length, snapshot.unitTotalCount)}
+          </p>
+        ) : null}
 
-      {snapshot.stuck === null ? null : <StuckPanel stuck={snapshot.stuck} snapshot={snapshot} />}
+        {snapshot.stuck === null ? null : <StuckPanel stuck={snapshot.stuck} snapshot={snapshot} />}
 
-      {/*
-        The filter is a form control, so it stays in the page's g10: ADR-0014 rejected a
-        fully dark monitoring page precisely because it would darken this kind of control.
-      */}
-      <div className="dbx-run__filters">
-        <ContentSwitcher
-          aria-label={messages.run.filters.heading}
-          selectedIndex={unitFilters.indexOf(filter)}
-          onChange={({ name }) => setFilter((name as UnitFilter | undefined) ?? 'all')}
-        >
-          <Switch name="all" text={messages.run.filters.all} />
-          <Switch name="failed" text={messages.run.filters.failed} />
-          <Switch name="stuck" text={messages.run.filters.stuck} />
-        </ContentSwitcher>
-      </div>
+        {/*
+          The filter is a form control, so it stays in the page's g10: ADR-0014 rejected a
+          fully dark monitoring page precisely because it would darken this kind of control.
+        */}
+        <div className="dbx-run__filters">
+          <ContentSwitcher
+            aria-label={messages.run.filters.heading}
+            selectedIndex={unitFilters.indexOf(filter)}
+            onChange={({ name }) => setFilter((name as UnitFilter | undefined) ?? 'all')}
+          >
+            <Switch name="all" text={messages.run.filters.all} />
+            <Switch name="failed" text={messages.run.filters.failed} />
+            <Switch name="stuck" text={messages.run.filters.stuck} />
+          </ContentSwitcher>
+        </div>
 
-      {/*
-        ADR-0014: 「Only the live blocks inside run monitoring — the progress matrix, the
-        event stream, and logs — are wrapped in an inline g100 theme.」 Exactly these three,
-        and nothing above or below them.
-      */}
-      <Theme theme="g100" className="dbx-run__live">
-        <RunProgressMatrix snapshot={snapshot} units={units} filterActive={filter !== 'all'} />
-        <RunEventStream snapshot={snapshot} />
-        <RunLogPanel snapshot={snapshot} />
-      </Theme>
+        {/*
+          ADR-0014: 「Only the live blocks inside run monitoring — the progress matrix, the
+          event stream, and logs — are wrapped in an inline g100 theme.」 Exactly these three,
+          and nothing above or below them.
+        */}
+        <Theme theme="g100" className="dbx-run__live">
+          <RunProgressMatrix
+            snapshot={snapshot}
+            units={units}
+            filterActive={filter !== 'all'}
+            // 单表证据 has its own URL (#39): activating a row is a navigation, built
+            // through `paths` so the active scenario travels with it (D25).
+            onRowActivate={(unit) => void navigate(paths.tableMigrationUnit(runId, unit.id))}
+          />
+          <RunEventStream snapshot={snapshot} />
+          <RunLogPanel snapshot={snapshot} />
+        </Theme>
 
-      <CancelRunModal
-        runId={run.id}
-        open={cancelOpen}
-        onClose={() => setCancelOpen(false)}
-        onRequested={progress.refresh}
-      />
-    </Page>
+        <CancelRunModal
+          runId={run.id}
+          open={cancelOpen}
+          onClose={() => setCancelOpen(false)}
+          onRequested={progress.refresh}
+        />
+      </Page>
+      <EvidenceOutlet />
+    </>
   );
 }

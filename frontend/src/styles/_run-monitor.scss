@@ -175,3 +175,97 @@
   margin: 0;
   white-space: pre;
 }
+
+// 单表证据抽屉 (#39).
+//
+// An overlay that owns a URL. It sits above 运行监控 rather than replacing it, because the
+// question it answers — 「这张表出了什么事」 — is asked while reading the run, and losing
+// the run to answer it would cost the operator their place. Nothing here animates in from
+// the side: the drawer is present or it is not, in the same spirit as the progress bar
+// that never eases between two observations.
+.dbx-drawer__scrim {
+  position: fixed;
+  inset: 0;
+  background-color: $overlay;
+  z-index: 8000;
+}
+
+.dbx-drawer__panel {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: min(42rem, 100vw);
+  display: flex;
+  flex-direction: column;
+  background-color: $layer;
+  border-inline-start: 1px solid $border-subtle;
+  z-index: 8001;
+  overflow-y: auto;
+}
+
+.dbx-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-05;
+  padding: $spacing-05;
+  border-block-end: 1px solid $border-subtle;
+  position: sticky;
+  inset-block-start: 0;
+  background-color: $layer;
+}
+
+.dbx-drawer__title {
+  @include type-style('productive-heading-03');
+  margin: 0;
+}
+
+.dbx-drawer__body {
+  padding: $spacing-05;
+}
+
+.dbx-drawer__section {
+  border-block-start: 1px solid $border-subtle;
+  padding-block: $spacing-05;
+
+  p {
+    margin-bottom: $spacing-03;
+  }
+}
+
+.dbx-drawer__section-title {
+  @include type-style('heading-compact-01');
+  margin-bottom: $spacing-03;
+}
+
+// What happened, stated first and in full sentences. ADR-0005 orders the error card:
+// what happened, where, what is affected, what one action is recommended.
+.dbx-drawer__statement {
+  @include type-style('body-01');
+}
+
+.dbx-drawer__occurrences {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dbx-drawer__occurrence + .dbx-drawer__occurrence {
+  margin-block-start: $spacing-05;
+}
+
+.dbx-drawer__detail-heading {
+  @include type-style('label-01');
+  color: $text-secondary;
+  margin-block-start: $spacing-03;
+}
+
+// Server-produced evidence, shown as it will be pasted into a ticket.
+.dbx-drawer__detail {
+  @include type-style('code-01');
+  background-color: $layer-accent;
+  padding: $spacing-03;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}

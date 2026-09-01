@@ -11,6 +11,8 @@ import type {
   TableMigrationOutcome,
   TableMigrationPhase,
   TableMigrationUnit,
+  TableWriteContract,
+  TableWriteContractColumn,
 } from '@/contract';
 import type { ControllableClock } from '../clock';
 import type { SeedPlan } from '../scenarios';
@@ -423,6 +425,70 @@ export function projectRunProgress({
   };
 }
 
+/**
+ * The columns of a run's 表写入契约, as this fixture states them.
+ *
+ * Deliberately a small fixed shape rather than the wizard's full column assembly: what a
+ * 迁移运行 carries is the contract that was **already approved** before it started, and
+ * regenerating one per table on every poll would spend the whole 1200-table assembly to
+ * show a version number and a proof. The single-table workspace (#35) is where a contract
+ * is derived; here it is a record being read back.
+ */
+const CONTRACT_COLUMNS: readonly TableWriteContractColumn[] = [
+  {
+    sourceColumn: 'id',
+    sourceType: 'BIGINT UNSIGNED',
+    targetColumn: 'id',
+    targetType: 'numeric(20,0)',
+    mappingRuleId: null,
+  },
+  {
+    sourceColumn: 'reference_code',
+    sourceType: 'VARCHAR(64)',
+    targetColumn: 'reference_code',
+    targetType: 'character varying(64)',
+    mappingRuleId: null,
+  },
+  {
+    sourceColumn: 'created_at',
+    sourceType: 'DATETIME(3)',
+    targetColumn: 'created_at',
+    targetType: 'timestamp(3) without time zone',
+    mappingRuleId: null,
+  },
+  {
+    sourceColumn: 'settled_at',
+    sourceType: 'DATETIME(3)',
+    targetColumn: 'settled_at',
+    targetType: 'timestamp(3) without time zone',
+    mappingRuleId: null,
+  },
+  {
+    sourceColumn: 'payload',
+    sourceType: 'JSON',
+    targetColumn: 'payload',
+    targetType: 'jsonb',
+    mappingRuleId: null,
+  },
+];
+
+function contractOf(run: MigrationRun, unit: UnitPlan): TableWriteContract {
+  const columns = CONTRACT_COLUMNS;
+  return {
+    version: 1,
+    generatedAt: run.startedAt,
+    // A 迁移运行 exists because 执行确认 approved the contract, so it is approved here.
+    approvedAt: run.startedAt,
+    columns,
+    targetDdl: [
+      `CREATE TABLE "${run.targetSchema}"."${unit.targetTable}" (`,
+      columns.map((column) => `  "${column.targetColumn}" ${column.targetType}`).join(',\n'),
+      ');',
+    ].join('\n'),
+    supplementalSql: null,
+  };
+}
+
 function unitOf(
   run: MigrationRun,
   unit: UnitPlan,
@@ -443,6 +509,9 @@ function unitOf(
   // two columns are separate observations rather than one number shown twice.
   const writtenFraction = hasProgress ? readFractionAt(unit, observedQuantum - 1) : 0;
   const movement = hasProgress ? lastMovementQuantum(unit, observedQuantum) : null;
+  // The target exists and has been proven against the contract from the quantum the
+  // transfer starts: DBX cannot start writing before either is true.
+  const writing = q >= unit.transferStartsAt;
 
   return {
     id: unit.id,
@@ -460,11 +529,16 @@ function unitOf(
       largestValueBytes: null,
       largestRowBytes: null,
     },
-    // The 表写入契约, its 结构证明 and the 校验执行 belong to the single-table evidence
-    // view (#39/#40) and are not assembled by 运行监控; the monitor shows phase, progress,
-    // technical result and observation time, and says nothing it has not read.
-    tableWriteContract: null,
-    structuralProof: null,
+    // The 表写入契约 and its 结构证明 (#39). Both are facts about *this* run rather than
+    // decorations: ADR-0011 makes the approved contract immutable, and `CONTEXT.md` makes
+    // the 结构证明 the deterministic comparison that must show zero difference before the
+    // target may be written at all. A unit that has not begun writing has neither and
+    // says so — an unproven structure rendered as a proven one is the one lie this pair
+    // could tell. The 校验执行 stays null: it belongs to 校验报告 (#40).
+    tableWriteContract: writing ? contractOf(run, unit) : null,
+    structuralProof: writing
+      ? { provenAt: at(unit.transferStartsAt), matchesContract: true, differences: [] }
+      : null,
     sourceBaselineRowCount: unit.baselineRowCount,
     progress: hasProgress
       ? {
