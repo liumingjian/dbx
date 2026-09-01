@@ -42,8 +42,16 @@ export const draftTableKeys = {
 
 const draftPath = (draftId: string) => `/migration-drafts/${encodeURIComponent(draftId)}`;
 
-/** Every table in the draft's 迁移范围, summarised. Small enough to hold 1200 of them. */
-export function useDraftTableConfigurations(draftId: string) {
+/**
+ * Every table in the draft's 迁移范围, summarised.
+ *
+ * `enabled` is a real parameter rather than a convenience: assembling these summaries runs
+ * the same column assembly the single-table workspace does, for **every** table in the
+ * 迁移范围 (D27). At 1200 tables that is not something the first two stages should pay for
+ * — neither of their gates reads this list. The polarity is unchanged where it is off:
+ * `null` still blocks, because an unknown safety fact is not a satisfied one (D22).
+ */
+export function useDraftTableConfigurations(draftId: string, enabled = true) {
   return useQuery({
     queryKey: draftTableKeys.configurations(draftId),
     queryFn: async () =>
@@ -52,7 +60,7 @@ export function useDraftTableConfigurations(draftId: string) {
           `${draftPath(draftId)}/table-configurations`,
         )
       ).items,
-    enabled: draftId !== '',
+    enabled: enabled && draftId !== '',
     // A missing conclusion means a scan is still running, and the stage's gate reads this
     // list: leaving it stale would leave the wizard reporting a fact that has expired.
     refetchInterval: (query) =>

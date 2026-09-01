@@ -127,6 +127,33 @@ describe('校验处置 never rewrites the technical result', () => {
     expect(result.ok ? '' : result.code).toBe('NOTHING_TO_DISPOSE');
   });
 
+  it('refuses a second 校验处置 rather than overwriting the first', () => {
+    // 校验处置 is 「an operator's audited decision」, and every other audit record in this
+    // store is append-only. A second decision that quietly replaced the first operator's
+    // name, reason and instant would be the one editable link in the chain.
+    const store = storeOf('inconclusive-validation');
+    const row = rowWith(reportOf(store), 'INCONCLUSIVE');
+    const first = store.recordValidationDisposition(MONITORED_RUN_ID, {
+      unitId: row.unitId,
+      reason: '差异已在变更评审中逐行复核。',
+      accountableOperator: 'li.na',
+    });
+    expect(first.ok).toBe(true);
+
+    const second = store.recordValidationDisposition(MONITORED_RUN_ID, {
+      unitId: row.unitId,
+      reason: '换个理由',
+      accountableOperator: 'wang.lei',
+    });
+    expect(second.ok).toBe(false);
+    expect(second.ok ? '' : second.code).toBe('ALREADY_DISPOSED');
+
+    // The recorded decision is the first one, whole.
+    const recorded = reportOf(store).rows.find((entry) => entry.unitId === row.unitId)?.disposition;
+    expect(recorded?.accountableOperator).toBe('li.na');
+    expect(recorded?.reason).toBe('差异已在变更评审中逐行复核。');
+  });
+
   it('is already recorded in the 「已记录校验处置」 scenario, with the result unchanged', () => {
     // Lead decision D22: the state is reachable on first paint rather than performed first.
     const report = reportOf(storeOf('accepted-risk'));

@@ -114,7 +114,7 @@ export function WizardShell({ stage, context, onDiscard, children }: WizardShell
           hideCloseButton
           role="alert"
           title={messages.wizard.blockedTitle}
-          subtitle={gate.reason}
+          subtitle={gate.reason.text}
         />
       ) : null}
 

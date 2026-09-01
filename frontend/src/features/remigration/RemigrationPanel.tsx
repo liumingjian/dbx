@@ -5,7 +5,7 @@ import { useRemigrationOffer, useStartRemigration } from '@/api/remigration';
 import { DbxTable, type DbxTableColumn, useDbxSelection } from '@/components/DbxTable';
 import { ConclusionIndicator } from '@/conclusions';
 import type { RemigrationCandidate, RemigrationOffer } from '@/contract';
-import { outcomeLabel } from '@/features/runs';
+import { unitOutcomeLabel } from '@/features/runs';
 import { formatTimestamp } from '@/format/display';
 import { messages } from '@/messages';
 import { paths } from '@/routes/paths';
@@ -66,10 +66,8 @@ function candidateColumns(): readonly DbxTableColumn<RemigrationCandidate>[] {
       id: 'unitOutcome',
       header: copy.columns.unitOutcome,
       width: 220,
-      textValue: (candidate) =>
-        candidate.unitOutcome === null ? copy.noOutcome : outcomeLabel(candidate.unitOutcome),
-      renderCell: (candidate) =>
-        candidate.unitOutcome === null ? copy.noOutcome : outcomeLabel(candidate.unitOutcome),
+      textValue: (candidate) => unitOutcomeLabel(candidate.unitOutcome),
+      renderCell: (candidate) => unitOutcomeLabel(candidate.unitOutcome),
     },
     {
       // Read again, now: an earlier run's 预检 says nothing about whether this table may

@@ -1,5 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import type { MigrationRun, MigrationTask, SourceTableSummary } from '@/contract';
+import type {
+  MigrationRun,
+  MigrationTask,
+  MigrationTaskList,
+  SourceTableSummary,
+} from '@/contract';
 import { getJson } from './http';
 import { dbxQueryKey } from './queryKeys';
 
@@ -25,10 +30,20 @@ export const sourceTableKeys = {
   ofDatabase: (sourceDatabase: string) => dbxQueryKey('source-tables', sourceDatabase),
 };
 
+/**
+ * The 迁移任务 list, and the instant the platform assembled it.
+ *
+ * The instant is part of the answer rather than something the page takes from
+ * `Date.now()`: 「最近 7 天批准的」 is measured against the same clock the 批准时间 were
+ * written on, which in the mocked world is the controllable clock and in the real one is
+ * the backend's. Taking it from the browser worked only for as long as the two happened to
+ * agree — the fixture is anchored at 2026-09-01, so a week later the window silently
+ * emptied the list.
+ */
 export function useMigrationTasks() {
   return useQuery({
     queryKey: migrationTaskKeys.all(),
-    queryFn: async () => (await getJson<ListResponse<MigrationTask>>('/migration-tasks')).items,
+    queryFn: () => getJson<MigrationTaskList>('/migration-tasks'),
   });
 }
 

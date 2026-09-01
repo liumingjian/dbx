@@ -1,7 +1,7 @@
 import type { ValidationReport } from '@/contract';
 import { formatTimestamp } from '@/format/display';
 import { messages } from '@/messages';
-import { outcomeLabel } from '@/features/runs';
+import { unitOutcomeLabel } from '@/features/runs';
 import { summariseValidationReport } from './reportSummary';
 
 /**
@@ -69,9 +69,7 @@ export function formatValidationReport(report: ValidationReport): string {
         `${copy.rows.columns.disposition} ${
           row.disposition === null ? copy.disposition.none : copy.disposition.recorded
         }`,
-        `${copy.rows.columns.unitOutcome} ${
-          row.unitOutcome === null ? copy.rows.noOutcome : outcomeLabel(row.unitOutcome)
-        }`,
+        `${copy.rows.columns.unitOutcome} ${unitOutcomeLabel(row.unitOutcome)}`,
       ].join(' · '),
     );
     for (const item of row.execution?.items ?? []) {

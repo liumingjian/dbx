@@ -169,7 +169,13 @@ const context = (
 describe('wizard stage gating', () => {
   it('stops a half-configured draft at 连接与数据库', () => {
     const gate = evaluateStageGate('connections', context(draft()));
-    expect(gate).toEqual({ blocked: true, reason: messages.wizard.gates.connectionsIncomplete });
+    expect(gate).toEqual({
+      blocked: true,
+      reason: {
+        code: 'CONNECTIONS_INCOMPLETE' as const,
+        text: messages.wizard.gates.connectionsIncomplete,
+      },
+    });
     expect(furthestReachableStage(context(draft()))).toBe('connections');
   });
 
@@ -177,7 +183,10 @@ describe('wizard stage gating', () => {
     const gate = evaluateStageGate('connections', context(configured, [source, failingTarget]));
     expect(gate).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.connectionUnusable(failingTarget.name, 'FAILED'),
+      reason: {
+        code: 'CONNECTION_UNUSABLE' as const,
+        text: messages.wizard.gates.connectionUnusable(failingTarget.name, 'FAILED'),
+      },
     });
   });
 
@@ -189,7 +198,7 @@ describe('wizard stage gating', () => {
   it('is Gate 1: an empty 迁移范围 cannot advance', () => {
     expect(evaluateStageGate('scope', context(configured))).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.noTableSelected,
+      reason: { code: 'NO_TABLE_SELECTED' as const, text: messages.wizard.gates.noTableSelected },
     });
   });
 
@@ -232,7 +241,10 @@ describe('wizard stage gating', () => {
     // Nothing is unlocked by waiting: the stage the operator is standing on still refuses.
     expect(evaluateStageGate('confirm', reading)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.executionSummaryUnread,
+      reason: {
+        code: 'EXECUTION_SUMMARY_UNREAD' as const,
+        text: messages.wizard.gates.executionSummaryUnread,
+      },
     });
     expect(mayStartMigration(reading)).toBe(false);
 
@@ -267,7 +279,10 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('tables', blocked)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.contractNotGenerated(1, 'order_header'),
+      reason: {
+        code: 'CONTRACT_NOT_GENERATED' as const,
+        text: messages.wizard.gates.contractNotGenerated(1, 'order_header'),
+      },
     });
     expect(furthestReachableStage(blocked)).toBe('tables');
     expect(isStageReachable('confirm', blocked)).toBe(false);
@@ -286,7 +301,10 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('tables', unread)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.tableConfigurationsUnread,
+      reason: {
+        code: 'TABLE_CONFIGURATIONS_UNREAD' as const,
+        text: messages.wizard.gates.tableConfigurationsUnread,
+      },
     });
   });
 
@@ -309,11 +327,14 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('tables', blocked)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.preflightNotSupported(
-        1,
-        'order_event',
-        messages.conclusion.labels.UNSUPPORTED,
-      ),
+      reason: {
+        code: 'PREFLIGHT_NOT_SUPPORTED' as const,
+        text: messages.wizard.gates.preflightNotSupported(
+          1,
+          'order_event',
+          messages.conclusion.labels.UNSUPPORTED,
+        ),
+      },
     });
     expect(isStageReachable('confirm', blocked)).toBe(false);
   });
@@ -328,11 +349,14 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('tables', blocked)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.preflightNotSupported(
-        1,
-        'order_item',
-        messages.conclusion.labels.INCONCLUSIVE,
-      ),
+      reason: {
+        code: 'PREFLIGHT_NOT_SUPPORTED' as const,
+        text: messages.wizard.gates.preflightNotSupported(
+          1,
+          'order_item',
+          messages.conclusion.labels.INCONCLUSIVE,
+        ),
+      },
     });
   });
 
@@ -345,7 +369,10 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('tables', running)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.preflightInFlight(1, 'order_item'),
+      reason: {
+        code: 'PREFLIGHT_IN_FLIGHT' as const,
+        text: messages.wizard.gates.preflightInFlight(1, 'order_item'),
+      },
     });
   });
 
@@ -357,7 +384,10 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('tables', contradictory)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.preflightBlockingFindings(1, 'order_item'),
+      reason: {
+        code: 'PREFLIGHT_BLOCKING_FINDINGS' as const,
+        text: messages.wizard.gates.preflightBlockingFindings(1, 'order_item'),
+      },
     });
   });
 
@@ -378,11 +408,14 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('tables', both)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.preflightNotSupported(
-        1,
-        'order_item',
-        messages.conclusion.labels.UNSUPPORTED,
-      ),
+      reason: {
+        code: 'PREFLIGHT_NOT_SUPPORTED' as const,
+        text: messages.wizard.gates.preflightNotSupported(
+          1,
+          'order_item',
+          messages.conclusion.labels.UNSUPPORTED,
+        ),
+      },
     });
   });
 
@@ -400,7 +433,10 @@ describe('wizard stage gating', () => {
     const ready = context({ ...configured, selectedTables: ['order_item'] });
     expect(evaluateStageGate('confirm', ready)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.writeFreezeNotConfirmed,
+      reason: {
+        code: 'WRITE_FREEZE_NOT_CONFIRMED' as const,
+        text: messages.wizard.gates.writeFreezeNotConfirmed,
+      },
     });
     expect(mayStartMigration(ready)).toBe(false);
   });
@@ -413,7 +449,10 @@ describe('wizard stage gating', () => {
     });
     expect(evaluateStageGate('confirm', blank)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.writeFreezeNotConfirmed,
+      reason: {
+        code: 'WRITE_FREEZE_NOT_CONFIRMED' as const,
+        text: messages.wizard.gates.writeFreezeNotConfirmed,
+      },
     });
     expect(mayStartMigration(blank)).toBe(false);
   });
@@ -426,7 +465,10 @@ describe('wizard stage gating', () => {
     });
     expect(evaluateStageGate('confirm', unbounded)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.writeFreezeNotConfirmed,
+      reason: {
+        code: 'WRITE_FREEZE_NOT_CONFIRMED' as const,
+        text: messages.wizard.gates.writeFreezeNotConfirmed,
+      },
     });
   });
 
@@ -442,7 +484,10 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('confirm', occupied)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.structuralProofMissing(1, 'order_item'),
+      reason: {
+        code: 'STRUCTURAL_PROOF_MISSING' as const,
+        text: messages.wizard.gates.structuralProofMissing(1, 'order_item'),
+      },
     });
     expect(mayStartMigration(occupied)).toBe(false);
   });
@@ -456,7 +501,10 @@ describe('wizard stage gating', () => {
     );
     expect(evaluateStageGate('confirm', unread)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.executionSummaryUnread,
+      reason: {
+        code: 'EXECUTION_SUMMARY_UNREAD' as const,
+        text: messages.wizard.gates.executionSummaryUnread,
+      },
     });
     expect(mayStartMigration(unread)).toBe(false);
   });
@@ -471,7 +519,7 @@ describe('wizard stage gating', () => {
     });
     expect(evaluateStageGate('confirm', ready)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.runNotStarted,
+      reason: { code: 'RUN_NOT_STARTED' as const, text: messages.wizard.gates.runNotStarted },
     });
     expect(mayStartMigration(ready)).toBe(true);
     expect(isStageReachable('monitor', ready)).toBe(false);
@@ -481,7 +529,10 @@ describe('wizard stage gating', () => {
     const ready = context({ ...configured, selectedTables: ['order_item'] });
     expect(evaluateStageGate('monitor', ready)).toEqual({
       blocked: true,
-      reason: messages.wizard.gates.stageBelongsToRun,
+      reason: {
+        code: 'STAGE_BELONGS_TO_RUN' as const,
+        text: messages.wizard.gates.stageBelongsToRun,
+      },
     });
     expect(isStageReachable('monitor', ready)).toBe(false);
   });

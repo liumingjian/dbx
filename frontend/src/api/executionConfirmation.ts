@@ -30,12 +30,19 @@ export const executionConfirmationKeys = {
 
 const draftPath = (draftId: string) => `/migration-drafts/${encodeURIComponent(draftId)}`;
 
-export function useExecutionConfirmationSummary(draftId: string) {
+/**
+ * The 执行确认 summary.
+ *
+ * `enabled` for the same reason `useDraftTableConfigurations` has one: the summary is an
+ * aggregate over the whole 迁移范围, and the stages before 执行确认 do not read it. Where
+ * it is off the summary is `null`, which **blocks** — D22's polarity, unchanged.
+ */
+export function useExecutionConfirmationSummary(draftId: string, enabled = true) {
   return useQuery({
     queryKey: executionConfirmationKeys.summary(draftId),
     queryFn: () =>
       getJson<ExecutionConfirmationSummary>(`${draftPath(draftId)}/execution-confirmation`),
-    enabled: draftId !== '',
+    enabled: enabled && draftId !== '',
   });
 }
 

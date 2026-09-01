@@ -41,6 +41,23 @@ export function outcomeLabel(outcome: TableMigrationOutcome): string {
 }
 
 /**
+ * One 表迁移单元's 技术结果, including the case where there is not one yet.
+ *
+ * 「还没有技术结果」 is a state seven surfaces have to render — the 进度矩阵, the evidence
+ * drawer, the 校验报告 table and its exported form, the 重新迁移 panel — and each of them
+ * used to spell it out against a message key of its own. Three keys for one fact is three
+ * chances for two screens to disagree about what 「没有结果」 is called, which is precisely
+ * the drift `CONTEXT.md` exists to stop. There is one sentence for it now, and it is here,
+ * beside the outcomes it stands in for.
+ *
+ * It is **not** 迁移失败 and not 取消: ADR-0004 forbids inventing per-table blame merely to
+ * populate an outcome.
+ */
+export function unitOutcomeLabel(outcome: TableMigrationOutcome | null): string {
+  return outcome === null ? messages.run.matrix.noOutcome : outcomeLabel(outcome);
+}
+
+/**
  * The 根因域 as the operator sees it.
  *
  * The contract keeps the specific domain — `CONTEXT.md` requires it to be 「retained in the

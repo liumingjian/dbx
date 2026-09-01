@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { conclusionIndicatorKind } from '@/conclusions';
+import { conclusionIndicatorKind, preflightNoticeKind } from '@/conclusions';
 import type { Preflight } from '@/contract';
-import {
-  preflightBlocks,
-  preflightIndicatorConclusion,
-  preflightNoticeKind,
-  prunableColumnsOf,
-} from './preflightExits';
+import { preflightBlocks, preflightIndicatorConclusion, prunableColumnsOf } from './preflightExits';
 
 /**
  * The judgement rules of 预检, tested where they are decided rather than through a screen.

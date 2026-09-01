@@ -1190,7 +1190,6 @@ export const messages = {
       },
       itemsOf: (parts: readonly string[]) => parts.join(' · '),
       noExecution: '没有校验执行',
-      noOutcome: '尚无技术结果',
       evidenceAction: '打开证据',
       planVersion: (version: number) => `校验计划 v${version}`,
       empty: {
@@ -1375,7 +1374,6 @@ export const messages = {
       preflight: '本次预检结论',
       contractVersion: '表写入契约版本',
     },
-    noOutcome: '技术结果未定',
     ineligible: {
       heading: '现在不能重新迁移的表',
       statement:

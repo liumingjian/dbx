@@ -66,6 +66,28 @@ export const conclusionIndicatorKind: Readonly<Record<DbxConclusion, ConclusionI
   STUCK: 'caution-major',
 };
 
+/**
+ * The Carbon notification kinds DBX allows a conclusion to be announced with.
+ *
+ * Deliberately two, and deliberately neither of Carbon's `warning` variants. `error` says
+ * 「无法迁移」; `info` says 「无法确认是否可迁移」. There is no kind for 「大概可以」 because
+ * there is no such conclusion.
+ */
+export type ConclusionNoticeKind = 'error' | 'info';
+
+/**
+ * How a blocking 预检 conclusion is announced.
+ *
+ * The same rule as the row above it, in the other visual vocabulary: `INCONCLUSIVE` is
+ * **not** a caution. Drawing 「无法判定」 as a warning teaches the operator to read it as
+ * 「有点风险但可以过」, which is the single misreading #30 says 逐表配置与预检 exists to
+ * prevent. It lives here, beside `conclusionIndicatorKind`, because a second
+ * conclusion→visual map anywhere else is how the two come to disagree.
+ */
+export function preflightNoticeKind(conclusion: PreflightConclusion): ConclusionNoticeKind {
+  return conclusion === 'INCONCLUSIVE' ? 'info' : 'error';
+}
+
 /** Every conclusion DBX can render, in the order the mapping table states them. */
 export const dbxConclusions: readonly DbxConclusion[] = [
   'SUPPORTED',

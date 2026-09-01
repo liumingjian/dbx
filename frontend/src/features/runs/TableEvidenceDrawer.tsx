@@ -6,7 +6,7 @@ import type { Diagnosis, ErrorOccurrence, TableMigrationUnitEvidence } from '@/c
 import { formatCount, formatTimestamp } from '@/format/display';
 import { messages } from '@/messages';
 import { Identifier } from '@/pages/Identifier';
-import { outcomeLabel, phaseLabel, presentRootCauseDomain } from './runVocabulary';
+import { phaseLabel, presentRootCauseDomain, unitOutcomeLabel } from './runVocabulary';
 
 /**
  * 单表证据抽屉 — one 表迁移单元's evidence, over 运行监控 (#39).
@@ -133,9 +133,7 @@ function EvidenceBody({ evidence }: { evidence: TableMigrationUnitEvidence }) {
             {copy.outcomeLabel}{' '}
             <ConclusionIndicator
               conclusion={tableMigrationConclusion(unit.outcome)}
-              label={
-                unit.outcome === null ? messages.run.matrix.noOutcome : outcomeLabel(unit.outcome)
-              }
+              label={unitOutcomeLabel(unit.outcome)}
             />
           </li>
           <li>

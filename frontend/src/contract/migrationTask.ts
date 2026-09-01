@@ -33,6 +33,19 @@ export interface MigrationTask {
   readonly latestRunStatus: MigrationRunStatus | null;
 }
 
+/**
+ * The 迁移任务 list, with the instant the platform assembled it.
+ *
+ * 「最近 7 天批准的」 is a question about *now*, and the browser's clock is not the clock
+ * the data was written against — the mock world runs on a controllable clock (ADR-0016),
+ * and a real backend runs on its own. Reading 「now」 from the same response as the tasks
+ * keeps the window and the timestamps it is measured against on one clock.
+ */
+export interface MigrationTaskList {
+  readonly items: readonly MigrationTask[];
+  readonly observedAt: IsoTimestamp;
+}
+
 /*
  * A 迁移草稿 deliberately records **no** completed-stage high-water mark. Lead decision
  * D18: 「Stage reachability is derived, never stored」 — walk the stages in journey order

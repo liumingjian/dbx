@@ -5,7 +5,7 @@ import type { RunProgressSnapshot, TableMigrationUnit } from '@/contract';
 import { formatCount, formatTimestamp } from '@/format/display';
 import { messages } from '@/messages';
 import { Identifier } from '@/pages/Identifier';
-import { outcomeLabel, phaseLabel } from './runVocabulary';
+import { phaseLabel, unitOutcomeLabel } from './runVocabulary';
 
 /**
  * 进度矩阵 — the run seen as its 表迁移单元, one row each (#38).
@@ -100,7 +100,17 @@ export function RunProgressMatrix({
           stalled.includes(unit.id) ? (
             <span className="dbx-run__phase">
               {phaseLabel(unit.phase)}
-              <ConclusionIndicator conclusion="STUCK" label={messages.phase.stuck} />
+              {/*
+                Through `tableMigrationConclusion`'s `stalled` parameter rather than a
+                literal: the conclusion→indicator decision belongs to `src/conclusions/`,
+                and a second decision spelled out in a view is how `INCONCLUSIVE` ends up a
+                caution on one screen and a failure on another (D33 — a parameter nothing
+                exercises is not implemented).
+              */}
+              <ConclusionIndicator
+                conclusion={tableMigrationConclusion(unit.outcome, true)}
+                label={messages.phase.stuck}
+              />
             </span>
           ) : (
             phaseLabel(unit.phase)
@@ -149,14 +159,11 @@ export function RunProgressMatrix({
         id: 'outcome',
         header: copy.columns.outcome,
         width: 220,
-        textValue: (unit) =>
-          unit.outcome === null ? messages.run.matrix.noOutcome : outcomeLabel(unit.outcome),
+        textValue: (unit) => unitOutcomeLabel(unit.outcome),
         renderCell: (unit) => (
           <ConclusionIndicator
             conclusion={tableMigrationConclusion(unit.outcome)}
-            label={
-              unit.outcome === null ? messages.run.matrix.noOutcome : outcomeLabel(unit.outcome)
-            }
+            label={unitOutcomeLabel(unit.outcome)}
           />
         ),
       },

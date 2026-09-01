@@ -2,29 +2,14 @@ import type { DbxConclusion } from '@/conclusions';
 import type { Preflight, PreflightConclusion } from '@/contract';
 
 /**
- * What a 预检 conclusion means for the interface around it — as pure functions, so the
- * claims can be tested without a browser and cannot drift between views.
+ * The three exits ADR-0003 gives a blocked 预检, and what a conclusion means for the stage
+ * around it — as pure functions, so the claims can be tested without a browser.
  *
- * The one this module exists for is `preflightNoticeKind`. `INCONCLUSIVE` gets its own
- * form and it is **not a caution**: drawing 「无法判定」 as a warning teaches the operator
- * to read it as 「有点风险但可以过」, which is the single misreading #30 says this stage
- * exists to prevent. The indicator side of that is already fixed in `src/conclusions/`
- * (`INCONCLUSIVE` → `unknown`); this is the notification side of the same rule, and it is
- * written here rather than inline in a component so a future edit has to argue with a test.
+ * The conclusion→**visual form** rules are not here. They live in `src/conclusions/`, which
+ * is the single site that knows which form carries which conclusion: `INCONCLUSIVE` →
+ * `unknown` for the indicator and `info` for the notification are two halves of one rule,
+ * and keeping them in two modules is how they end up disagreeing.
  */
-
-/**
- * The Carbon notification kinds DBX allows a 预检 to use.
- *
- * Deliberately two, and deliberately neither of Carbon's `warning` variants. `error` says
- * 「无法迁移」; `info` says 「无法确认是否可迁移」. There is no kind for 「大概可以」 because
- * there is no such conclusion.
- */
-export type PreflightNoticeKind = 'error' | 'info';
-
-export function preflightNoticeKind(conclusion: PreflightConclusion): PreflightNoticeKind {
-  return conclusion === 'INCONCLUSIVE' ? 'info' : 'error';
-}
 
 /** The conclusion to render, where a scan still running is a state of its own. */
 export function preflightIndicatorConclusion(

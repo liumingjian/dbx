@@ -62,7 +62,7 @@ import {
   draftTableWorkspaceOf,
   requiresZeroDateDecision,
 } from './fixtures/tableWorkspace';
-import { remigrationCandidateRows } from '@/features/remigration/candidates';
+import { serverRemigrationCandidateRows } from './remigrationCandidates';
 import { deepFreeze } from './immutable';
 import type { DraftPersistence } from './persistence';
 import type { ScenarioDefinition, SeedPlan } from './scenarios';
@@ -278,7 +278,17 @@ export type RecordValidationDispositionResult =
         /** A 校验处置 without a named 责任人 or a stated 理由 is not an audited decision. */
         | 'REASON_OR_OPERATOR_MISSING'
         /** Nothing to dispose of: this table's 校验执行 concluded `PASS`, or never ran. */
-        | 'NOTHING_TO_DISPOSE';
+        | 'NOTHING_TO_DISPOSE'
+        /**
+         * This unit already carries a 校验处置.
+         *
+         * 校验处置 is 「an operator's audited decision」, and every other audit record in
+         * this store is append-only: a 迁移运行 is immutable, a 重新迁移 is a new run
+         * rather than a retry in place, and a 校验执行 is a projection nothing may write
+         * to. A second decision that silently replaced the first operator's name, reason
+         * and instant would be the one editable link in that chain.
+         */
+        | 'ALREADY_DISPOSED';
     };
 
 /** Why a start was refused, or the 迁移任务 and 迁移运行 it produced. */
@@ -1071,7 +1081,7 @@ export function createMockStore({
     const ineligible: RemigrationCandidate[] = [];
     const now = clock.nowIso();
 
-    for (const row of remigrationCandidateRows(report)) {
+    for (const row of serverRemigrationCandidateRows(report)) {
       const fresh = freshPreflightOf(run.sourceDatabase, row.sourceTable);
       const candidate: RemigrationCandidate = {
         unitId: row.unitId,
@@ -1353,6 +1363,14 @@ export function createMockStore({
           : acceptedCheckIdsOf(row.execution);
       if (accepted.length === 0) {
         return { ok: false, code: 'NOTHING_TO_DISPOSE' };
+      }
+
+      // Append-only, like every other audit record here: a decision already recorded is
+      // not replaced, it is refused. Nothing in the interface offers a second one — 记录
+      // 校验处置 is only shown where there is none — so this answers a request that did
+      // not come from the screen.
+      if (dispositionsOf(runId).has(request.unitId)) {
+        return { ok: false, code: 'ALREADY_DISPOSED' };
       }
 
       dispositionsOf(runId).set(request.unitId, {

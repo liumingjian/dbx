@@ -64,12 +64,48 @@ export interface WizardGateContext {
  * cannot explain is indistinguishable from a bug: #30 requires a blocked state to say what
  * would unblock it, and requires that the state cannot simply be dismissed.
  */
+/**
+ * Why a stage is shut, as a **code** the product may act on and a sentence the operator
+ * reads.
+ *
+ * The two are separate because they are separate things. Whether 开始迁移 may fire, and
+ * where a typed URL lands, used to switch on string identity against the copy table — so
+ * editing a sentence in `zh-CN.ts` changed safety behaviour, silently and from the one
+ * module whose whole job is wording. A code is a fact about the gate; the sentence is how
+ * DBX explains it.
+ */
+export type StageGateReasonCode =
+  | 'CONNECTIONS_INCOMPLETE'
+  | 'CONNECTION_UNUSABLE'
+  | 'NO_TABLE_SELECTED'
+  | 'TABLE_CONFIGURATIONS_UNREAD'
+  | 'PREFLIGHT_IN_FLIGHT'
+  | 'PREFLIGHT_NOT_SUPPORTED'
+  | 'PREFLIGHT_BLOCKING_FINDINGS'
+  | 'CONTRACT_NOT_GENERATED'
+  | 'EXECUTION_SUMMARY_UNREAD'
+  | 'WRITE_FREEZE_NOT_CONFIRMED'
+  | 'STRUCTURAL_PROOF_MISSING'
+  /** Nothing is wrong: 执行确认 is left by 开始迁移, and nobody has pressed it yet. */
+  | 'RUN_NOT_STARTED'
+  /** 运行监控 and 校验报告 observe a 迁移运行, and a 迁移草稿 has none. */
+  | 'STAGE_BELONGS_TO_RUN';
+
+export interface StageGateReason {
+  readonly code: StageGateReasonCode;
+  /** The sentence shown to the operator, from `messages.wizard.gates`. */
+  readonly text: string;
+}
+
 export type StageGateResult =
-  { readonly blocked: false } | { readonly blocked: true; readonly reason: string };
+  { readonly blocked: false } | { readonly blocked: true; readonly reason: StageGateReason };
 
 const passes: StageGateResult = { blocked: false };
 
-const blockedBy = (reason: string): StageGateResult => ({ blocked: true, reason });
+const blockedBy = (code: StageGateReasonCode, text: string): StageGateResult => ({
+  blocked: true,
+  reason: { code, text },
+});
 
 function connectionById(
   connections: readonly DatabaseConnection[],
@@ -95,17 +131,18 @@ function connectionsGate({ draft, connections }: WizardGateContext): StageGateRe
     draft.targetSchema === null ||
     draft.targetSchema === ''
   ) {
-    return blockedBy(messages.wizard.gates.connectionsIncomplete);
+    return blockedBy('CONNECTIONS_INCOMPLETE', messages.wizard.gates.connectionsIncomplete);
   }
 
   for (const id of [draft.sourceConnectionId, draft.targetConnectionId]) {
     const connection = connectionById(connections, id);
     // A connection the wizard cannot even see is not one it may migrate through.
     if (connection === undefined) {
-      return blockedBy(messages.wizard.gates.connectionsIncomplete);
+      return blockedBy('CONNECTIONS_INCOMPLETE', messages.wizard.gates.connectionsIncomplete);
     }
     if (connection.latestCheck.outcome !== 'SUCCEEDED') {
       return blockedBy(
+        'CONNECTION_UNUSABLE',
         messages.wizard.gates.connectionUnusable(connection.name, connection.latestCheck.outcome),
       );
     }
@@ -123,7 +160,7 @@ function connectionsGate({ draft, connections }: WizardGateContext): StageGateRe
 function scopeGate({ draft }: WizardGateContext): StageGateResult {
   return draft.selectedTables.length > 0
     ? passes
-    : blockedBy(messages.wizard.gates.noTableSelected);
+    : blockedBy('NO_TABLE_SELECTED', messages.wizard.gates.noTableSelected);
 }
 
 /**
@@ -150,7 +187,10 @@ function scopeGate({ draft }: WizardGateContext): StageGateResult {
  */
 function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult {
   if (tableConfigurations === null) {
-    return blockedBy(messages.wizard.gates.tableConfigurationsUnread);
+    return blockedBy(
+      'TABLE_CONFIGURATIONS_UNREAD',
+      messages.wizard.gates.tableConfigurationsUnread,
+    );
   }
 
   // A conclusion that has not been reached is not a conclusion in DBX's favour.
@@ -160,6 +200,7 @@ function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult
   const firstRunning = running[0];
   if (firstRunning !== undefined) {
     return blockedBy(
+      'PREFLIGHT_IN_FLIGHT',
       messages.wizard.gates.preflightInFlight(running.length, firstRunning.sourceTable),
     );
   }
@@ -171,6 +212,7 @@ function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult
   const firstNotSupported = notSupported[0];
   if (firstNotSupported !== undefined) {
     return blockedBy(
+      'PREFLIGHT_NOT_SUPPORTED',
       messages.wizard.gates.preflightNotSupported(
         notSupported.length,
         firstNotSupported.sourceTable,
@@ -189,6 +231,7 @@ function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult
   const firstBlocked = withBlockingFindings[0];
   if (firstBlocked !== undefined) {
     return blockedBy(
+      'PREFLIGHT_BLOCKING_FINDINGS',
       messages.wizard.gates.preflightBlockingFindings(
         withBlockingFindings.length,
         firstBlocked.sourceTable,
@@ -202,6 +245,7 @@ function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult
   const first = withoutContract[0];
   if (first !== undefined) {
     return blockedBy(
+      'CONTRACT_NOT_GENERATED',
       messages.wizard.gates.contractNotGenerated(withoutContract.length, first.sourceTable),
     );
   }
@@ -233,7 +277,7 @@ function tablesGate({ tableConfigurations }: WizardGateContext): StageGateResult
  */
 function confirmGate({ executionSummary, draft }: WizardGateContext): StageGateResult {
   if (executionSummary === null) {
-    return blockedBy(messages.wizard.gates.executionSummaryUnread);
+    return blockedBy('EXECUTION_SUMMARY_UNREAD', messages.wizard.gates.executionSummaryUnread);
   }
 
   const freeze = draft.writeFreeze;
@@ -243,13 +287,14 @@ function confirmGate({ executionSummary, draft }: WizardGateContext): StageGateR
     !Number.isFinite(freeze.durationHours) ||
     freeze.durationHours <= 0
   ) {
-    return blockedBy(messages.wizard.gates.writeFreezeNotConfirmed);
+    return blockedBy('WRITE_FREEZE_NOT_CONFIRMED', messages.wizard.gates.writeFreezeNotConfirmed);
   }
 
   const gaps = executionSummary.structuralProof.gaps;
   const first = gaps[0];
   if (first !== undefined) {
     return blockedBy(
+      'STRUCTURAL_PROOF_MISSING',
       messages.wizard.gates.structuralProofMissing(
         new Set(gaps.map((gap) => gap.sourceTable)).size,
         first.sourceTable,
@@ -257,7 +302,7 @@ function confirmGate({ executionSummary, draft }: WizardGateContext): StageGateR
     );
   }
 
-  return blockedBy(messages.wizard.gates.runNotStarted);
+  return blockedBy('RUN_NOT_STARTED', messages.wizard.gates.runNotStarted);
 }
 
 /**
@@ -270,7 +315,7 @@ function confirmGate({ executionSummary, draft }: WizardGateContext): StageGateR
  */
 export function mayStartMigration(context: WizardGateContext): boolean {
   const gate = confirmGate(context);
-  return gate.blocked && gate.reason === messages.wizard.gates.runNotStarted;
+  return gate.blocked && gate.reason.code === 'RUN_NOT_STARTED';
 }
 
 /**
@@ -278,7 +323,8 @@ export function mayStartMigration(context: WizardGateContext): boolean {
  * migration run" by definition (`CONTEXT.md`). They keep their routes — every stage has its
  * own URL — but no draft is ever inside them.
  */
-const belongsToRun = (): StageGateResult => blockedBy(messages.wizard.gates.stageBelongsToRun);
+const belongsToRun = (): StageGateResult =>
+  blockedBy('STAGE_BELONGS_TO_RUN', messages.wizard.gates.stageBelongsToRun);
 
 export const wizardStageGates: Readonly<
   Record<WizardStage, (context: WizardGateContext) => StageGateResult>
@@ -328,13 +374,13 @@ export function isStageComplete(stage: WizardStage, context: WizardGateContext):
  * about *where the operator belongs*. A failed rule says: this draft's place is the stage
  * that stopped it. An unread fact says only: DBX does not know yet.
  *
- * Compared by identity against the messages, exactly as `mayStartMigration` compares
- * `runNotStarted`. The alternative is a second flag on `StageGateResult` that every gate
- * would have to remember to set.
+ * Compared by **code**, exactly as `mayStartMigration` compares `RUN_NOT_STARTED`. Never
+ * by the sentence: a reason compared by its wording makes `zh-CN.ts` a safety-relevant
+ * module, and rewording a sentence would change where a typed URL lands.
  */
-const unreadGateReasons: readonly string[] = [
-  messages.wizard.gates.tableConfigurationsUnread,
-  messages.wizard.gates.executionSummaryUnread,
+const unreadGateReasons: readonly StageGateReasonCode[] = [
+  'TABLE_CONFIGURATIONS_UNREAD',
+  'EXECUTION_SUMMARY_UNREAD',
 ];
 
 /**
@@ -360,7 +406,7 @@ export function resolveStageEntry(requested: WizardStage, context: WizardGateCon
   }
   const destination = furthestReachableStage(context);
   const gate = evaluateStageGate(destination, context);
-  return gate.blocked && unreadGateReasons.includes(gate.reason) ? requested : destination;
+  return gate.blocked && unreadGateReasons.includes(gate.reason.code) ? requested : destination;
 }
 
 export function nextStage(stage: WizardStage): WizardStage | null {
