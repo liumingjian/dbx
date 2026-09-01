@@ -1,5 +1,7 @@
 import type {
   AddCredentialVersionRequest,
+  ExecutionConfirmationSummary,
+  ExecutionSummaryTable,
   CredentialVersion,
   DatabaseConnection,
   DraftMappingRule,
@@ -13,7 +15,11 @@ import type {
   PruneColumnRequest,
   RecordMappingRuleRequest,
   RegisterDatabaseConnectionRequest,
+  SourceBaselineEntry,
   SourceTableSummary,
+  StructuralProofGapStatement,
+  UnresolvedFinding,
+  WriteFreezeDeclaration,
 } from '@/contract';
 import type { ControllableClock } from './clock';
 import { seedDatabaseConnections, unreachableConnectionIds } from './fixtures/databaseConnections';
@@ -24,6 +30,7 @@ import {
   draftTableWorkspaceOf,
   requiresZeroDateDecision,
 } from './fixtures/tableWorkspace';
+import { deepFreeze } from './immutable';
 import type { DraftPersistence } from './persistence';
 import type { ScenarioDefinition } from './scenarios';
 
@@ -106,7 +113,48 @@ export interface MockStore {
    * anything else.
    */
   rerunPreflight(draftId: string, sourceTable: string): DraftTableWorkspace | undefined;
+
+  /**
+   * Everything 执行确认 shows for one 迁移草稿, assembled in one read.
+   *
+   * Assembled server-side rather than added up in the browser, because two of its
+   * statements are not the frontend's to make: whether the platform can establish a
+   * 结构证明 for every table, and which 预检发现 are still on the record. Returns
+   * `undefined` when there is no such draft, or when the draft has no source/target pair
+   * yet — there is nothing to summarise before that.
+   */
+  summariseExecutionConfirmation(draftId: string): ExecutionConfirmationSummary | undefined;
+
+  /**
+   * Turns a 迁移草稿 into a 迁移任务 and generates its first 迁移运行.
+   *
+   * This is the hinge of the whole audit chain. `CONTEXT.md` makes approval part of what a
+   * 迁移任务 *is* and a 迁移运行 「one immutable execution attempt」, so the transition is
+   * one step: the draft is consumed, the task is recorded as approved by the 写冻结's
+   * accountable operator, and the run is frozen with the scope and 源基线 captured at this
+   * instant. Nothing afterwards can edit it — see `./immutable.ts`.
+   *
+   * The refusals below are the same constraints the wizard's gate states. The gate is what
+   * the operator sees; this is what makes the constraint true even for a request that
+   * never went through it.
+   */
+  startMigrationRun(draftId: string, freeze: WriteFreezeDeclaration): StartMigrationRunResult;
 }
+
+/** Why a start was refused, or the 迁移任务 and 迁移运行 it produced. */
+export type StartMigrationRunResult =
+  | { readonly ok: true; readonly task: MigrationTask; readonly run: MigrationRun }
+  | {
+      readonly ok: false;
+      readonly code:
+        | 'NOT_FOUND'
+        /** Gate 5: 「没有写冻结确认就无法启动」. */
+        | 'WRITE_FREEZE_NOT_CONFIRMED'
+        /** Gate 6: 「没有结构证明就不会开始写入目标」. */
+        | 'STRUCTURAL_PROOF_MISSING'
+        /** A table in the 迁移范围 that stage three's gate would not have let through. */
+        | 'SCOPE_NOT_APPROVABLE';
+    };
 
 export interface MockStoreOptions {
   readonly scenario: ScenarioDefinition;
@@ -114,8 +162,18 @@ export interface MockStoreOptions {
   readonly draftPersistence: DraftPersistence;
 }
 
-/** The identifier of the seeded 迁移草稿; see `SeedPlan.migrationDrafts`. */
+/** The identifier of the 迁移草稿 seeded at 逐表配置与预检; see `SeedPlan.migrationDrafts`. */
 export const SEEDED_DRAFT_ID = 'draft-ready-for-tables';
+
+/**
+ * The identifier of the 迁移草稿 seeded at 执行确认 (lead decision D22).
+ *
+ * Stage four is four client-side navigations and a 1200-table selection away from the
+ * start of the wizard, and its whole subject is what an operator may *not* do once they
+ * are standing in front of the start button. A fixed-id seed is what lets a review link —
+ * and #42's coverage matrix — land there directly, in a chosen scenario, on first paint.
+ */
+export const CONFIRM_DRAFT_ID = 'draft-ready-for-confirm';
 
 /**
  * How long a rerun of one table's 预检 takes, in **mock** milliseconds.
@@ -157,6 +215,24 @@ export function createMockStore({
    * the draft is already there. `SEEDED_DRAFT_ID` is what a review link and #42's coverage
    * matrix address.
    */
+  /** The shape every seeded 迁移草稿 shares: the pair, the databases, nothing decided. */
+  const seededDraftBase = (id: string, now: string) => ({
+    id,
+    name: '',
+    createdAt: now,
+    updatedAt: now,
+    sourceConnectionId: 'conn-mysql-orders',
+    sourceDatabase: 'orders',
+    targetConnectionId: 'conn-pg-analytics',
+    targetSchema: 'orders_migrated',
+    scopeKind: 'SELECTED_TABLES' as const,
+    excludedTables: [] as readonly string[],
+    mappingRules: [],
+    prunedColumns: [],
+    writeFreeze: null,
+    completedStages: ['connections', 'scope'] as const,
+  });
+
   if (seedPlan.migrationDrafts === 'ready-for-tables' && drafts.length === 0) {
     const now = clock.nowIso();
     const generated = generateSourceTables({ seed: scenario.seed, sourceDatabase: 'orders' });
@@ -193,23 +269,67 @@ export function createMockStore({
 
     drafts = [
       {
-        id: SEEDED_DRAFT_ID,
-        name: '',
-        createdAt: now,
-        updatedAt: now,
-        sourceConnectionId: 'conn-mysql-orders',
-        sourceDatabase: 'orders',
-        targetConnectionId: 'conn-pg-analytics',
-        targetSchema: 'orders_migrated',
-        scopeKind: 'SELECTED_TABLES',
+        ...seededDraftBase(SEEDED_DRAFT_ID, now),
         // Generation order, so the 迁移范围 opens the same way twice.
         selectedTables: generated
           .filter((table) => scope.has(table.name))
           .map((table) => table.name),
-        excludedTables: [],
-        mappingRules: [],
+      },
+    ];
+  }
+
+  /**
+   * A 迁移草稿 already standing at 执行确认, with a fixed identifier.
+   *
+   * Every table in its 迁移范围 satisfies stage three's gate, because that is the only way
+   * a draft reaches stage four at all: a `SUPPORTED` 预检 with no blocking finding and a
+   * complete 表写入契约. The scope is chosen by *asking the same assembly the stage asks*
+   * rather than by trusting the generator's own label, so the seed cannot drift away from
+   * the gate and leave stage four unreachable.
+   *
+   * Two conditions are deliberately present. Some tables are 大记录表 whose 预检 found
+   * values above 1 MiB and judged them non-blocking — those are the 未解决的发现 the
+   * summary has to put in front of the operator. And two `UNSUPPORTED` tables are recorded
+   * as 显式排除 rather than merely absent, because 「显式排除是可复核的例外」.
+   */
+  if (seedPlan.migrationDrafts === 'ready-for-confirm' && drafts.length === 0) {
+    const now = clock.nowIso();
+    const generated = generateSourceTables({ seed: scenario.seed, sourceDatabase: 'orders' });
+    const approvable = (table: SourceTableSummary): boolean => {
+      const configuration = draftTableConfigurationOf({
+        seed: scenario.seed,
+        table,
+        userRules: [],
         prunedColumns: [],
-        completedStages: ['connections', 'scope'],
+        preflightInFlight: false,
+        generatedAt: now,
+      });
+      return (
+        configuration.preflightConclusion === 'SUPPORTED' &&
+        configuration.blockingFindingCount === 0 &&
+        configuration.contractVersion !== null
+      );
+    };
+
+    const candidates = generated.filter(approvable);
+    const withFindings = candidates.filter((table) => table.largeRecordTable);
+    const scope = new Set<string>(withFindings.slice(0, 2).map((table) => table.name));
+    for (const table of candidates) {
+      if (scope.size >= 12) break;
+      scope.add(table.name);
+    }
+
+    drafts = [
+      {
+        ...seededDraftBase(CONFIRM_DRAFT_ID, now),
+        selectedTables: generated
+          .filter((table) => scope.has(table.name))
+          .map((table) => table.name),
+        excludedTables: generated
+          .filter((table) => table.preflightConclusion === 'UNSUPPORTED')
+          .slice(0, 2)
+          .map((table) => table.name),
+        completedStages: ['connections', 'scope', 'tables'],
       },
     ];
   }
@@ -274,6 +394,120 @@ export function createMockStore({
       return false;
     }
     return true;
+  };
+
+  /**
+   * One table's entry in the 源基线.
+   *
+   * `CONTEXT.md` lists 「estimated row count」 under 源基线's `_Avoid_`: a baseline is an
+   * exact count captured while source writes are frozen, and the discovery estimate is a
+   * different number reached a different way. The mock therefore derives a figure that is
+   * deterministic but deliberately *not* the estimate, so nothing downstream can quietly
+   * treat one as the other.
+   */
+  const baselineEntryOf = (table: SourceTableSummary | undefined): SourceBaselineEntry => {
+    const estimate = table?.estimatedRowCount ?? 0;
+    const exactRowCount = Math.max(0, estimate - (estimate % 97));
+    return {
+      sourceTable: table?.name ?? '',
+      exactRowCount,
+      terminalPrimaryKeyValue: exactRowCount === 0 ? null : String(exactRowCount),
+    };
+  };
+
+  /**
+   * 执行确认's summary, assembled from the same workspace every other stage reads.
+   *
+   * Derived rather than stored, and derived from the identical assembly stage three shows,
+   * for the reason `draftTableConfigurationOf` gives: a cheaper approximation is how a
+   * summary and the screen behind it end up disagreeing about what is about to be run.
+   */
+  const summaryOf = (
+    draft: MigrationDraft | undefined,
+  ): ExecutionConfirmationSummary | undefined => {
+    if (
+      draft === undefined ||
+      draft.sourceConnectionId === null ||
+      draft.sourceDatabase === null ||
+      draft.targetConnectionId === null ||
+      draft.targetSchema === null
+    ) {
+      return undefined;
+    }
+    const source = connections.get(draft.sourceConnectionId);
+    const target = connections.get(draft.targetConnectionId);
+    if (source === undefined || target === undefined) {
+      return undefined;
+    }
+
+    const byName = sourceTablesOf(draft);
+    const tables: ExecutionSummaryTable[] = [];
+    const unresolvedFindings: UnresolvedFinding[] = [];
+    const gaps: StructuralProofGapStatement[] = [];
+
+    for (const name of draft.selectedTables) {
+      const table = byName.get(name);
+      if (table === undefined) {
+        continue;
+      }
+      const workspace = workspaceOf(draft, table);
+      const contract = workspace.tableWriteContract;
+      tables.push({
+        sourceTable: workspace.sourceTable,
+        targetTable: workspace.targetTable,
+        preflightConclusion: workspace.preflight.conclusion,
+        contractVersion: contract?.version ?? null,
+        contractColumnCount: contract?.columns.length ?? 0,
+        largeRecordTable: workspace.preflight.largeRecordTable,
+        prunedColumnCount: workspace.prunedColumns.length,
+      });
+      for (const finding of workspace.preflight.findings) {
+        unresolvedFindings.push({
+          sourceTable: workspace.sourceTable,
+          code: finding.code,
+          sourceColumn: finding.sourceColumn,
+          blocking: finding.blocking,
+          detail: finding.detail,
+        });
+      }
+      // A table with no approved 表写入契约 has nothing for a catalog comparison to compare
+      // against, so DBX cannot promise it a 结构证明 (ADR-0011).
+      if (contract === null) {
+        gaps.push({ sourceTable: name, gap: 'CONTRACT_NOT_APPROVED' });
+      }
+    }
+
+    // ADR-0011: 「A first run encountering an existing target table fails review rather
+    // than reusing, truncating, or replacing it」 — ownership and structural history are
+    // unproven, so no 结构证明 can be established for it. Which target coordinates are
+    // already occupied is a server-side fact, which is exactly why the scenario seeds it.
+    if (seedPlan.targetSchema === 'occupied') {
+      const first = tables[0];
+      if (first !== undefined) {
+        gaps.push({ sourceTable: first.sourceTable, gap: 'TARGET_TABLE_EXISTS' });
+      }
+    }
+
+    return {
+      draftId: draft.id,
+      sourceConnectionId: source.id,
+      sourceConnectionName: source.name,
+      sourceDatabase: draft.sourceDatabase,
+      targetConnectionId: target.id,
+      targetConnectionName: target.name,
+      targetSchema: draft.targetSchema,
+      scopeKind: draft.scopeKind,
+      tables,
+      excludedTables: draft.excludedTables,
+      unresolvedFindings,
+      structuralProof: {
+        // Counted over distinct tables: one table can be short of a 结构证明 for more than
+        // one reason, and a count that double-subtracted would understate the scope.
+        provableTableCount: tables.length - new Set(gaps.map((entry) => entry.sourceTable)).size,
+        gaps,
+      },
+      assembledAt: clock.nowIso(),
+    };
   };
 
   const workspaceOf = (draft: MigrationDraft, table: SourceTableSummary): DraftTableWorkspace =>
@@ -429,6 +663,7 @@ export function createMockStore({
         excludedTables: [],
         mappingRules: [],
         prunedColumns: [],
+        writeFreeze: null,
         completedStages: [],
         ...patch,
       };
@@ -613,6 +848,116 @@ export function createMockStore({
       }
       markPreflightRerun(draftId, sourceTable);
       return workspaceOf(draft, table);
+    },
+
+    summariseExecutionConfirmation(draftId) {
+      return summaryOf(drafts.find((entry) => entry.id === draftId));
+    },
+
+    startMigrationRun(draftId, freeze) {
+      const index = drafts.findIndex((entry) => entry.id === draftId);
+      const draft = drafts[index];
+      const summary = summaryOf(draft);
+      if (draft === undefined || summary === undefined) {
+        return { ok: false, code: 'NOT_FOUND' };
+      }
+
+      // Gate 5, restated where it cannot be walked around. A 写冻结 with no accountable
+      // operator or no 时限 is the 「permanent checkbox」 `CONTEXT.md` rules out.
+      if (
+        freeze.accountableOperator.trim() === '' ||
+        !Number.isFinite(freeze.durationHours) ||
+        freeze.durationHours <= 0
+      ) {
+        return { ok: false, code: 'WRITE_FREEZE_NOT_CONFIRMED' };
+      }
+
+      // Only a `SUPPORTED` 预检 may be approved, and a table with no 表写入契约 has
+      // nothing a 结构证明 could compare against (ADR-0011).
+      if (
+        summary.tables.length === 0 ||
+        summary.tables.some(
+          (table) => table.preflightConclusion !== 'SUPPORTED' || table.contractVersion === null,
+        )
+      ) {
+        return { ok: false, code: 'SCOPE_NOT_APPROVABLE' };
+      }
+
+      // Gate 6. The refusal is the server's, which is where it actually lives.
+      if (summary.structuralProof.gaps.length > 0) {
+        return { ok: false, code: 'STRUCTURAL_PROOF_MISSING' };
+      }
+
+      const now = clock.nowIso();
+      const expiresAt = new Date(clock.now() + freeze.durationHours * 60 * 60 * 1000).toISOString();
+      const taskId = nextId('task');
+      const runId = `${taskId}-run-1`;
+      const byName = sourceTablesOf(draft);
+
+      const run: MigrationRun = {
+        id: runId,
+        taskId,
+        status: 'PREPARING',
+        startedAt: now,
+        endedAt: null,
+        // Snapshotted rather than referenced: 「A migration run freezes the database,
+        // schema, effective connection semantics … it uses」 (`CONTEXT.md`), so a later
+        // edit to either 数据库连接 does not reach backwards into this execution.
+        sourceConnectionId: summary.sourceConnectionId,
+        sourceDatabase: summary.sourceDatabase,
+        targetConnectionId: summary.targetConnectionId,
+        targetSchema: summary.targetSchema,
+        writeFreeze: {
+          accountableOperator: freeze.accountableOperator.trim(),
+          confirmedAt: now,
+          expiresAt,
+          // 「source data covered by a migration run」: the commitment covers the source
+          // database this run reads, and says so rather than leaving it implied.
+          scope: summary.sourceDatabase,
+          changeReference: freeze.changeReference,
+          declaredBrokenAt: null,
+        },
+        sourceBaseline: {
+          capturedAt: now,
+          entries: summary.tables.map((table) => baselineEntryOf(byName.get(table.sourceTable))),
+        },
+        selectedTableCount: summary.tables.length,
+        excludedTableCount: summary.excludedTables.length,
+        cancellationRequestedAt: null,
+      };
+
+      const task: MigrationTask = {
+        id: taskId,
+        // The task is named by the pair it moves, in the identifiers the operator chose.
+        name: `${summary.sourceDatabase} → ${summary.targetSchema}`,
+        databasePair: { sourceDialect: 'MYSQL_8_0', targetDialect: 'POSTGRESQL_15' },
+        sourceConnectionId: summary.sourceConnectionId,
+        sourceDatabase: summary.sourceDatabase,
+        targetConnectionId: summary.targetConnectionId,
+        targetSchema: summary.targetSchema,
+        // Approval *is* what a 迁移任务 is, and the accountable operator of the 写冻结 is
+        // the person who made it.
+        approvedAt: now,
+        approvedBy: run.writeFreeze.accountableOperator,
+        selectedTableCount: run.selectedTableCount,
+        runCount: 1,
+        latestRunId: run.id,
+        latestRunStatus: run.status,
+      };
+
+      // Frozen before it is reachable, so there is no instant in which the record exists
+      // and is still writable. A 迁移运行 is 「one immutable execution attempt」, and this
+      // is where that stops being a comment.
+      runs.set(run.id, deepFreeze(run));
+      tasks.set(task.id, deepFreeze(task));
+
+      // The 迁移草稿 is consumed rather than kept beside its task: a draft is 「unapproved
+      // … and may be deleted without trace」, and one that outlived its approval would be
+      // a second, editable copy of a scope that is now audit evidence.
+      drafts = [...drafts.slice(0, index), ...drafts.slice(index + 1)];
+      flushDrafts();
+
+      return { ok: true, task, run };
     },
   };
 }

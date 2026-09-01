@@ -8,6 +8,7 @@ import type {
 } from './primitives';
 import type { MigrationRunStatus } from './migrationRun';
 import type { MappingRule } from './tableConfiguration';
+import type { WriteFreezeDeclaration } from './executionConfirmation';
 
 /**
  * A migration task is a *user-approved* migration of one source MySQL database into one
@@ -102,6 +103,16 @@ export interface MigrationDraft {
   readonly mappingRules: readonly DraftMappingRule[];
   /** The columns cut out of the draft's tables, keyed by table (ADR-0003). */
   readonly prunedColumns: readonly DraftPrunedColumn[];
+  /**
+   * The 写冻结 the operator has committed to at 执行确认, or `null` while there is none.
+   *
+   * It belongs to the draft rather than to a component's state for the same reason the
+   * 映射规则 do: it is a decision the operator made, it has to survive a refresh, and the
+   * wizard's gate is a pure function of the draft. It is a *declaration* and not yet the
+   * run's 写冻结 — the accountable operator and the 时限 are stated here, and the platform
+   * stamps `confirmedAt` and `expiresAt` from its own clock when the 迁移运行 is created.
+   */
+  readonly writeFreeze: WriteFreezeDeclaration | null;
   readonly completedStages: readonly MigrationDraftStage[];
 }
 

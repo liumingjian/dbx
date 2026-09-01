@@ -23,14 +23,15 @@ export const DRAFT_STORAGE_KEY = 'dbx.migration-drafts';
 
 /**
  * Bumped whenever the persisted shape changes — version 2 added the draft's scope kind
- * (#34), version 3 the user 映射规则 of its per-table configuration (#35), and version 4
- * the columns cut out of a table by ADR-0003's second exit (#36). `CONTEXT.md` counts
+ * (#34), version 3 the user 映射规则 of its per-table configuration (#35), version 4
+ * the columns cut out of a table by ADR-0003's second exit (#36), and version 5 the
+ * 写冻结 the operator declares at 执行确认 (#37). `CONTEXT.md` counts
  * per-table configuration as part of a 迁移草稿, so all of it has to survive a refresh. A
  * payload written by an older version is discarded rather than migrated: a draft is
  * discardable by definition, so guessing at a stale shape would buy nothing and could
  * resurrect a half-valid selection.
  */
-export const DRAFT_SCHEMA_VERSION = 4;
+export const DRAFT_SCHEMA_VERSION = 5;
 
 interface PersistedPayload {
   readonly schemaVersion: number;

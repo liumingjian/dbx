@@ -169,6 +169,59 @@ describe('messages module', () => {
     expect(reason).toContain('显式排除该表');
   });
 
+  it('never lets a 写冻结 be a permanent checkbox', () => {
+    // `Write freeze`'s `_Avoid_` names 「permanent checkbox」 outright, and its definition
+    // makes an accountable operator and an expiry part of what a freeze *is*. So the
+    // interface asks for both by name, and the gate's refusal says so too.
+    const confirm = messages.wizard.confirm;
+    expect(confirm.freezeHeading).toBe('写冻结');
+    expect(confirm.operatorLabel).toBe('责任人');
+    expect(confirm.durationLabel).toBe('时限');
+    expect(confirm.durationOption(8)).toBe('8 小时');
+    expect(messages.wizard.gates.writeFreezeNotConfirmed).toContain('责任人');
+    expect(messages.wizard.gates.writeFreezeNotConfirmed).toContain('时限');
+    // 「externally enforced」: DBX records the commitment, it does not impose it.
+    expect(confirm.freezeConstraint).toContain('DBX 只记录');
+  });
+
+  it('states Gate 6 as a constraint rather than as something the frontend performed', () => {
+    // 结构证明 is 「the deterministic comparison of the actual PostgreSQL table … against
+    // the approved table write contract. Only zero difference permits the Sink to start」,
+    // and it happens server-side inside the run (lead decision D11). The copy says both:
+    // what the rule is, and who establishes it.
+    const confirm = messages.wizard.confirm;
+    expect(confirm.proofHeading).toBe('结构证明');
+    expect(confirm.proofConstraint).toContain('表写入契约');
+    expect(confirm.proofConstraint).toContain('只有零差异');
+    expect(confirm.proofConstraint).toContain('不会向目标表写入');
+    expect(confirm.proofConstraint).toContain('由平台在迁移运行内');
+    expect(messages.wizard.gates.structuralProofMissing(1, 'order_item')).toContain(
+      '没有结构证明，DBX 不会开始写入目标表',
+    );
+    // ADR-0011: an existing target table 「fails review rather than reusing, truncating,
+    // or replacing it」 — the copy must not soften that into a reuse.
+    expect(confirm.proofGaps.TARGET_TABLE_EXISTS).toContain('不会复用、清空或替换');
+  });
+
+  it('says a 迁移运行 is an immutable snapshot rather than an editable plan', () => {
+    // `Migration run`: 「one immutable execution attempt」, with 「retry in place」 and
+    // 「resumed run」 under `_Avoid_`. The dialog is where the operator consents to that,
+    // so it is where the sentence has to appear.
+    expect(messages.wizard.confirm.start.body).toContain('不可变的执行快照');
+    expect(messages.wizard.confirm.start.body).toContain('范围日后不可篡改');
+    expect(messages.wizard.confirm.start.challengeHelper).toContain('不能顺手点过');
+  });
+
+  it('never calls a 未解决的发现 harmless', () => {
+    // A blocking finding cannot reach 执行确认 at all, so what is listed there is what
+    // nobody resolved. The wording says it travels with the migration rather than
+    // implying it stopped mattering once the stage let the table through.
+    const notice = messages.wizard.confirm.findingsNotice('3');
+    expect(notice).toContain('未解决的发现');
+    expect(notice).toContain('会随这次迁移一起被带走');
+    expect(notice).not.toContain('可以忽略');
+  });
+
   it('keeps the two selection scopes verbally distinct', () => {
     // ADR-0015 leaves cross-page selection semantics to DBX. "Select all" that silently
     // means "this page" is the mistake the wording exists to prevent.

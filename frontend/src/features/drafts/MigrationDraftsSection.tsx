@@ -50,7 +50,12 @@ export function MigrationDraftsSection() {
   const resumePath = (draft: MigrationDraft) =>
     paths.wizardStage(
       draft.id,
-      furthestReachableStage({ draft, connections, tableConfigurations: null }),
+      furthestReachableStage({
+        draft,
+        connections,
+        tableConfigurations: null,
+        executionSummary: null,
+      }),
     );
 
   const startDraft = () =>

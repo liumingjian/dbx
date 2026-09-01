@@ -33,6 +33,13 @@ export type MockResource =
    * discovery read behind stage two is healthy.
    */
   | 'draftTableConfigurations'
+  /**
+   * 执行确认 (#37): the assembled pre-start summary of one 迁移草稿. Faulted on its own
+   * because stage four has to be reachable while everything behind it is healthy — a
+   * summary that will not load is a state the last stage before a production migration
+   * must be able to show honestly.
+   */
+  | 'executionConfirmation'
   | 'validationExecutions';
 
 /**
@@ -63,7 +70,17 @@ export interface SeedPlan {
    * deterministic identifier. Default scenarios seed none: an empty 迁移任务 page is a
    * state of its own, and a phantom draft would take it away.
    */
-  readonly migrationDrafts: 'none' | 'ready-for-tables';
+  readonly migrationDrafts: 'none' | 'ready-for-tables' | 'ready-for-confirm';
+  /**
+   * Whether the target PostgreSQL schema already holds a table the 迁移范围 would create.
+   *
+   * ADR-0011: 「A first run encountering an existing target table fails review rather than
+   * reusing, truncating, or replacing it」 — its ownership and structural history are
+   * unproven, so DBX cannot establish a 结构证明 for it. That is a server-side fact about
+   * the target catalog, which is why it is seeded here rather than decided in the browser,
+   * and it is what makes Gate 6 reviewable at all.
+   */
+  readonly targetSchema: 'empty' | 'occupied';
   /**
    * The shape a migration run takes as the clock advances. Consumed from #38 onwards;
    * declared here because the run scenarios ADR-0016 requires are part of *this* registry,
@@ -102,6 +119,7 @@ const standardSeedPlan: SeedPlan = {
   databaseConnections: 'standard',
   migrationTasks: 'standard',
   migrationDrafts: 'none',
+  targetSchema: 'empty',
   runPlan: 'all-tables-succeed',
   preflight: 'all-supported',
 };
@@ -151,6 +169,7 @@ const definitions: readonly ScenarioDefinition[] = [
       migrationRuns: { kind: 'pending' },
       tableMigrationUnits: { kind: 'pending' },
       draftTableConfigurations: { kind: 'pending' },
+      executionConfirmation: { kind: 'pending' },
       validationExecutions: { kind: 'pending' },
     },
     covers: ['loading'],
@@ -169,6 +188,7 @@ const definitions: readonly ScenarioDefinition[] = [
       migrationRuns: { kind: 'failure', status: 503 },
       tableMigrationUnits: { kind: 'failure', status: 503 },
       draftTableConfigurations: { kind: 'failure', status: 503 },
+      executionConfirmation: { kind: 'failure', status: 503 },
       validationExecutions: { kind: 'failure', status: 503 },
     },
     covers: ['error'],
@@ -206,6 +226,45 @@ const definitions: readonly ScenarioDefinition[] = [
     draftPersistence: 'memory',
     seedPlan: { ...standardSeedPlan, migrationDrafts: 'ready-for-tables' },
     transport: { draftTableConfigurations: { kind: 'failure', status: 503 } },
+    covers: ['error'],
+  }),
+  // 执行确认 on its own (#37): a 迁移草稿 whose every table has cleared stage three, so
+  // the last stage before a production migration is reachable on first paint.
+  scenario({
+    id: 'stage-confirm',
+    summary: 'A draft standing at 执行确认 with no 写冻结 confirmed yet.',
+    seed: 20260901,
+    clockRate: DEFAULT_CLOCK_RATE,
+    draftPersistence: 'memory',
+    seedPlan: { ...standardSeedPlan, migrationDrafts: 'ready-for-confirm' },
+    transport: {},
+    covers: [],
+  }),
+  scenario({
+    id: 'structural-proof-missing',
+    summary: 'The target schema already holds one of the tables, so no 结构证明 is possible.',
+    seed: 20260901,
+    clockRate: DEFAULT_CLOCK_RATE,
+    draftPersistence: 'memory',
+    // Gate 6 is stated rather than enforced by the frontend (lead decision D11): structural
+    // proof is server-side, so what this scenario makes reviewable is the refusal — the
+    // summary reports a missing 结构证明 and the run cannot be started.
+    seedPlan: {
+      ...standardSeedPlan,
+      migrationDrafts: 'ready-for-confirm',
+      targetSchema: 'occupied',
+    },
+    transport: {},
+    covers: ['blocked'],
+  }),
+  scenario({
+    id: 'stage-confirm-error',
+    summary: 'The 执行确认 summary read fails, so stage four must offer a retry.',
+    seed: 20260901,
+    clockRate: DEFAULT_CLOCK_RATE,
+    draftPersistence: 'memory',
+    seedPlan: { ...standardSeedPlan, migrationDrafts: 'ready-for-confirm' },
+    transport: { executionConfirmation: { kind: 'failure', status: 503 } },
     covers: ['error'],
   }),
   scenario({
