@@ -672,6 +672,15 @@ export const messages = {
       previousRunAction: '查看上一次迁移运行',
       scope: (runCount: number, taskCount: number) =>
         `本次迁移运行的选定表数是 ${runCount} 张；迁移任务的选定表数是 ${taskCount} 张。本次迁移运行只覆盖它自己的选定范围，不是整个迁移任务的重跑。`,
+      /**
+       * While the 迁移任务 has not been read yet.
+       *
+       * Falling back to the run's own count for both numbers would print 「N 张 / N 张」 —
+       * which is the one sentence this line exists to prevent, and it would be a claim
+       * nobody made rather than a fact nobody has yet.
+       */
+      scopeWithoutTask: (runCount: number) =>
+        `本次迁移运行的选定表数是 ${runCount} 张。迁移任务的选定表数还没有读到，因此这里先不与它比较。`,
     },
     /**
      * 「新运行重新执行连接检查、预检、写冻结确认、源基线与表写入契约」 (#41).

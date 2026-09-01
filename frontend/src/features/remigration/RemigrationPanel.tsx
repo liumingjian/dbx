@@ -78,9 +78,7 @@ function candidateColumns(): readonly DbxTableColumn<RemigrationCandidate>[] {
       header: copy.columns.preflight,
       width: 180,
       textValue: (candidate) => messages.conclusion.labels[candidate.preflightConclusion],
-      renderCell: (candidate) => (
-        <ConclusionIndicator conclusion={candidate.preflightConclusion} />
-      ),
+      renderCell: (candidate) => <ConclusionIndicator conclusion={candidate.preflightConclusion} />,
     },
     {
       id: 'contractVersion',

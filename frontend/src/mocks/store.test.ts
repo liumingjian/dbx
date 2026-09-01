@@ -117,3 +117,162 @@ describe('startMigrationRun', () => {
     expect(store.listMigrationTasks().map((task) => task.id)).toEqual(taskIdsBefore);
   });
 });
+
+/**
+ * 重新迁移 as the store performs it (#41).
+ *
+ * The journey is asserted at seam ① (`e2e/re-migration.spec.ts`). What is checked here is
+ * the property no screenshot can show: that a re-migration **creates** a record and
+ * **touches nothing**. `CONTEXT.md` lists 「retry in place」 under 迁移运行's `_Avoid_`, so
+ * the interesting assertions below are the negative ones — the earlier run comes out of
+ * the store byte-identical, and still refuses a write.
+ */
+describe('startRemigration', () => {
+  const remigrationScenario = 'inconclusive-validation';
+  const seededRunId = 'run-monitored';
+
+  it('creates a new 迁移运行 over a narrower scope and leaves the earlier one untouched', () => {
+    const store = storeOf(remigrationScenario);
+    const before = store.getMigrationRun(seededRunId);
+    const offer = store.describeRemigration(seededRunId);
+    expect(before).toBeDefined();
+    expect(offer).toBeDefined();
+    if (before === undefined || offer === undefined) return;
+    expect(offer.candidates.length).toBeGreaterThan(0);
+    // Narrower by construction: only the tables whose own result is undetermined.
+    expect(offer.candidates.length).toBeLessThan(before.selectedTableCount);
+
+    const started = store.startRemigration(seededRunId, {
+      unitIds: offer.candidates.map((candidate) => candidate.unitId),
+      writeFreeze: freeze,
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    expect(started.run.id).not.toBe(seededRunId);
+    expect(started.run.taskId).toBe(before.taskId);
+    expect(started.run.origin).toEqual({ kind: 'REMIGRATION', ofRunId: seededRunId });
+    // Its own selected scope, and a smaller one than the run it came from.
+    expect(started.run.selectedTableCount).toBe(offer.candidates.length);
+    expect(started.run.selectedTableCount).toBeLessThan(before.selectedTableCount);
+    expect(started.run.sourceBaseline.entries).toHaveLength(offer.candidates.length);
+    // A rerun creates new 表迁移单元 rather than reopening the old ones, so no unit
+    // identifier is shared between the two attempts.
+    const previousUnitIds = new Set(offer.candidates.map((candidate) => candidate.unitId));
+    for (const unit of store.getRunProgress(started.run.id)?.units ?? []) {
+      expect(previousUnitIds.has(unit.id)).toBe(false);
+    }
+
+    // The history now holds both attempts, and the earlier one is exactly as it was.
+    const runs = store.listMigrationRuns(before.taskId);
+    expect(runs.map((run) => run.id)).toContain(started.run.id);
+    expect(runs.map((run) => run.id)).toContain(seededRunId);
+    expect(store.getMigrationTask(before.taskId)?.runCount).toBe(2);
+
+    const after = store.getMigrationRun(seededRunId);
+    expect(after?.selectedTableCount).toBe(before.selectedTableCount);
+    expect(after?.startedAt).toBe(before.startedAt);
+    expect(after?.writeFreeze).toEqual(before.writeFreeze);
+    expect(after?.sourceBaseline).toEqual(before.sourceBaseline);
+    expect(after?.origin).toEqual({ kind: 'INITIAL' });
+    // Still frozen: nothing about starting another run made the first one writable.
+    expect(() => {
+      (after as unknown as { selectedTableCount: number }).selectedTableCount = 0;
+    }).toThrow(TypeError);
+  });
+
+  it('establishes its own evidence rather than carrying the earlier run’s forward', () => {
+    const store = storeOf(remigrationScenario);
+    const previous = store.getMigrationRun(seededRunId);
+    const offer = store.describeRemigration(seededRunId);
+    if (previous === undefined || offer === undefined) return;
+
+    const started = store.startRemigration(seededRunId, {
+      unitIds: offer.candidates.map((candidate) => candidate.unitId),
+      writeFreeze: freeze,
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    const run = started.run;
+
+    // 「A rerun freshly tests connections and capabilities … obtains a new write-freeze
+    // commitment and source baseline, regenerates write contracts」 (ADR-0006). Every
+    // instant below is this run's own, and none of them is the earlier run's.
+    expect(run.establishedEvidence.connectionChecks).toHaveLength(2);
+    for (const check of run.establishedEvidence.connectionChecks) {
+      expect(check.outcome).toBe('SUCCEEDED');
+      expect(check.checkedAt).toBe(run.startedAt);
+    }
+    expect(run.writeFreeze.confirmedAt).toBe(run.startedAt);
+    expect(run.writeFreeze.confirmedAt).not.toBe(previous.writeFreeze.confirmedAt);
+    expect(run.sourceBaseline.capturedAt).toBe(run.startedAt);
+    expect(run.sourceBaseline.capturedAt).not.toBe(previous.sourceBaseline.capturedAt);
+    expect(run.establishedEvidence.tables).toHaveLength(run.selectedTableCount);
+    for (const table of run.establishedEvidence.tables) {
+      // Only a `SUPPORTED` 预检 may be approved, and its 表写入契约 was regenerated now.
+      expect(table.preflightConclusion).toBe('SUPPORTED');
+      expect(table.preflightConcludedAt).toBe(run.startedAt);
+      expect(table.contractGeneratedAt).toBe(run.startedAt);
+      expect(table.contractVersion).toBeGreaterThan(0);
+    }
+  });
+
+  it('never offers a 预检排除项 or a passing table, and refuses one that is asked for', () => {
+    const store = storeOf(remigrationScenario);
+    const report = store.getValidationReport(seededRunId);
+    const offer = store.describeRemigration(seededRunId);
+    if (report === undefined || offer === undefined) return;
+
+    const offered = [...offer.candidates, ...offer.ineligible];
+    expect(offer.exclusions.length).toBeGreaterThan(0);
+    for (const exclusion of offer.exclusions) {
+      // 「没迁」 is not 「迁了但没过」: a table that never migrated has no technical
+      // conclusion and may never be offered as though it had failed.
+      expect(offered.map((candidate) => candidate.sourceTable)).not.toContain(
+        exclusion.sourceTable,
+      );
+    }
+    const passing = report.rows.filter((row) => row.conclusion === 'PASS');
+    expect(passing.length).toBeGreaterThan(0);
+    for (const row of passing) {
+      expect(offered.map((candidate) => candidate.unitId)).not.toContain(row.unitId);
+    }
+
+    const runsBefore = store.listMigrationRuns(report.taskId).length;
+    const refused = store.startRemigration(seededRunId, {
+      unitIds: [passing[0]?.unitId ?? ''],
+      writeFreeze: freeze,
+    });
+    expect(refused).toEqual({ ok: false, code: 'NOT_A_CANDIDATE' });
+    // Refused means nothing happened.
+    expect(store.listMigrationRuns(report.taskId)).toHaveLength(runsBefore);
+  });
+
+  it('needs a 写冻结 of its own, and at least one table', () => {
+    const store = storeOf(remigrationScenario);
+    const offer = store.describeRemigration(seededRunId);
+    if (offer === undefined) return;
+    const unitIds = offer.candidates.map((candidate) => candidate.unitId);
+
+    expect(
+      store.startRemigration(seededRunId, {
+        unitIds,
+        writeFreeze: { ...freeze, accountableOperator: '  ' },
+      }),
+    ).toEqual({ ok: false, code: 'WRITE_FREEZE_NOT_CONFIRMED' });
+    expect(
+      store.startRemigration(seededRunId, {
+        unitIds,
+        writeFreeze: { ...freeze, durationHours: 0 },
+      }),
+    ).toEqual({ ok: false, code: 'WRITE_FREEZE_NOT_CONFIRMED' });
+    expect(store.startRemigration(seededRunId, { unitIds: [], writeFreeze: freeze })).toEqual({
+      ok: false,
+      code: 'NO_TABLES_SELECTED',
+    });
+    expect(store.startRemigration('no-such-run', { unitIds, writeFreeze: freeze })).toEqual({
+      ok: false,
+      code: 'NOT_FOUND',
+    });
+  });
+});

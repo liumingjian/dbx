@@ -245,10 +245,9 @@ export function MigrationRunPage() {
               : messages.run.origin.initial}
           </p>
           <p>
-            {messages.run.origin.scope(
-              run.selectedTableCount,
-              task.data?.selectedTableCount ?? run.selectedTableCount,
-            )}
+            {task.data === undefined
+              ? messages.run.origin.scopeWithoutTask(run.selectedTableCount)
+              : messages.run.origin.scope(run.selectedTableCount, task.data.selectedTableCount)}
           </p>
           {run.origin.kind === 'REMIGRATION' ? (
             <p>
@@ -268,7 +267,10 @@ export function MigrationRunPage() {
           claim checkable rather than decorative: evidence carried over from an earlier run
           would be visibly older than the run reading it.
         */}
-        <section className="dbx-run__identity" aria-label={messages.run.establishedEvidence.heading}>
+        <section
+          className="dbx-run__identity"
+          aria-label={messages.run.establishedEvidence.heading}
+        >
           <h3>{messages.run.establishedEvidence.heading}</h3>
           <p>{messages.run.establishedEvidence.statement}</p>
           <p>{messages.run.establishedEvidence.connectionHeading}</p>

@@ -28,13 +28,13 @@ export function isRemigrationCandidate(row: ValidationReportRow): boolean {
   if (row.unitOutcome === 'BLOCKED_BY_BOX_FAILURE') {
     return true;
   }
-  return row.conclusion === 'FAIL' || row.conclusion === 'INCONCLUSIVE' || row.conclusion === 'NOT_RUN';
+  return (
+    row.conclusion === 'FAIL' || row.conclusion === 'INCONCLUSIVE' || row.conclusion === 'NOT_RUN'
+  );
 }
 
 /** The rows of the report a 重新迁移 may cover, in the report's own order. */
-export function remigrationCandidateRows(
-  report: ValidationReport,
-): readonly ValidationReportRow[] {
+export function remigrationCandidateRows(report: ValidationReport): readonly ValidationReportRow[] {
   return report.rows.filter(isRemigrationCandidate);
 }
 
