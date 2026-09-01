@@ -4,6 +4,8 @@ import type {
   MigrationRunId,
   MigrationTaskId,
 } from './primitives';
+import type { ConnectionCheckOutcome, ConnectionRole } from './databaseConnection';
+import type { PreflightConclusion } from './tableMigrationUnit';
 
 /**
  * A migration run is one immutable execution attempt over all or part of a migration
@@ -53,6 +55,74 @@ export interface SourceBaseline {
   readonly entries: readonly SourceBaselineEntry[];
 }
 
+/**
+ * How a 迁移运行 came to exist.
+ *
+ * `CONTEXT.md` lists 「retry in place」 under 迁移运行's `_Avoid_` and ADR-0006 is explicit
+ * that 「a rerun is always a new migration run with new table migration units, connectors,
+ * topics, baselines … It may include one table, a chosen subset, or the entire task, but
+ * its report names that scope and does not present a partial rerun as a new whole-task
+ * success」. So a re-migration is not a state an existing run enters: it is a new run that
+ * *names* the earlier one, and the earlier record is not touched at all.
+ */
+export type MigrationRunOrigin =
+  /** The 迁移运行 生成 by 执行确认 when the 迁移任务 was approved. */
+  | { readonly kind: 'INITIAL' }
+  | {
+      readonly kind: 'REMIGRATION';
+      /**
+       * The earlier 迁移运行 whose undetermined tables this one covers.
+       *
+       * A reference and nothing more. Reading it can tell you where this run came from;
+       * nothing anywhere may use it to write back into that run's record.
+       */
+      readonly ofRunId: MigrationRunId;
+    };
+
+/**
+ * One 数据库连接 this run tested for itself before it started (ADR-0006).
+ *
+ * 「A rerun freshly tests connections and capabilities」: an earlier run's successful check
+ * proves nothing about this one, and carrying one forward would let a run start against a
+ * connection that has since stopped answering.
+ */
+export interface RunConnectionCheck {
+  readonly role: ConnectionRole;
+  readonly connectionId: DatabaseConnectionId;
+  readonly outcome: ConnectionCheckOutcome;
+  /** Null exactly when the outcome is `NOT_RUN`. */
+  readonly checkedAt: IsoTimestamp | null;
+}
+
+/**
+ * What this run established for one of its tables before admitting it.
+ *
+ * The 预检 conclusion and the 表写入契约 version are recorded together because ADR-0011
+ * ties them together: only a `SUPPORTED` 预检 may have its contract approved, and a
+ * changed contract requires a fresh approval. A rerun 「executes preflight … regenerates
+ * write contracts」, so these are this run's own readings and never the previous run's.
+ */
+export interface RunTableEvidence {
+  readonly sourceTable: string;
+  readonly preflightConclusion: PreflightConclusion;
+  readonly preflightConcludedAt: IsoTimestamp;
+  readonly contractVersion: number;
+  readonly contractGeneratedAt: IsoTimestamp;
+}
+
+/**
+ * The evidence a 迁移运行 established for itself before it started.
+ *
+ * The 写冻结 and the 源基线 are not repeated here — they are already fields of the run,
+ * with instants of their own — so there is exactly one copy of every fact. What this adds
+ * is the two readings a run has nowhere else to record: the fresh connection checks and
+ * the per-table 预检 and 表写入契约 it was admitted on.
+ */
+export interface RunEstablishedEvidence {
+  readonly connectionChecks: readonly RunConnectionCheck[];
+  readonly tables: readonly RunTableEvidence[];
+}
+
 export interface MigrationRun {
   readonly id: MigrationRunId;
   readonly taskId: MigrationTaskId;
@@ -70,4 +140,7 @@ export interface MigrationRun {
   readonly selectedTableCount: number;
   readonly excludedTableCount: number;
   readonly cancellationRequestedAt: IsoTimestamp | null;
+  readonly origin: MigrationRunOrigin;
+  /** Established by this run, at this run's instants. Never carried over from another. */
+  readonly establishedEvidence: RunEstablishedEvidence;
 }

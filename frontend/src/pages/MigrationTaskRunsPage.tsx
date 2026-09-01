@@ -34,7 +34,11 @@ export function MigrationTaskRunsPage() {
         identifying: true,
         width: 260,
         textValue: (run) => run.id,
-        renderCell: (run) => <Identifier>{run.id}</Identifier>,
+        renderCell: (run) => (
+          <CarbonLink as={Link} to={paths.migrationRun(run.id)}>
+            <Identifier>{run.id}</Identifier>
+          </CarbonLink>
+        ),
       },
       {
         id: 'status',
@@ -47,6 +51,26 @@ export function MigrationTaskRunsPage() {
             label={messages.tasks.runStatuses[run.status]}
           />
         ),
+      },
+      {
+        /**
+         * Which round this run is (#41).
+         *
+         * Without it the history is a list of attempts with no relation to each other, and
+         * a 18-table run beside a 1164-table one reads as an error rather than as the
+         * 重新迁移 it is. `CONTEXT.md`: 「A rerun is a new migration run.」
+         */
+        id: 'origin',
+        header: messages.tasks.runs.columns.origin,
+        width: 260,
+        textValue: (run) =>
+          run.origin.kind === 'REMIGRATION'
+            ? messages.tasks.runs.origins.remigrationOf(run.origin.ofRunId)
+            : messages.tasks.runs.origins.initial,
+        renderCell: (run) =>
+          run.origin.kind === 'REMIGRATION'
+            ? messages.tasks.runs.origins.remigrationOf(run.origin.ofRunId)
+            : messages.tasks.runs.origins.initial,
       },
       {
         id: 'startedAt',
@@ -82,6 +106,20 @@ export function MigrationTaskRunsPage() {
         textValue: (run) => String(run.excludedTableCount),
         renderCell: (run) => <Identifier>{run.excludedTableCount}</Identifier>,
       },
+      {
+        // Every historical run is revisitable by URL, and the history is where that link
+        // lives: activating a row navigates, and this column is the address itself, for a
+        // reader who wants to copy it into a ticket.
+        id: 'validationReport',
+        header: messages.tasks.runs.columns.validationReport,
+        width: 160,
+        textValue: () => messages.validation.openAction,
+        renderCell: (run) => (
+          <CarbonLink as={Link} to={paths.validationReport(run.id)}>
+            {messages.validation.openAction}
+          </CarbonLink>
+        ),
+      },
     ],
     [],
   );
@@ -93,6 +131,7 @@ export function MigrationTaskRunsPage() {
           {messages.tasks.runs.backAction}
         </CarbonLink>
       </p>
+      <p>{messages.tasks.runs.rounds(runs.data?.length ?? 0)}</p>
       <DbxTable
         label={messages.tasks.runs.listLabel}
         columns={columns}

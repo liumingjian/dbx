@@ -33,6 +33,15 @@ interface TaskPlan {
     readonly durationMinutes: number | null;
     readonly selectedTableCount: number;
     readonly excludedTableCount: number;
+    /**
+     * Whether this run is a 重新迁移 of the run before it.
+     *
+     * Seeded rather than only reachable by performing one, because 「迁移任务下并列展示
+     * 历次迁移运行及其结论」 (#41) is a state the history has to be able to *show*: a
+     * reviewer opening a task should see how many rounds it took without first having to
+     * start a round themselves.
+     */
+    readonly remigrationOfPreviousRun?: boolean;
   }[];
 }
 
@@ -62,12 +71,15 @@ const taskPlans: readonly TaskPlan[] = [
         selectedTableCount: 1164,
         excludedTableCount: 36,
       },
+      // 18 tables out of 1164: the 重新迁移 of what the first run left undetermined. Its
+      // report names that scope and does not present itself as a whole-task success.
       {
         status: 'COMPLETED',
         startedHoursAgo: 96,
         durationMinutes: 47,
         selectedTableCount: 18,
         excludedTableCount: 0,
+        remigrationOfPreviousRun: true,
       },
     ],
   },
@@ -179,6 +191,7 @@ export function seedMigrationTasks(plan: SeedPlan, clock: ControllableClock): Se
   for (const taskPlan of taskPlans) {
     const taskRuns: MigrationRun[] = taskPlan.runs.map((runPlan, index) => {
       const startedAt = at(runPlan.startedHoursAgo * hour);
+      const previousRunId = `${taskPlan.id}-run-${index}`;
       const endedAt =
         runPlan.durationMinutes === null
           ? null
@@ -213,6 +226,31 @@ export function seedMigrationTasks(plan: SeedPlan, clock: ControllableClock): Se
           runPlan.status === 'CANCELLED' || runPlan.status === 'CANCELLING'
             ? at(runPlan.startedHoursAgo * hour - 6 * minute)
             : null,
+        origin:
+          runPlan.remigrationOfPreviousRun === true && index > 0
+            ? { kind: 'REMIGRATION', ofRunId: previousRunId }
+            : { kind: 'INITIAL' },
+        // Every run tests its connections for itself before it starts (ADR-0006). These
+        // are this run's readings, taken at its own start.
+        establishedEvidence: {
+          connectionChecks: [
+            {
+              role: 'SOURCE',
+              connectionId: taskPlan.sourceConnectionId,
+              outcome: 'SUCCEEDED',
+              checkedAt: startedAt,
+            },
+            {
+              role: 'TARGET',
+              connectionId: taskPlan.targetConnectionId,
+              outcome: 'SUCCEEDED',
+              checkedAt: startedAt,
+            },
+          ],
+          // Per-table readings are not retained for the seeded history, exactly as its
+          // 源基线 entries are not: the fixture states what it knows and nothing more.
+          tables: [],
+        },
       };
     });
 

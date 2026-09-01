@@ -17,8 +17,15 @@ import type {
   RecordMappingRuleRequest,
   RunCancellationConsequences,
   RunProgressSnapshot,
+  ConnectionRole,
+  PreflightConclusion,
   RegisterDatabaseConnectionRequest,
+  RemigrationCandidate,
+  RemigrationOffer,
+  RunConnectionCheck,
+  RunEstablishedEvidence,
   SourceBaselineEntry,
+  StartRemigrationRequest,
   SourceTableSummary,
   StructuralProofGapStatement,
   TableMigrationUnitEvidence,
@@ -32,6 +39,8 @@ import type { ControllableClock } from './clock';
 import { seedDatabaseConnections, unreachableConnectionIds } from './fixtures/databaseConnections';
 import { seedMigrationTasks } from './fixtures/migrationTasks';
 import {
+  EXCLUDED_TABLE_COUNT,
+  MONITORED_UNIT_COUNT,
   OBSERVATION_INTERVAL_MOCK_MS,
   buildRunPlan,
   projectRunProgress,
@@ -52,6 +61,7 @@ import {
   draftTableWorkspaceOf,
   requiresZeroDateDecision,
 } from './fixtures/tableWorkspace';
+import { remigrationCandidateRows } from '@/features/remigration/candidates';
 import { deepFreeze } from './immutable';
 import type { DraftPersistence } from './persistence';
 import type { ScenarioDefinition, SeedPlan } from './scenarios';
@@ -210,7 +220,52 @@ export interface MockStore {
    * never went through it.
    */
   startMigrationRun(draftId: string, freeze: WriteFreezeDeclaration): StartMigrationRunResult;
+
+  /**
+   * What a 重新迁移 of one 迁移运行 could cover (#41).
+   *
+   * A read that changes nothing: it names the tables whose own result is undetermined or
+   * failed, reads each one's 预检 again, and restates the 预检排除项 so nobody looks for
+   * them among the candidates. Returns `undefined` when there is no such 迁移运行.
+   */
+  describeRemigration(runId: string): RemigrationOffer | undefined;
+
+  /**
+   * Migrates the named tables again, as a **new** 迁移运行.
+   *
+   * The signature is the whole design. There is no argument that could name an outcome, no
+   * argument that could reopen a 表迁移单元, and nothing here returns the earlier run as
+   * changed — because 「a rerun is a new migration run」 and 「retry in place」 is under
+   * 迁移运行's `_Avoid_`. The earlier record is deep-frozen (#37); this method never even
+   * reaches for it except to read.
+   *
+   * Every piece of evidence is established afresh before the run exists: the connections
+   * are checked, each table's 预检 is read again and its 表写入契约 regenerated, the
+   * operator declares a new 写冻结, and a new 源基线 is captured at this instant. ADR-0006
+   * requires all five, and each of them is a statement about a moment that has passed.
+   */
+  startRemigration(runId: string, request: StartRemigrationRequest): StartRemigrationResult;
 }
+
+/** Why a 重新迁移 was refused, or the 迁移任务 and the new 迁移运行 it produced. */
+export type StartRemigrationResult =
+  | { readonly ok: true; readonly task: MigrationTask; readonly run: MigrationRun }
+  | {
+      readonly ok: false;
+      readonly code:
+        | 'NOT_FOUND'
+        /** Gate 5 again: this run needs its own 写冻结, with a 责任人 and a 时限. */
+        | 'WRITE_FREEZE_NOT_CONFIRMED'
+        /** A 迁移运行 over no tables is not a migration. */
+        | 'NO_TABLES_SELECTED'
+        /**
+         * A table that may not be migrated again: its 校验执行 concluded `PASS`, it is a
+         * 预检排除项 that never migrated at all, or its fresh 预检 does not permit it.
+         */
+        | 'NOT_A_CANDIDATE'
+        /** 「A rerun freshly tests connections」 — and this one did not come back. */
+        | 'CONNECTION_CHECK_FAILED';
+    };
 
 /** Why a 校验处置 was refused, or the report it produced. */
 export type RecordValidationDispositionResult =
@@ -362,6 +417,10 @@ export function createMockStore({
       seed: scenario.seed,
       runPlan: runPlanShapeOf(run),
       sourceDatabase: run.sourceDatabase,
+      // A 表迁移单元 belongs to one 迁移运行, so two runs never share a unit identifier —
+      // which is what a 重新迁移 makes visible: it creates new units, it does not reopen
+      // the old ones.
+      runId: run.id,
       tables: run.sourceBaseline.entries.map((entry) => ({
         name: entry.sourceTable,
         exactRowCount: entry.exactRowCount,
@@ -629,8 +688,7 @@ export function createMockStore({
   const reachable = (connection: DatabaseConnection): boolean =>
     !unreachableConnectionIds.includes(connection.id);
 
-  const sourceTablesOf = (draft: MigrationDraft): ReadonlyMap<string, SourceTableSummary> => {
-    const sourceDatabase = draft.sourceDatabase ?? '';
+  const sourceTablesIn = (sourceDatabase: string): ReadonlyMap<string, SourceTableSummary> => {
     const cached = sourceTableIndex.get(sourceDatabase);
     if (cached !== undefined) {
       return cached;
@@ -642,6 +700,9 @@ export function createMockStore({
     sourceTableIndex.set(sourceDatabase, index);
     return index;
   };
+
+  const sourceTablesOf = (draft: MigrationDraft): ReadonlyMap<string, SourceTableSummary> =>
+    sourceTablesIn(draft.sourceDatabase ?? '');
 
   const rulesOfTable = (draft: MigrationDraft, sourceTable: string): DraftMappingRule[] =>
     draft.mappingRules.filter((rule) => rule.sourceTable === sourceTable);
@@ -807,6 +868,216 @@ export function createMockStore({
       generatedAt: draft.updatedAt,
     });
 
+  /**
+   * Runs one 数据库连接's check again and returns what it read.
+   *
+   * The same routine `checkDatabaseConnection` offers on 数据源, called from here so a run
+   * cannot be started against an endpoint nobody has spoken to. ADR-0006: 「Saving a
+   * connection runs a lightweight connectivity and identity check. Every run performs a
+   * fresh, scope-specific capability check before approval and execution.」
+   */
+  const performConnectionCheck = (id: string): DatabaseConnection | undefined => {
+    const existing = connections.get(id);
+    if (!existing) {
+      return undefined;
+    }
+    const now = clock.nowIso();
+    const succeeded = reachable(existing);
+    const updated: DatabaseConnection = {
+      ...existing,
+      latestCheck: {
+        outcome: succeeded ? 'SUCCEEDED' : 'FAILED',
+        checkedAt: now,
+        credentialVersionId: existing.currentCredentialVersion.id,
+        serverVersion: succeeded
+          ? existing.dialect === 'MYSQL_8_0'
+            ? 'MySQL 8.0.36'
+            : 'PostgreSQL 15.6'
+          : null,
+        failureReason: succeeded ? null : 'AUTHENTICATION_FAILED',
+      },
+      updatedAt: now,
+    };
+    connections.set(id, updated);
+    return updated;
+  };
+
+  const connectionCheckOf = (role: ConnectionRole, connectionId: string): RunConnectionCheck => {
+    const checked = performConnectionCheck(connectionId);
+    return {
+      role,
+      connectionId,
+      outcome: checked?.latestCheck.outcome ?? 'NOT_RUN',
+      checkedAt: checked?.latestCheck.checkedAt ?? null,
+    };
+  };
+
+  /**
+   * The evidence a 迁移运行 establishes for itself at the instant it is created.
+   *
+   * Called on the way *into* the store, never afterwards: ADR-0006 requires a run to test
+   * its connections, execute 预检 and regenerate its 表写入契约 before it starts, and
+   * nothing may write these readings once the record is frozen. Every instant recorded
+   * here is this run's own — an earlier run's readings are never carried forward, because
+   * each of them is a statement about a moment that has passed.
+   */
+  const establishedEvidenceOf = (
+    sourceConnectionId: string,
+    targetConnectionId: string,
+    tables: readonly {
+      readonly sourceTable: string;
+      readonly preflightConclusion: PreflightConclusion;
+      readonly contractVersion: number;
+    }[],
+    at: string,
+  ): RunEstablishedEvidence => ({
+    connectionChecks: [
+      connectionCheckOf('SOURCE', sourceConnectionId),
+      connectionCheckOf('TARGET', targetConnectionId),
+    ],
+    tables: tables.map((table) => ({
+      sourceTable: table.sourceTable,
+      preflightConclusion: table.preflightConclusion,
+      preflightConcludedAt: at,
+      contractVersion: table.contractVersion,
+      contractGeneratedAt: at,
+    })),
+  });
+
+  /**
+   * One table's 预检 and 表写入契约, read again now.
+   *
+   * The same assembly 逐表配置与预检 runs, rather than a cheaper approximation of it: a
+   * rerun 「reads source metadata, executes preflight … regenerates write contracts」, and
+   * a second implementation of that reading is how the offer and the workspace end up
+   * disagreeing about whether a table may go.
+   */
+  /**
+   * The tables a seeded 迁移运行 covers, which are not the database's discovery listing.
+   *
+   * A seeded run's plan is drawn from the same generator asked for a *smaller* count, and
+   * the generator's shuffle depends on that count — so the twelve tables of the seeded run
+   * are not the first twelve of the 1200-table listing. The lookup below therefore
+   * consults both sets rather than pretending one contains the other, which is what lets a
+   * 重新迁移 read a real 预检 for a table of a seeded run.
+   */
+  const seededRunTableIndex = new Map<string, ReadonlyMap<string, SourceTableSummary>>();
+  const seededRunTablesIn = (sourceDatabase: string): ReadonlyMap<string, SourceTableSummary> => {
+    const cached = seededRunTableIndex.get(sourceDatabase);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const index = new Map<string, SourceTableSummary>();
+    for (const table of generateSourceTables({
+      seed: scenario.seed,
+      count: MONITORED_UNIT_COUNT + EXCLUDED_TABLE_COUNT,
+      sourceDatabase,
+    })) {
+      index.set(table.name, table);
+    }
+    seededRunTableIndex.set(sourceDatabase, index);
+    return index;
+  };
+
+  const sourceTableFor = (
+    sourceDatabase: string,
+    sourceTable: string,
+  ): SourceTableSummary | undefined =>
+    sourceTablesIn(sourceDatabase).get(sourceTable) ??
+    seededRunTablesIn(sourceDatabase).get(sourceTable);
+
+  const freshPreflightOf = (sourceDatabase: string, sourceTable: string) => {
+    const table = sourceTableFor(sourceDatabase, sourceTable);
+    if (table === undefined) {
+      return null;
+    }
+    return draftTableConfigurationOf({
+      seed: scenario.seed,
+      table,
+      userRules: [],
+      prunedColumns: [],
+      preflightInFlight: false,
+      generatedAt: clock.nowIso(),
+    });
+  };
+
+  /**
+   * What a 重新迁移 of one 迁移运行 could cover, assembled in one read (#41).
+   *
+   * Assembled here rather than in the browser for the reason 执行确认's summary is: the
+   * fresh 预检 conclusion behind each candidate is not the frontend's statement to make,
+   * and a candidate list whose halves were fetched separately could name a table the
+   * platform would then refuse.
+   */
+  const remigrationOfferOf = (run: MigrationRun): RemigrationOffer => {
+    const report = validationReportOf(run);
+    const task = tasks.get(run.taskId);
+    const candidates: RemigrationCandidate[] = [];
+    const ineligible: RemigrationCandidate[] = [];
+    const now = clock.nowIso();
+
+    for (const row of remigrationCandidateRows(report)) {
+      const fresh = freshPreflightOf(run.sourceDatabase, row.sourceTable);
+      const candidate: RemigrationCandidate = {
+        unitId: row.unitId,
+        sourceTable: row.sourceTable,
+        targetTable: row.targetTable,
+        conclusion: row.conclusion,
+        unitOutcome: row.unitOutcome,
+        preflightConclusion: fresh?.preflightConclusion ?? 'INCONCLUSIVE',
+        preflightConcludedAt: now,
+        contractVersion: fresh?.contractVersion ?? null,
+      };
+      // 「Only `SUPPORTED` may proceed」, and a table with no 表写入契约 has nothing a
+      // 结构证明 could compare against (ADR-0011). Both are stated, never hidden.
+      if (candidate.preflightConclusion === 'SUPPORTED' && candidate.contractVersion !== null) {
+        candidates.push(candidate);
+      } else {
+        ineligible.push(candidate);
+      }
+    }
+
+    return deepFreeze({
+      runId: run.id,
+      taskId: run.taskId,
+      sourceConnectionId: run.sourceConnectionId,
+      sourceDatabase: run.sourceDatabase,
+      targetConnectionId: run.targetConnectionId,
+      targetSchema: run.targetSchema,
+      taskSelectedTableCount: task?.selectedTableCount ?? run.selectedTableCount,
+      runSelectedTableCount: run.selectedTableCount,
+      candidates,
+      ineligible,
+      // Restated from the report rather than re-derived: 「没迁」 and 「迁了但没过」 are kept
+      // apart in exactly one place.
+      exclusions: report.exclusions,
+      connectionChecks: [
+        {
+          role: 'SOURCE',
+          connectionId: run.sourceConnectionId,
+          outcome: connections.get(run.sourceConnectionId)?.latestCheck.outcome ?? 'NOT_RUN',
+          checkedAt: connections.get(run.sourceConnectionId)?.latestCheck.checkedAt ?? null,
+        },
+        {
+          role: 'TARGET',
+          connectionId: run.targetConnectionId,
+          outcome: connections.get(run.targetConnectionId)?.latestCheck.outcome ?? 'NOT_RUN',
+          checkedAt: connections.get(run.targetConnectionId)?.latestCheck.checkedAt ?? null,
+        },
+      ],
+      assembledAt: now,
+    });
+  };
+
+  /** The next unused identifier for a run of this 迁移任务. */
+  const nextRunId = (taskId: string): string => {
+    let ordinal = 1;
+    while (runs.has(`${taskId}-run-${ordinal}`)) {
+      ordinal += 1;
+    }
+    return `${taskId}-run-${ordinal}`;
+  };
+
   return {
     listDatabaseConnections() {
       // Deterministic ordering: a DBA comparing two screenshots must see the same rows in
@@ -897,29 +1168,7 @@ export function createMockStore({
     },
 
     checkDatabaseConnection(id) {
-      const existing = connections.get(id);
-      if (!existing) {
-        return undefined;
-      }
-      const now = clock.nowIso();
-      const succeeded = reachable(existing);
-      const updated: DatabaseConnection = {
-        ...existing,
-        latestCheck: {
-          outcome: succeeded ? 'SUCCEEDED' : 'FAILED',
-          checkedAt: now,
-          credentialVersionId: existing.currentCredentialVersion.id,
-          serverVersion: succeeded
-            ? existing.dialect === 'MYSQL_8_0'
-              ? 'MySQL 8.0.36'
-              : 'PostgreSQL 15.6'
-            : null,
-          failureReason: succeeded ? null : 'AUTHENTICATION_FAILED',
-        },
-        updatedAt: now,
-      };
-      connections.set(id, updated);
-      return updated;
+      return performConnectionCheck(id);
     },
 
     listMigrationDrafts() {
@@ -1303,6 +1552,17 @@ export function createMockStore({
         selectedTableCount: summary.tables.length,
         excludedTableCount: summary.excludedTables.length,
         cancellationRequestedAt: null,
+        origin: { kind: 'INITIAL' },
+        establishedEvidence: establishedEvidenceOf(
+          summary.sourceConnectionId,
+          summary.targetConnectionId,
+          summary.tables.map((table) => ({
+            sourceTable: table.sourceTable,
+            preflightConclusion: table.preflightConclusion ?? 'INCONCLUSIVE',
+            contractVersion: table.contractVersion ?? 1,
+          })),
+          now,
+        ),
       };
 
       const task: MigrationTask = {
@@ -1337,6 +1597,122 @@ export function createMockStore({
       flushDrafts();
 
       return { ok: true, task, run };
+    },
+
+    describeRemigration(runId) {
+      const run = runs.get(runId);
+      return run === undefined ? undefined : remigrationOfferOf(run);
+    },
+
+    startRemigration(runId, request) {
+      const previous = runs.get(runId);
+      const task = previous === undefined ? undefined : tasks.get(previous.taskId);
+      if (previous === undefined || task === undefined) {
+        return { ok: false, code: 'NOT_FOUND' };
+      }
+
+      // A new 源基线 is captured below, and a 写冻结 「must remain valid from source-baseline
+      // capture until every selected table reaches a validation terminal state」. The
+      // earlier run's commitment covered an earlier boundary and cannot be stretched over
+      // this one, so this run obtains its own — with a 责任人 and a 时限, never a tickbox.
+      const freeze = request.writeFreeze;
+      if (
+        freeze.accountableOperator.trim() === '' ||
+        !Number.isFinite(freeze.durationHours) ||
+        freeze.durationHours <= 0
+      ) {
+        return { ok: false, code: 'WRITE_FREEZE_NOT_CONFIRMED' };
+      }
+
+      // Re-derived here rather than trusted from the request, for the reason
+      // `startMigrationRun` re-checks Gates 5 and 6: which tables may be migrated again is
+      // a constraint on the system, not on the button that happened to send this.
+      const offer = remigrationOfferOf(previous);
+      const admissible = new Map(offer.candidates.map((entry) => [entry.unitId, entry]));
+      const requested = [...new Set(request.unitIds)];
+      if (requested.length === 0) {
+        return { ok: false, code: 'NO_TABLES_SELECTED' };
+      }
+      const chosen: RemigrationCandidate[] = [];
+      for (const unitId of requested) {
+        const candidate = admissible.get(unitId);
+        if (candidate === undefined) {
+          return { ok: false, code: 'NOT_A_CANDIDATE' };
+        }
+        chosen.push(candidate);
+      }
+
+      const now = clock.nowIso();
+      // 「A rerun freshly tests connections and capabilities」: the checks are run now, and
+      // their outcome is recorded on the run that was admitted on them.
+      const establishedEvidence = establishedEvidenceOf(
+        previous.sourceConnectionId,
+        previous.targetConnectionId,
+        chosen.map((candidate) => ({
+          sourceTable: candidate.sourceTable,
+          preflightConclusion: candidate.preflightConclusion,
+          contractVersion: candidate.contractVersion ?? 1,
+        })),
+        now,
+      );
+      if (establishedEvidence.connectionChecks.some((check) => check.outcome !== 'SUCCEEDED')) {
+        return { ok: false, code: 'CONNECTION_CHECK_FAILED' };
+      }
+
+      const newRunId = nextRunId(task.id);
+      const run: MigrationRun = {
+        id: newRunId,
+        taskId: task.id,
+        status: 'PREPARING',
+        startedAt: now,
+        endedAt: null,
+        // Snapshotted again from the earlier run rather than followed: the pair this
+        // 迁移任务 moves is what it is, and a run never tracks a later connection edit.
+        sourceConnectionId: previous.sourceConnectionId,
+        sourceDatabase: previous.sourceDatabase,
+        targetConnectionId: previous.targetConnectionId,
+        targetSchema: previous.targetSchema,
+        writeFreeze: {
+          accountableOperator: freeze.accountableOperator.trim(),
+          confirmedAt: now,
+          expiresAt: new Date(clock.now() + freeze.durationHours * 60 * 60 * 1000).toISOString(),
+          scope: previous.sourceDatabase,
+          changeReference: freeze.changeReference,
+          declaredBrokenAt: null,
+        },
+        // Captured now, from the source as it stands now. ADR-0006: 「It never refreshes
+        // the baseline inside the same run. A new freeze and baseline require a new run.」
+        // This is that new run, so the numbers are read again rather than copied across.
+        sourceBaseline: {
+          capturedAt: now,
+          entries: chosen.map((candidate) =>
+            baselineEntryOf(sourceTableFor(previous.sourceDatabase, candidate.sourceTable)),
+          ),
+        },
+        // Its own scope, and a smaller one. The interface states it beside the 迁移任务's
+        // own count so a partial rerun cannot be read as a whole-task attempt.
+        selectedTableCount: chosen.length,
+        // Nothing is *excluded* from a 重新迁移: the tables it leaves alone already have a
+        // result. Recording them as exclusions would claim a decision nobody made.
+        excludedTableCount: 0,
+        cancellationRequestedAt: null,
+        origin: { kind: 'REMIGRATION', ofRunId: previous.id },
+        establishedEvidence,
+      };
+
+      // Frozen before it is reachable, like every other run. Note what is *not* here: no
+      // write of any kind to `previous`, which is deep-frozen and would throw if tried.
+      runs.set(run.id, deepFreeze(run));
+
+      const updatedTask: MigrationTask = {
+        ...task,
+        runCount: task.runCount + 1,
+        latestRunId: run.id,
+        latestRunStatus: run.status,
+      };
+      tasks.set(task.id, deepFreeze(updatedTask));
+
+      return { ok: true, task: updatedTask, run };
     },
   };
 }

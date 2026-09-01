@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button, ContentSwitcher, Link as CarbonLink, Switch, Theme } from '@carbon/react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '@/api/http';
+import { useMigrationTask } from '@/api/migrationTasks';
 import { useRunProgress } from '@/api/runProgress';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ViewState';
 import { ConclusionIndicator, migrationRunConclusion } from '@/conclusions';
@@ -119,6 +120,9 @@ export function MigrationRunPage() {
   const { runId = '' } = useParams();
   const navigate = useNavigate();
   const progress = useRunProgress(runId);
+  // The 迁移任务's own selected scope, so a 重新迁移's narrower one can be stated against
+  // something rather than left to be read as the whole task (#41).
+  const task = useMigrationTask(progress.snapshot?.run.taskId ?? '');
   const [filter, setFilter] = useState<UnitFilter>('all');
   const [cancelOpen, setCancelOpen] = useState(false);
 
@@ -224,6 +228,98 @@ export function MigrationRunPage() {
               {messages.validation.openAction}
             </CarbonLink>
           </p>
+        </section>
+
+        {/*
+          Where this 迁移运行 came from, and what it does not cover (#41).
+
+          A 重新迁移 is a new run over a chosen subset, so the two counts are printed
+          together: ADR-0006 requires a partial rerun's report to name its scope rather
+          than read as a fresh whole-task attempt, and the count on its own does not say
+          that — it needs the task's count beside it to mean anything.
+        */}
+        <section className="dbx-run__identity" aria-label={messages.run.origin.heading}>
+          <p>
+            {run.origin.kind === 'REMIGRATION'
+              ? messages.run.origin.remigrationOf(run.origin.ofRunId)
+              : messages.run.origin.initial}
+          </p>
+          <p>
+            {messages.run.origin.scope(
+              run.selectedTableCount,
+              task.data?.selectedTableCount ?? run.selectedTableCount,
+            )}
+          </p>
+          {run.origin.kind === 'REMIGRATION' ? (
+            <p>
+              <CarbonLink as={Link} to={paths.migrationRun(run.origin.ofRunId)}>
+                {messages.run.origin.previousRunAction}
+              </CarbonLink>
+            </p>
+          ) : null}
+        </section>
+
+        {/*
+          The evidence this run established for itself, each statement with its own instant.
+
+          「A rerun freshly tests connections and capabilities, reads source metadata,
+          executes preflight, obtains a new write-freeze commitment and source baseline,
+          regenerates write contracts」 (ADR-0006). Printing the instants is what makes the
+          claim checkable rather than decorative: evidence carried over from an earlier run
+          would be visibly older than the run reading it.
+        */}
+        <section className="dbx-run__identity" aria-label={messages.run.establishedEvidence.heading}>
+          <h3>{messages.run.establishedEvidence.heading}</h3>
+          <p>{messages.run.establishedEvidence.statement}</p>
+          <p>{messages.run.establishedEvidence.connectionHeading}</p>
+          <ul>
+            {run.establishedEvidence.connectionChecks.map((check) => (
+              <li key={`${check.role}-${check.connectionId}`}>
+                {messages.run.establishedEvidence.connectionOf(
+                  messages.run.establishedEvidence.roles[check.role],
+                  check.connectionId,
+                  messages.connections.checkOutcomes[check.outcome],
+                  check.checkedAt === null
+                    ? messages.run.establishedEvidence.notChecked
+                    : formatTimestamp(check.checkedAt),
+                )}
+              </li>
+            ))}
+          </ul>
+          <p>{messages.run.establishedEvidence.freezeHeading}</p>
+          <p>
+            {messages.run.establishedEvidence.freezeOf(
+              run.writeFreeze.accountableOperator,
+              formatTimestamp(run.writeFreeze.confirmedAt),
+              formatTimestamp(run.writeFreeze.expiresAt),
+            )}
+          </p>
+          <p>{messages.run.establishedEvidence.baselineHeading}</p>
+          <p>
+            {run.sourceBaseline.entries.length === 0
+              ? messages.run.establishedEvidence.baselineNone
+              : messages.run.establishedEvidence.baselineOf(
+                  formatTimestamp(run.sourceBaseline.capturedAt),
+                  run.sourceBaseline.entries.length,
+                )}
+          </p>
+          <p>{messages.run.establishedEvidence.preflightHeading}</p>
+          {run.establishedEvidence.tables.length === 0 ? (
+            <p>{messages.run.establishedEvidence.preflightNone}</p>
+          ) : (
+            <ul>
+              {run.establishedEvidence.tables.map((table) => (
+                <li key={table.sourceTable}>
+                  {messages.run.establishedEvidence.preflightOf(
+                    table.sourceTable,
+                    messages.conclusion.labels[table.preflightConclusion],
+                    table.contractVersion,
+                    formatTimestamp(table.preflightConcludedAt),
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         {/*

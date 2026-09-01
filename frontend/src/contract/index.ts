@@ -15,3 +15,4 @@ export type * from './tableEvidence';
 export type * from './validation';
 export type * from './tableConfiguration';
 export type * from './executionConfirmation';
+export type * from './remigration';

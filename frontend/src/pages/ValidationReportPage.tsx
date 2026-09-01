@@ -6,6 +6,7 @@ import { useRecordValidationDisposition, useValidationReport } from '@/api/valid
 import { EmptyState, ErrorState, LoadingState } from '@/components/ViewState';
 import { ConclusionIndicator, migrationRunConclusion } from '@/conclusions';
 import type { ValidationReport, ValidationReportRow } from '@/contract';
+import { RemigrationPanel } from '@/features/remigration';
 import {
   RecordDispositionModal,
   ValidationReportTable,
@@ -322,6 +323,14 @@ export function ValidationReportPage() {
           </ul>
         )}
       </section>
+
+      {/*
+        The next action, after the conclusions and after the decisions: 重新迁移 creates a
+        new 迁移运行 for the tables whose result is failed or undetermined (#41). It is
+        last because it is what a reader does *having* read the report, and it is on this
+        page because the report is where the candidates are established.
+      */}
+      <RemigrationPanel runId={report.runId} />
 
       {disposing === null ? null : (
         <RecordDispositionModal

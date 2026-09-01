@@ -1,5 +1,5 @@
 import { Button, Tag, Tile } from '@carbon/react';
-import type { ConnectionCheckOutcome, DatabaseConnection } from '@/contract';
+import type { DatabaseConnection } from '@/contract';
 import { formatCredentialVersion, formatDialect, formatTimestamp } from '@/format/display';
 import { messages } from '@/messages';
 import { ConclusionIndicator, connectionCheckConclusion } from '@/conclusions';
@@ -17,12 +17,6 @@ import { Identifier } from '@/pages/Identifier';
  * `IconIndicator`. The check outcome goes through the shared conclusion module (#33), so
  * 数据源 cannot drift into a second indicator vocabulary of its own.
  */
-
-const checkOutcomeLiterals: Record<ConnectionCheckOutcome, string> = {
-  SUCCEEDED: messages.connections.checkOutcomes.succeeded,
-  FAILED: messages.connections.checkOutcomes.failed,
-  NOT_RUN: messages.connections.checkOutcomes.notRun,
-};
 
 export function DatabaseConnectionCard({
   connection,
@@ -69,7 +63,7 @@ export function DatabaseConnectionCard({
           <dd>
             <ConclusionIndicator
               conclusion={connectionCheckConclusion(latestCheck.outcome)}
-              label={checkOutcomeLiterals[latestCheck.outcome]}
+              label={messages.connections.checkOutcomes[latestCheck.outcome]}
             />
             {latestCheck.checkedAt === null ? (
               <span className="dbx-connection__check-time">
