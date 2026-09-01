@@ -24,9 +24,12 @@ describe('product shell', () => {
     expect(document.body.textContent).not.toContain('作业');
   });
 
-  it('routes the wizard stage URL to the named stage', () => {
+  it('routes the wizard stage URL into the migration wizard', async () => {
     renderAt('/tasks/new/draft-1/scope');
 
-    expect(screen.getByText(new RegExp(messages.wizard.stages.scope))).toBeInTheDocument();
+    // The wizard owns `/tasks/new/:draftId/:stage`. `draft-1` was never created, and a
+    // 迁移草稿 that is gone leaves no trace, so the page says so rather than offering a
+    // retry that can never succeed — or a 404, which would be about the route.
+    expect(await screen.findByText(messages.wizard.notFound.title)).toBeInTheDocument();
   });
 });
