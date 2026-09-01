@@ -39,5 +39,15 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // ADR-0015 requires exactly one module to know the table substrate exists. That module
+    // is `DbxTable.tsx`, and this is the whole of its exemption: the ban above still holds
+    // for every other file, including the rest of the `DbxTable` directory, whose public
+    // types must stay expressible without the substrate.
+    files: ['src/components/DbxTable/DbxTable.tsx'],
+    rules: {
+      'no-restricted-imports': 'off',
+    },
+  },
   prettier,
 );

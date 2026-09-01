@@ -29,10 +29,30 @@ npm run verify      # all of the above
 | `src/contract/`                       | The hand-written frontend/backend contract (ADR-0016). No OpenAPI document, deliberately.   |
 | `src/api/`                            | The HTTP edge and the TanStack Query hooks over it.                                         |
 | `src/mocks/`                          | MSW handlers, the stateful store, the controllable clock, and the URL scenario registry.    |
+| `src/components/DbxTable/`            | The table boundary (ADR-0015). The only module that imports the table substrate.            |
+| `src/conclusions/`                    | The conclusion → indicator mapping. The single site that knows which indicator means what.  |
 | `src/features/`                       | Per-area product code, one directory per surface.                                           |
 | `src/shell/`                          | The persistent product shell: 迁移任务 / 数据源 / 系统设置.                                 |
 | `src/pages/`                          | One module per route.                                                                       |
 | `e2e/`                                | Playwright, seam 1.                                                                         |
+
+## Tables and conclusions
+
+Every table goes through `DbxTable` (ADR-0015). `@carbon/ibm-products` supplies the
+substrate — sticky columns, virtual scrolling, column resizing, skeleton rows — and is
+importable from `src/components/DbxTable/DbxTable.tsx` and from nowhere else; the
+`no-restricted-imports` rule in `eslint.config.js` scopes that exemption to exactly that
+file. Cross-page selection, paging, density, column visibility and the empty / no-match /
+error states are DBX's own, because Carbon decides none of them.
+
+`DbxTable.test-d.ts` is the type-level half of that guarantee: it asserts the public props
+are constructible from DBX domain types alone. `vitest.config.ts` turns typechecking on so
+`npm test` runs it.
+
+`src/conclusions/` owns the conclusion → indicator mapping fixed by #30 and ADR-0014. No
+other module chooses an indicator kind, and no conclusion is carried by colour alone —
+`INCONCLUSIVE` maps to `unknown` and to no caution variant, so 「无法判定」 is never read as
+「有点风险但可以过」.
 
 ## Mocks, scenarios and the clock
 

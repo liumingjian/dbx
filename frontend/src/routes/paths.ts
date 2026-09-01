@@ -27,6 +27,8 @@ export function isWizardStage(value: string | undefined): value is WizardStage {
 export const routePatterns = {
   migrationTasks: '/tasks',
   wizardStage: '/tasks/new/:draftId/:stage',
+  /** A task's migration run history. Deep-linkable, like every other DBX surface. */
+  migrationTaskRuns: '/tasks/:taskId/runs',
   migrationRun: '/runs/:runId',
   tableMigrationUnit: '/runs/:runId/tables/:unitId',
   databaseConnections: '/connections',
@@ -52,6 +54,7 @@ export const paths = {
   densitySample: routePatterns.densitySample,
   wizardStage: (draftId: string, stage: WizardStage) =>
     buildPath(routePatterns.wizardStage, { draftId, stage }),
+  migrationTaskRuns: (taskId: string) => buildPath(routePatterns.migrationTaskRuns, { taskId }),
   migrationRun: (runId: string) => buildPath(routePatterns.migrationRun, { runId }),
   tableMigrationUnit: (runId: string, unitId: string) =>
     buildPath(routePatterns.tableMigrationUnit, { runId, unitId }),

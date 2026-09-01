@@ -5,6 +5,7 @@ import type {
   RegisterDatabaseConnectionRequest,
 } from '@/contract';
 import { getJson, postJson } from './http';
+import { dbxQueryKey } from './queryKeys';
 
 /**
  * Reading and maintaining database connections.
@@ -19,12 +20,12 @@ interface DatabaseConnectionListResponse {
 }
 
 export const databaseConnectionKeys = {
-  all: ['database-connections'] as const,
+  all: () => dbxQueryKey('database-connections'),
 };
 
 export function useDatabaseConnections() {
   return useQuery({
-    queryKey: databaseConnectionKeys.all,
+    queryKey: databaseConnectionKeys.all(),
     queryFn: async () =>
       (await getJson<DatabaseConnectionListResponse>('/database-connections')).items,
   });
@@ -35,7 +36,7 @@ export function useRegisterDatabaseConnection() {
   return useMutation({
     mutationFn: (request: RegisterDatabaseConnectionRequest) =>
       postJson<DatabaseConnection>('/database-connections', request),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: databaseConnectionKeys.all }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: databaseConnectionKeys.all() }),
   });
 }
 
@@ -47,7 +48,7 @@ export function useAddCredentialVersion() {
         `/database-connections/${encodeURIComponent(variables.id)}/credential-versions`,
         variables.request,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: databaseConnectionKeys.all }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: databaseConnectionKeys.all() }),
   });
 }
 
@@ -56,6 +57,6 @@ export function useCheckDatabaseConnection() {
   return useMutation({
     mutationFn: (id: string) =>
       postJson<DatabaseConnection>(`/database-connections/${encodeURIComponent(id)}/checks`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: databaseConnectionKeys.all }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: databaseConnectionKeys.all() }),
   });
 }

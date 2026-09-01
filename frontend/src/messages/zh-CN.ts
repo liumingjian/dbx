@@ -27,6 +27,83 @@ export const messages = {
   tasks: {
     title: '迁移任务',
     lead: '这里列出全部迁移任务与尚未批准的迁移草稿。',
+    listLabel: '迁移任务',
+    /** A migration task is counted in 项; a source table is counted in 张 (see #34). */
+    unitLabel: '项',
+    columns: {
+      name: '名称',
+      databasePair: '数据库对',
+      source: '源',
+      target: '目标',
+      latestRunStatus: '最近运行状态',
+      selectedTableCount: '选定表数',
+      runCount: '迁移运行次数',
+      approvedAt: '批准时间',
+    },
+    /**
+     * A migration run's status has no `_中文_` line in `CONTEXT.md`, so the interface
+     * shows the enum literal rather than inventing a translation — the precedent batch 1
+     * set for preflight conclusions. The indicator beside it comes from the conclusion
+     * mapping module, so the meaning is never carried by colour alone.
+     */
+    runStatuses: {
+      PREPARING: 'PREPARING',
+      RUNNING: 'RUNNING',
+      ATTENTION_REQUIRED: 'ATTENTION_REQUIRED',
+      CANCELLING: 'CANCELLING',
+      COMPLETED: 'COMPLETED',
+      COMPLETED_WITH_FAILURES: 'COMPLETED_WITH_FAILURES',
+      COMPLETED_WITH_ACCEPTED_RISK: 'COMPLETED_WITH_ACCEPTED_RISK',
+      CANCELLED: 'CANCELLED',
+    },
+    neverRun: '尚未运行',
+    filters: {
+      heading: '筛选',
+      status: '最近运行状态',
+      databasePair: '数据库对',
+      approvedWithin: '批准时间',
+      any: '全部',
+      lastSevenDays: '最近 7 天',
+      lastThirtyDays: '最近 30 天',
+      lastNinetyDays: '最近 90 天',
+      clear: '清除筛选',
+    },
+    openRunsAction: '查看迁移运行',
+    loading: '正在读取迁移任务。',
+    empty: {
+      title: '尚未批准任何迁移任务',
+      body: '下一步：在数据源里登记源与目标的数据库连接，然后新建迁移草稿。迁移草稿经执行确认后才成为迁移任务。',
+    },
+    error: {
+      title: '迁移任务读取失败',
+      body: '这次请求没有成功。稍后重试，或确认 DBX 后端是否可达。',
+    },
+    runs: {
+      title: '迁移运行',
+      lead: '一次迁移运行是对该迁移任务的一次不可变执行尝试；重新迁移是新的迁移运行，不是原地重试。',
+      listLabel: '迁移运行',
+      unitLabel: '次',
+      columns: {
+        id: '迁移运行',
+        status: '状态',
+        startedAt: '开始时间',
+        endedAt: '结束时间',
+        selectedTableCount: '选定表数',
+        excludedTableCount: '排除表数',
+      },
+      inFlight: '进行中',
+      openAction: '打开迁移运行',
+      backAction: '返回迁移任务',
+      loading: '正在读取迁移运行。',
+      empty: {
+        title: '该迁移任务还没有迁移运行',
+        body: '迁移任务在执行确认后生成首个迁移运行。',
+      },
+      error: {
+        title: '迁移运行读取失败',
+        body: '这次请求没有成功。稍后重试，或确认 DBX 后端是否可达。',
+      },
+    },
   },
   wizard: {
     title: '新建迁移草稿',
@@ -131,21 +208,91 @@ export const messages = {
       phase: '阶段',
       conclusion: '预检结论',
     },
-    phases: {
-      readComplete: '读取完成',
-      writeComplete: '写入完成',
-      migrationComplete: '迁移完成',
-      stuck: '卡死',
+  },
+  /**
+   * The migration boundaries of `CONTEXT.md`, as product vocabulary.
+   *
+   * These words used to live under `densitySample`, which made the design reference page
+   * the owner of the product's status language. They are the product's (#33, lead
+   * decision D6); `/design/density` now reads them from here like any other view.
+   */
+  phase: {
+    readComplete: '读取完成',
+    writeComplete: '写入完成',
+    migrationComplete: '迁移完成',
+    stuck: '卡死',
+  },
+  conclusion: {
+    /**
+     * Labels for the closed set of judgements DBX renders as an indicator.
+     *
+     * Only 卡死 has a `_中文_` line in `CONTEXT.md`. The rest are enum literals, because
+     * `CONTEXT.md` carries no Chinese wording for them and the repository rule is to add
+     * the word there first rather than invent one here. `IN_FLIGHT` is the gap this
+     * ticket adds to that list.
+     */
+    labels: {
+      SUPPORTED: 'SUPPORTED',
+      UNSUPPORTED: 'UNSUPPORTED',
+      INCONCLUSIVE: 'INCONCLUSIVE',
+      PASS: 'PASS',
+      FAIL: 'FAIL',
+      NOT_APPLICABLE: 'NOT_APPLICABLE',
+      NOT_RUN: 'NOT_RUN',
+      IN_FLIGHT: 'IN_FLIGHT',
+      STUCK: '卡死',
     },
-    // Preflight conclusions have no `_中文_` line in CONTEXT.md, so DBX shows the enum
-    // literal rather than inventing a translation. #30 writes them this way too
-    // ("预检结论是 `SUPPORTED`、`UNSUPPORTED` 还是 `INCONCLUSIVE`"). If a Chinese wording
-    // is ever wanted, it is added to CONTEXT.md first.
-    conclusions: {
-      supported: 'SUPPORTED',
-      unsupported: 'UNSUPPORTED',
-      inconclusive: 'INCONCLUSIVE',
+  },
+  /**
+   * Copy owned by the `DbxTable` boundary (ADR-0015). Cross-page selection wording, the
+   * density switcher and the column-visibility control are DBX's own — Carbon publishes
+   * none of them — so their words live here rather than being taken from the substrate.
+   */
+  table: {
+    unitLabel: '项',
+    density: {
+      label: '行高',
+      /** ADR-0014: 32px is the smallest usable row height in Chinese; `xs` (24px) is unavailable. */
+      condensed: '密集（32px）',
+      comfortable: '舒适（40px）',
     },
+    columnsAction: '列显示',
+    columnsTitle: '列显示',
+    columnsDescription: '取消勾选可以隐藏该列。标识列始终显示。',
+    columnsClose: '关闭',
+    selection: {
+      columnLabel: '选择',
+      rowLabel: (row: string) => `选择 ${row}`,
+      selectedCount: (count: number, unit: string) => `已选 ${count} ${unit}`,
+      allMatchingSelected: (count: number, unit: string) =>
+        `已选中符合当前筛选的全部 ${count} ${unit}`,
+      excludedCount: (count: number, unit: string) => `已排除 ${count} ${unit}`,
+      selectPageAction: '当前页全选',
+      clearPageAction: '取消当前页选择',
+      selectAllMatchingAction: '选中符合当前筛选的全部',
+      clearAction: '清除选择',
+      undoAction: '撤销',
+      excludeAction: '排除',
+    },
+    batch: {
+      label: '批量动作',
+      confirmAction: '确认',
+      cancelAction: '关闭',
+      undoneNotice: '已撤销上一步动作。',
+    },
+    /** `_Avoid_`: 「没有数据」 when a filter is what emptied the table. */
+    noMatches: {
+      title: '没有匹配项',
+      body: '当前筛选条件没有匹配到任何行。放宽或清除筛选后再看。',
+    },
+    pagination: {
+      itemsPerPage: '每页行数',
+      backward: '上一页',
+      forward: '下一页',
+      itemRange: (min: number, max: number, total: number) => `第 ${min}–${max} 行，共 ${total} 行`,
+      pageRange: (current: number, total: number) => `第 ${current} 页，共 ${total} 页`,
+    },
+    loading: '正在读取。',
   },
   common: {
     retry: '重试',

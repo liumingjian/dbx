@@ -4,10 +4,15 @@ import type {
   DatabaseConnection,
   MigrationDraft,
   MigrationDraftPatch,
+  MigrationRun,
+  MigrationTask,
   RegisterDatabaseConnectionRequest,
+  SourceTableSummary,
 } from '@/contract';
 import type { ControllableClock } from './clock';
 import { seedDatabaseConnections, unreachableConnectionIds } from './fixtures/databaseConnections';
+import { seedMigrationTasks } from './fixtures/migrationTasks';
+import { generateSourceTables } from './fixtures/sourceTables';
 import type { DraftPersistence } from './persistence';
 import type { ScenarioDefinition } from './scenarios';
 
@@ -39,6 +44,17 @@ export interface MockStore {
   updateMigrationDraft(id: string, patch: MigrationDraftPatch): MigrationDraft | undefined;
   /** Discarding a draft leaves no trace, as `CONTEXT.md` requires. */
   discardMigrationDraft(id: string): boolean;
+
+  listMigrationTasks(): MigrationTask[];
+  getMigrationTask(id: string): MigrationTask | undefined;
+  /** A task's migration runs, most recent first. A rerun is a new run, never a retry. */
+  listMigrationRuns(taskId: string): MigrationRun[];
+  getMigrationRun(id: string): MigrationRun | undefined;
+  /**
+   * The tables discovered in one source database. Generated from the scenario seed, so a
+   * 1200-table production schema is reproducible rather than merely large.
+   */
+  listSourceTables(sourceDatabase: string): SourceTableSummary[];
 }
 
 export interface MockStoreOptions {
@@ -55,6 +71,11 @@ export function createMockStore({
   const connections = new Map<string, DatabaseConnection>(
     seedDatabaseConnections(scenario.seedPlan, clock).map((entry) => [entry.id, entry]),
   );
+
+  const seededTasks = seedMigrationTasks(scenario.seedPlan, clock);
+  const tasks = new Map<string, MigrationTask>(seededTasks.tasks.map((task) => [task.id, task]));
+  const runs = new Map<string, MigrationRun>(seededTasks.runs.map((run) => [run.id, run]));
+  const sourceTablesByDatabase = new Map<string, SourceTableSummary[]>();
 
   let drafts: MigrationDraft[] = [...(draftPersistence.read() ?? [])];
   let sequence = 0;
@@ -232,6 +253,38 @@ export function createMockStore({
       drafts = remaining;
       flushDrafts();
       return true;
+    },
+
+    listMigrationTasks() {
+      // Most recently approved first, with the identifier as the tie-break, so the list
+      // reads the same way twice.
+      return [...tasks.values()].sort(
+        (a, b) => b.approvedAt.localeCompare(a.approvedAt, 'en') || a.id.localeCompare(b.id, 'en'),
+      );
+    },
+
+    getMigrationTask(id) {
+      return tasks.get(id);
+    },
+
+    listMigrationRuns(taskId) {
+      return [...runs.values()]
+        .filter((run) => run.taskId === taskId)
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt, 'en'));
+    },
+
+    getMigrationRun(id) {
+      return runs.get(id);
+    },
+
+    listSourceTables(sourceDatabase) {
+      const cached = sourceTablesByDatabase.get(sourceDatabase);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const generated = [...generateSourceTables({ seed: scenario.seed, sourceDatabase })];
+      sourceTablesByDatabase.set(sourceDatabase, generated);
+      return generated;
     },
   };
 }

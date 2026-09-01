@@ -1,16 +1,10 @@
-import { render, screen } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { messages } from '@/messages';
-import { routerFutureFlags, routes } from './router';
-
-function renderAt(initialPath: string) {
-  const router = createMemoryRouter(routes, {
-    initialEntries: [initialPath],
-    future: routerFutureFlags,
-  });
-  return render(<RouterProvider router={router} future={{ v7_startTransition: true }} />);
-}
+// The shared helper (lead decision D14) supplies the query client these routes now need:
+// the migration task list reads through TanStack Query, so rendering a route without a
+// provider stopped being a shell-only concern in #33.
+import { renderRoute as renderAt } from '@/test/render';
 
 describe('product shell', () => {
   it('offers the three navigation destinations', () => {

@@ -2,6 +2,7 @@ import { Button, Tag, Tile } from '@carbon/react';
 import type { ConnectionCheckOutcome, DatabaseConnection } from '@/contract';
 import { formatCredentialVersion, formatDialect, formatTimestamp } from '@/format/display';
 import { messages } from '@/messages';
+import { ConclusionIndicator, connectionCheckConclusion } from '@/conclusions';
 import { Identifier } from '@/pages/Identifier';
 
 /**
@@ -13,7 +14,8 @@ import { Identifier } from '@/pages/Identifier';
  *
  * `Tag` is used for the dimension it is meant for (which side of the database pair this
  * endpoint serves), never for a conclusion: ADR-0014 reserves conclusions for
- * `IconIndicator`, which arrives with the shared conclusion module in #33.
+ * `IconIndicator`. The check outcome goes through the shared conclusion module (#33), so
+ * 数据源 cannot drift into a second indicator vocabulary of its own.
  */
 
 const checkOutcomeLiterals: Record<ConnectionCheckOutcome, string> = {
@@ -65,7 +67,10 @@ export function DatabaseConnectionCard({
         <div className="dbx-connection__fact">
           <dt>{messages.connections.latestCheckLabel}</dt>
           <dd>
-            <Identifier>{checkOutcomeLiterals[latestCheck.outcome]}</Identifier>
+            <ConclusionIndicator
+              conclusion={connectionCheckConclusion(latestCheck.outcome)}
+              label={checkOutcomeLiterals[latestCheck.outcome]}
+            />
             {latestCheck.checkedAt === null ? (
               <span className="dbx-connection__check-time">
                 {messages.connections.neverChecked}

@@ -112,6 +112,36 @@ export const handlers = [
     return updated ? HttpResponse.json(updated) : notFound();
   }),
 
+  http.get(`${API_BASE}/migration-tasks`, async () => {
+    const faulted = await applyTransportFault('migrationTasks');
+    if (faulted) return faulted;
+    return HttpResponse.json({ items: getMockContext().store.listMigrationTasks() });
+  }),
+
+  http.get(`${API_BASE}/migration-tasks/:id`, async ({ params }) => {
+    const faulted = await applyTransportFault('migrationTasks');
+    if (faulted) return faulted;
+    const task = getMockContext().store.getMigrationTask(String(params.id));
+    return task ? HttpResponse.json(task) : notFound();
+  }),
+
+  // A rerun is a new migration run rather than a retry in place (`CONTEXT.md`), so a
+  // task's runs are a history and never a single mutable record.
+  http.get(`${API_BASE}/migration-tasks/:id/runs`, async ({ params }) => {
+    const faulted = await applyTransportFault('migrationRuns');
+    if (faulted) return faulted;
+    return HttpResponse.json({
+      items: getMockContext().store.listMigrationRuns(String(params.id)),
+    });
+  }),
+
+  http.get(`${API_BASE}/source-tables`, async ({ request }) => {
+    const faulted = await applyTransportFault('tableMigrationUnits');
+    if (faulted) return faulted;
+    const sourceDatabase = new URL(request.url).searchParams.get('sourceDatabase') ?? 'orders';
+    return HttpResponse.json({ items: getMockContext().store.listSourceTables(sourceDatabase) });
+  }),
+
   // Discarding a draft leaves no trace; there is nothing to return but the fact of it.
   http.delete(`${API_BASE}/migration-drafts/:id`, async ({ params }) => {
     const faulted = await applyTransportFault('migrationDrafts');

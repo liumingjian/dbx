@@ -8,5 +8,6 @@ export type * from './primitives';
 export type * from './databaseConnection';
 export type * from './migrationTask';
 export type * from './migrationRun';
+export type * from './sourceTable';
 export type * from './tableMigrationUnit';
 export type * from './validation';
