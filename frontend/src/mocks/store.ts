@@ -3,12 +3,14 @@ import type {
   CredentialVersion,
   DatabaseConnection,
   DraftMappingRule,
+  DraftPrunedColumn,
   DraftTableConfiguration,
   DraftTableWorkspace,
   MigrationDraft,
   MigrationDraftPatch,
   MigrationRun,
   MigrationTask,
+  PruneColumnRequest,
   RecordMappingRuleRequest,
   RegisterDatabaseConnectionRequest,
   SourceTableSummary,
@@ -17,7 +19,11 @@ import type { ControllableClock } from './clock';
 import { seedDatabaseConnections, unreachableConnectionIds } from './fixtures/databaseConnections';
 import { seedMigrationTasks } from './fixtures/migrationTasks';
 import { generateSourceTables } from './fixtures/sourceTables';
-import { draftTableConfigurationOf, draftTableWorkspaceOf } from './fixtures/tableWorkspace';
+import {
+  draftTableConfigurationOf,
+  draftTableWorkspaceOf,
+  requiresZeroDateDecision,
+} from './fixtures/tableWorkspace';
 import type { DraftPersistence } from './persistence';
 import type { ScenarioDefinition } from './scenarios';
 
@@ -81,6 +87,25 @@ export interface MockStore {
     draftId: string,
     request: RecordMappingRuleRequest,
   ): DraftTableWorkspace | undefined;
+
+  /**
+   * Cuts one column out of a table's selected columns, or puts it back (ADR-0003).
+   *
+   * The second of the three exits from a blocked 预检. Like a 映射规则, it changes what
+   * the contract would write, so it reruns the table's 预检 rather than editing a
+   * conclusion — 「DBX reruns preflight against the approved selected columns」.
+   */
+  pruneColumn(draftId: string, request: PruneColumnRequest): DraftTableWorkspace | undefined;
+
+  /**
+   * Runs one table's 预检 again.
+   *
+   * The first of the three exits: the operator fixes the source — data, a permission, a
+   * timeout — outside DBX and asks for a fresh reading. It reruns the scan and reports
+   * whatever it finds; there is deliberately no argument that could make it conclude
+   * anything else.
+   */
+  rerunPreflight(draftId: string, sourceTable: string): DraftTableWorkspace | undefined;
 }
 
 export interface MockStoreOptions {
@@ -91,6 +116,18 @@ export interface MockStoreOptions {
 
 /** The identifier of the seeded 迁移草稿; see `SeedPlan.migrationDrafts`. */
 export const SEEDED_DRAFT_ID = 'draft-ready-for-tables';
+
+/**
+ * How long a rerun of one table's 预检 takes, in **mock** milliseconds.
+ *
+ * ADR-0003 makes preflight an exact source-side scan that 「may require a full source-table
+ * scan and can delay review」, so a rerun that settled inside one request would have taught
+ * the interface nothing: 「预检进行中」 has to be a state a view can actually be caught in,
+ * or nobody would find out that it renders as a running scan rather than as a frozen
+ * screen. Expressed in mock time so the controllable clock governs it like everything else
+ * — at the default rate it is a few seconds of real waiting.
+ */
+export const PREFLIGHT_RERUN_MOCK_MS = 180_000;
 
 export function createMockStore({
   scenario,
@@ -122,6 +159,30 @@ export function createMockStore({
    */
   if (seedPlan.migrationDrafts === 'ready-for-tables' && drafts.length === 0) {
     const now = clock.nowIso();
+    const generated = generateSourceTables({ seed: scenario.seed, sourceDatabase: 'orders' });
+    // Forty tables, plus one of every condition stage three has to be able to express.
+    //
+    // Taking a prefix alone would leave which conditions are present to luck, and the
+    // conditions are the whole point of the stage: a blocked table, a table nothing can be
+    // concluded about, a table hitting several conditions at once, and a table whose
+    // mapping DBX refuses to decide. Each is named by what it *is*, so the seed can change
+    // without the scope quietly losing a case.
+    const scope = new Set(generated.slice(0, 40).map((table) => table.name));
+    const include = (table: SourceTableSummary | undefined): void => {
+      if (table !== undefined) scope.add(table.name);
+    };
+    include(generated.find((table) => table.preflightConclusion === 'UNSUPPORTED'));
+    include(generated.find((table) => table.preflightConclusion === 'INCONCLUSIVE'));
+    include(
+      generated.find(
+        (table) =>
+          table.preflightConclusion !== 'SUPPORTED' &&
+          table.largeRecordTable &&
+          table.mappingExceptionCount > 0,
+      ),
+    );
+    include(generated.find((table) => requiresZeroDateDecision(scenario.seed, table)));
+
     drafts = [
       {
         id: SEEDED_DRAFT_ID,
@@ -133,11 +194,13 @@ export function createMockStore({
         targetConnectionId: 'conn-pg-analytics',
         targetSchema: 'orders_migrated',
         scopeKind: 'SELECTED_TABLES',
-        selectedTables: generateSourceTables({ seed: scenario.seed, sourceDatabase: 'orders' })
-          .slice(0, 40)
+        // Generation order, so the 迁移范围 opens the same way twice.
+        selectedTables: generated
+          .filter((table) => scope.has(table.name))
           .map((table) => table.name),
         excludedTables: [],
         mappingRules: [],
+        prunedColumns: [],
         completedStages: ['connections', 'scope'],
       },
     ];
@@ -171,6 +234,55 @@ export function createMockStore({
 
   const rulesOfTable = (draft: MigrationDraft, sourceTable: string): DraftMappingRule[] =>
     draft.mappingRules.filter((rule) => rule.sourceTable === sourceTable);
+
+  const prunedOfTable = (draft: MigrationDraft, sourceTable: string): string[] =>
+    draft.prunedColumns
+      .filter((column) => column.sourceTable === sourceTable)
+      .map((column) => column.sourceColumn);
+
+  /**
+   * The tables whose 预检 is running again, and the mock instant each finishes at.
+   *
+   * Held here rather than on the draft because a scan in progress is a server-side fact
+   * about work, not part of the operator's unapproved working set — persisting it would
+   * resurrect a running scan on a page nobody has open.
+   */
+  const preflightRerunUntil = new Map<string, number>();
+  const rerunKey = (draftId: string, sourceTable: string): string => `${draftId}\u0000${sourceTable}`;
+
+  const markPreflightRerun = (draftId: string, sourceTable: string): void => {
+    preflightRerunUntil.set(rerunKey(draftId, sourceTable), clock.now() + PREFLIGHT_RERUN_MOCK_MS);
+  };
+
+  const preflightInFlight = (draftId: string, sourceTable: string): boolean => {
+    const key = rerunKey(draftId, sourceTable);
+    const until = preflightRerunUntil.get(key);
+    if (until === undefined) {
+      return false;
+    }
+    if (clock.now() >= until) {
+      preflightRerunUntil.delete(key);
+      return false;
+    }
+    return true;
+  };
+
+  const workspaceOf = (
+    draft: MigrationDraft,
+    table: SourceTableSummary,
+  ): DraftTableWorkspace =>
+    draftTableWorkspaceOf({
+      seed: scenario.seed,
+      table,
+      targetSchema: draft.targetSchema ?? '',
+      userRules: rulesOfTable(draft, table.name),
+      prunedColumns: prunedOfTable(draft, table.name),
+      preflightInFlight: preflightInFlight(draft.id, table.name),
+      // The moment the contract was assembled is the moment the draft last changed, not
+      // the moment it was read: 「重新生成于」 has to move when a 映射规则 is recorded and
+      // stay still when the same table is merely opened again.
+      generatedAt: draft.updatedAt,
+    });
 
   return {
     listDatabaseConnections() {
@@ -310,6 +422,7 @@ export function createMockStore({
         selectedTables: [],
         excludedTables: [],
         mappingRules: [],
+        prunedColumns: [],
         completedStages: [],
         ...patch,
       };
@@ -387,6 +500,9 @@ export function createMockStore({
                 seed: scenario.seed,
                 table,
                 userRules: rulesOfTable(draft, name),
+                prunedColumns: prunedOfTable(draft, name),
+                preflightInFlight: preflightInFlight(draftId, name),
+                generatedAt: draft.updatedAt,
               }),
             ];
       });
@@ -403,16 +519,7 @@ export function createMockStore({
       if (table === undefined || !draft.selectedTables.includes(sourceTable)) {
         return undefined;
       }
-      return draftTableWorkspaceOf({
-        seed: scenario.seed,
-        table,
-        targetSchema: draft.targetSchema ?? '',
-        userRules: rulesOfTable(draft, sourceTable),
-        // The moment the contract was assembled is the moment the draft last changed, not
-        // the moment it was read: 「重新生成于」 has to move when a 映射规则 is recorded and
-        // stay still when the same table is merely opened again.
-        generatedAt: draft.updatedAt,
-      });
+      return workspaceOf(draft, table);
     },
 
     recordMappingRule(draftId, request) {
@@ -449,13 +556,57 @@ export function createMockStore({
       if (table === undefined) {
         return undefined;
       }
-      return draftTableWorkspaceOf({
-        seed: scenario.seed,
-        table,
-        targetSchema: updated.targetSchema ?? '',
-        userRules: rulesOfTable(updated, request.sourceTable),
-        generatedAt: updated.updatedAt,
-      });
+      // ADR-0011: 「A mapping change creates a new draft and reruns every affected
+      // preflight」. The rerun starts here rather than being something a view remembers to
+      // ask for, which is what stops a superseded conclusion outliving the rule that
+      // produced it.
+      markPreflightRerun(draftId, request.sourceTable);
+      return workspaceOf(updated, table);
+    },
+
+    pruneColumn(draftId, request) {
+      const index = drafts.findIndex((entry) => entry.id === draftId);
+      const draft = drafts[index];
+      if (draft === undefined) {
+        return undefined;
+      }
+      const table = sourceTablesOf(draft).get(request.sourceTable);
+      if (table === undefined || !draft.selectedTables.includes(request.sourceTable)) {
+        return undefined;
+      }
+      const without = draft.prunedColumns.filter(
+        (column) =>
+          column.sourceTable !== request.sourceTable ||
+          column.sourceColumn !== request.sourceColumn,
+      );
+      const pruned: DraftPrunedColumn = {
+        sourceTable: request.sourceTable,
+        sourceColumn: request.sourceColumn,
+      };
+      const updated: MigrationDraft = {
+        ...draft,
+        prunedColumns: request.pruned ? [...without, pruned] : without,
+        updatedAt: clock.nowIso(),
+      };
+      drafts = [...drafts.slice(0, index), updated, ...drafts.slice(index + 1)];
+      flushDrafts();
+      // ADR-0003: 「Excluding one field does not waive the row check: DBX reruns preflight
+      // against the approved selected columns.」
+      markPreflightRerun(draftId, request.sourceTable);
+      return workspaceOf(updated, table);
+    },
+
+    rerunPreflight(draftId, sourceTable) {
+      const draft = drafts.find((entry) => entry.id === draftId);
+      if (draft === undefined) {
+        return undefined;
+      }
+      const table = sourceTablesOf(draft).get(sourceTable);
+      if (table === undefined || !draft.selectedTables.includes(sourceTable)) {
+        return undefined;
+      }
+      markPreflightRerun(draftId, sourceTable);
+      return workspaceOf(draft, table);
     },
   };
 }

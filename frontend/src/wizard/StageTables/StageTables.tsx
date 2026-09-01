@@ -3,16 +3,19 @@ import { useSearchParams } from 'react-router-dom';
 import {
   useDraftTableConfigurations,
   useDraftTableWorkspace,
+  usePruneColumn,
   useRecordMappingRule,
+  useRerunPreflight,
 } from '@/api/draftTables';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ViewState';
-import type { MappingRuleAction } from '@/contract';
+import type { MappingRuleAction, MigrationDraftPatch } from '@/contract';
 import { formatTimestamp } from '@/format/display';
 import { messages } from '@/messages';
 import type { WizardGateContext } from '../stageGates';
 import { DdlPane } from './DdlPane';
 import { FindingsPane } from './FindingsPane';
 import { ObjectTreePane } from './ObjectTreePane';
+import { PreflightPane } from './PreflightPane';
 
 /**
  * Stage three — 逐表配置与预检, front half (#35).
@@ -33,9 +36,11 @@ import { ObjectTreePane } from './ObjectTreePane';
  */
 interface StageTablesProps {
   readonly context: WizardGateContext;
+  /** Needed by the third exit: excluding a table changes the 迁移范围 the draft records. */
+  readonly onPatch: (patch: MigrationDraftPatch) => void;
 }
 
-export function StageTables({ context }: StageTablesProps) {
+export function StageTables({ context, onPatch }: StageTablesProps) {
   const { draft } = context;
   const [searchParams, setSearchParams] = useSearchParams();
   const configurations = useDraftTableConfigurations(draft.id);
@@ -51,6 +56,9 @@ export function StageTables({ context }: StageTablesProps) {
 
   const workspace = useDraftTableWorkspace(draft.id, selected);
   const record = useRecordMappingRule(draft.id);
+  const prune = usePruneColumn(draft.id);
+  const rerun = useRerunPreflight(draft.id);
+  const busy = record.isPending || prune.isPending || rerun.isPending;
 
   const openTable = useCallback(
     (sourceTable: string) => {
@@ -78,6 +86,42 @@ export function StageTables({ context }: StageTablesProps) {
     },
     [record, selected],
   );
+
+  const pruneColumn = useCallback(
+    (sourceColumn: string, pruned: boolean) => {
+      if (selected !== null) {
+        prune.mutate({ sourceTable: selected, sourceColumn, pruned });
+      }
+    },
+    [prune, selected],
+  );
+
+  const rerunPreflight = useCallback(() => {
+    if (selected !== null) {
+      rerun.mutate(selected);
+    }
+  }, [rerun, selected]);
+
+  /**
+   * ADR-0003's third exit: 「选择排除此表」.
+   *
+   * The table leaves the 迁移范围 and is written into the draft's 显式排除 at the same
+   * time, because 「显式排除是可复核的例外」 — an unticked table and an excluded one are
+   * different decisions (lead decision D20), and only the second one is reviewable. The
+   * 迁移范围's own kind is left alone: this is one exception recorded inside the scope the
+   * operator already stated, not a restatement of that scope.
+   */
+  const excludeTable = useCallback(() => {
+    if (selected === null) {
+      return;
+    }
+    onPatch({
+      selectedTables: draft.selectedTables.filter((name) => name !== selected),
+      excludedTables: draft.excludedTables.includes(selected)
+        ? draft.excludedTables
+        : [...draft.excludedTables, selected],
+    });
+  }, [draft.excludedTables, draft.selectedTables, onPatch, selected]);
 
   if (configurations.isPending) {
     return <LoadingState description={messages.wizard.tables.loading} />;
@@ -162,8 +206,18 @@ export function StageTables({ context }: StageTablesProps) {
               <FindingsPane
                 exceptions={workspace.data?.mappingExceptions ?? []}
                 onChoose={chooseRule}
-                recording={record.isPending}
-              />
+                recording={busy}
+              >
+                {workspace.data === undefined ? null : (
+                  <PreflightPane
+                    workspace={workspace.data}
+                    onRerun={rerunPreflight}
+                    onPrune={pruneColumn}
+                    onExclude={excludeTable}
+                    busy={busy}
+                  />
+                )}
+              </FindingsPane>
             </>
           )}
         </div>

@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Search, Tag, TreeNode, TreeView } from '@carbon/react';
+import { ConclusionIndicator } from '@/conclusions';
 import type { DraftTableConfiguration, TableObjectNode } from '@/contract';
 import { messages } from '@/messages';
 import { Identifier } from '@/pages/Identifier';
+import { preflightIndicatorConclusion } from './preflightExits';
 
 /**
  * The workspace's first pane: the object tree.
@@ -109,7 +111,12 @@ export function ObjectTreePane({
               <span className="dbx-workspace__tree-label">
                 <Identifier>{table.sourceTable}</Identifier>
                 {/* A table can hit several conditions at once, and the tree says all of
-                    them rather than the most dramatic one (story 47). */}
+                    them rather than the most dramatic one (story 47). The conclusion comes
+                    from the product's one conclusion→indicator module, so `INCONCLUSIVE`
+                    keeps the same first-class form here as in the 预检 pane. */}
+                <ConclusionIndicator
+                  conclusion={preflightIndicatorConclusion(table.preflightConclusion)}
+                />
                 {table.largeRecordTable ? (
                   <Tag type="cool-gray" size="sm">
                     {messages.wizard.tables.largeRecordTable}
@@ -118,6 +125,11 @@ export function ObjectTreePane({
                 {table.mappingExceptionCount > 0 ? (
                   <span className="dbx-workspace__tree-detail">
                     {messages.wizard.scope.mappingExceptions(table.mappingExceptionCount)}
+                  </span>
+                ) : null}
+                {table.prunedColumnCount > 0 ? (
+                  <span className="dbx-workspace__tree-detail">
+                    {messages.wizard.tables.prunedColumnCount(table.prunedColumnCount)}
                   </span>
                 ) : null}
                 {table.contractVersion === null ? (
@@ -155,6 +167,11 @@ export function ObjectTreePane({
                           <span className="dbx-workspace__tree-label">
                             <Identifier>{member.name}</Identifier>
                             <span className="dbx-workspace__tree-detail">{member.detail}</span>
+                            {member.pruned ? (
+                              <Tag type="warm-gray" size="sm">
+                                {messages.wizard.tables.prunedColumn}
+                              </Tag>
+                            ) : null}
                             {member.hasMappingException ? (
                               <Tag type="blue" size="sm">
                                 {messages.wizard.tables.mappingListLabel}

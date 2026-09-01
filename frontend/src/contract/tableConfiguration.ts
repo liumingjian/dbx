@@ -126,6 +126,14 @@ export interface TableObjectNode {
   readonly inWritableContract: boolean;
   /** Whether this coordinate carries a structured mapping exception. */
   readonly hasMappingException: boolean;
+  /**
+   * True when the operator cut this column out of the table's selected columns.
+   *
+   * A pruned column stays listed rather than disappearing: ADR-0003's second exit is
+   * 「裁剪超限字段后重新预检」, and a field that vanished from the tree would be an
+   * omission nobody could review or undo.
+   */
+  readonly pruned: boolean;
 }
 
 /**
@@ -137,9 +145,12 @@ export interface TableObjectNode {
 export interface DraftTableConfiguration {
   readonly sourceTable: string;
   readonly targetTable: string;
-  readonly preflightConclusion: PreflightConclusion;
+  /** Null while the table's 预检 is being re-established. See `Preflight.conclusion`. */
+  readonly preflightConclusion: PreflightConclusion | null;
   readonly blockingFindingCount: number;
   readonly largeRecordTable: boolean;
+  /** Columns the operator cut out of this table's selected columns (ADR-0003). */
+  readonly prunedColumnCount: number;
   readonly mappingExceptionCount: number;
   /** Exceptions DBX will not decide on the operator's behalf, still undecided. */
   readonly undecidedMappingExceptionCount: number;
@@ -168,6 +179,8 @@ export interface DraftTableWorkspace {
   readonly objectTree: readonly TableObjectNode[];
   readonly mappingExceptions: readonly MappingException[];
   readonly preflight: Preflight;
+  /** The columns cut out of this table's selected columns, in source order. */
+  readonly prunedColumns: readonly string[];
   /** Null while an exception is undecided: an incomplete contract is not rendered. */
   readonly tableWriteContract: TableWriteContract | null;
 }
@@ -180,6 +193,23 @@ export interface DraftTableWorkspace {
  * affected 预检, which is ADR-0011's 「A mapping change creates a new draft and reruns
  * every affected preflight」.
  */
+/**
+ * Cutting one column out of a table's selected columns, or putting it back.
+ *
+ * ADR-0003 fixes this as one of the three exits from a blocked preflight: 「exclude an
+ * offending selected column through the column-pruning/query-mode behavior already fixed
+ * by the map」. It is reversible because it is a review decision, not a repair — and
+ * because 「Excluding one field does not waive the row check: DBX reruns preflight against
+ * the approved selected columns」, so the operator has to be able to see what the rerun
+ * concluded and change their mind.
+ */
+export interface PruneColumnRequest {
+  readonly sourceTable: string;
+  readonly sourceColumn: string;
+  /** False puts the column back into the selected columns. */
+  readonly pruned: boolean;
+}
+
 export interface RecordMappingRuleRequest {
   readonly sourceTable: string;
   readonly sourceColumn: string;

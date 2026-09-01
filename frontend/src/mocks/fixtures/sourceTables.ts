@@ -205,6 +205,9 @@ export function generateSourceTables({
 
     if (category === 'preflightBlocked') {
       conclusion = blockedSeen % 2 === 0 ? 'UNSUPPORTED' : 'INCONCLUSIVE';
+      // ADR-0003 has two different unsupported shapes, and the interface has to be able to
+      // show both: a value above the 20 MiB 大记录包络, which the operator can cut, and a
+      // value domain the target type cannot hold, which they cannot.
       blockingFindings = conclusion === 'UNSUPPORTED' ? 1 + Math.floor(random() * 3) : 0;
       if (blockedSeen % 3 === 0) largeRecordTable = true;
       if (blockedSeen % 4 === 0) mappingExceptions = 1 + Math.floor(random() * 4);
@@ -225,7 +228,13 @@ export function generateSourceTables({
       estimatedBytes,
       mappingExceptionCount: mappingExceptions,
       largeRecordTable,
-      largestValueBytes: largeRecordTable ? 1_048_576 + Math.floor(random() * 18_000_000) : null,
+      largestValueBytes: largeRecordTable
+        ? // An UNSUPPORTED 大记录表 is unsupported *because* one value is over the 20 MiB
+          // envelope; every other 大记录表 is over 1 MiB and inside the envelope.
+          conclusion === 'UNSUPPORTED'
+          ? 20_971_520 + 1 + Math.floor(random() * 4_000_000)
+          : 1_048_576 + Math.floor(random() * 18_000_000)
+        : null,
       preflightConclusion: conclusion,
       preflightBlockingFindingCount: blockingFindings,
     });

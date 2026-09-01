@@ -123,3 +123,76 @@
 .dbx-sql--punctuation {
   color: $text-secondary;
 }
+
+// 预检证据与阻断门禁 (#36).
+//
+// The conclusion, its findings and the three exits sit at the top of the findings pane,
+// above the mapping exceptions, because they are the judgement the rest of the pane exists
+// to inform. Nothing here is styled as a warning: `INCONCLUSIVE` carries its own indicator
+// and its own notification kind, decided in `src/conclusions/` and `preflightExits.ts`.
+
+.dbx-preflight {
+  border: 1px solid $border-subtle;
+  background-color: $layer;
+  padding: $spacing-04;
+  margin-block-end: $spacing-05;
+}
+
+.dbx-preflight__conclusion,
+.dbx-preflight__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $spacing-03;
+  margin-block-start: $spacing-03;
+}
+
+.dbx-preflight__facts {
+  color: $text-secondary;
+}
+
+.dbx-preflight__pruned {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-02;
+}
+
+.dbx-preflight__subtitle {
+  @include type-style('heading-compact-01');
+
+  margin-block-start: $spacing-05;
+}
+
+.dbx-preflight__findings {
+  margin-block-start: $spacing-03;
+  display: grid;
+  gap: $spacing-03;
+}
+
+.dbx-preflight__finding-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $spacing-03;
+}
+
+.dbx-preflight__finding-body {
+  display: block;
+  color: $text-secondary;
+}
+
+.dbx-preflight__exits {
+  margin-block-start: $spacing-05;
+  display: grid;
+  gap: $spacing-04;
+}
+
+// Three exits, side by side and equally weighted: none of them is the easy one, because
+// none of them is a way around the constraint.
+.dbx-preflight__exit {
+  border-inline-start: 2px solid $border-strong;
+  padding-inline-start: $spacing-04;
+  display: grid;
+  justify-items: start;
+  gap: $spacing-02;
+}

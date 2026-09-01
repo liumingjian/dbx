@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   DraftTableConfiguration,
   DraftTableWorkspace,
+  PruneColumnRequest,
   RecordMappingRuleRequest,
 } from '@/contract';
 import { getJson, postJson } from './http';
@@ -19,7 +20,15 @@ import { dbxQueryKey } from './queryKeys';
  * the reassembled workspace and invalidates the per-table summaries, so the DDL on screen,
  * the exception list beside it and the stage's gate all move together — 「修改映射后契约与
  * DDL 自动重新生成」 falls out of the cache rather than out of a callback.
+ *
+ * The same holds for the 预检 the change invalidates (#36). A rerun takes time, so both
+ * reads poll while any conclusion is missing and stop the moment they are all back. That
+ * is the whole mechanism behind 「旧结论不会留在屏幕上」: the conclusion is absent while the
+ * scan runs, so there is nothing stale left to render.
  */
+
+/** How often an unconcluded 预检 is asked about again, in real milliseconds. */
+const PREFLIGHT_POLL_MS = 400;
 
 interface ListResponse<T> {
   readonly items: readonly T[];
@@ -44,6 +53,14 @@ export function useDraftTableConfigurations(draftId: string) {
         )
       ).items,
     enabled: draftId !== '',
+    // A missing conclusion means a scan is still running, and the stage's gate reads this
+    // list: leaving it stale would leave the wizard reporting a fact that has expired.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some(
+        (configuration) => configuration.preflightConclusion === null,
+      )
+        ? PREFLIGHT_POLL_MS
+        : false,
   });
 }
 
@@ -62,24 +79,59 @@ export function useDraftTableWorkspace(draftId: string, sourceTable: string | nu
         `${draftPath(draftId)}/tables/${encodeURIComponent(sourceTable ?? '')}`,
       ),
     enabled: draftId !== '' && sourceTable !== null && sourceTable !== '',
+    refetchInterval: (query) =>
+      query.state.data?.preflight.conclusion === null ? PREFLIGHT_POLL_MS : false,
   });
 }
 
-export function useRecordMappingRule(draftId: string) {
+/**
+ * The three writes stage three can make, all of the same shape.
+ *
+ * Each one changes what the 表写入契约 would write and therefore invalidates the evidence
+ * that was reached against the previous one. They share this hook so that no caller can
+ * make one of the three without the reassembled workspace landing in the cache and the
+ * per-table summaries — the stage's gate among them — being invalidated.
+ */
+function useWorkspaceMutation<TRequest>(
+  draftId: string,
+  send: (request: TRequest) => Promise<DraftTableWorkspace>,
+) {
   const queryClient = useQueryClient();
   return useMutation({
-    // Serialised: two rules recorded at once are two partial writes against one draft, and
+    // Serialised: two changes at once are two partial writes against one draft, and
     // landing out of order would quietly restore a decision the operator had replaced.
     scope: { id: 'migration-draft' },
-    mutationFn: (request: RecordMappingRuleRequest) =>
-      postJson<DraftTableWorkspace>(`${draftPath(draftId)}/mapping-rules`, request),
-    onSuccess: (workspace) => {
-      // The regenerated contract, straight into the cache: the DDL pane is showing the
-      // contract this response carries, not a promise that one is coming.
+    mutationFn: send,
+    onSuccess: (workspace: DraftTableWorkspace) => {
+      // The regenerated contract and the rerunning 预检, straight into the cache: the pane
+      // is showing the evidence this response carries, not a promise that some is coming.
       queryClient.setQueryData(draftTableKeys.workspace(draftId, workspace.sourceTable), workspace);
       // ADR-0011: a mapping change reruns every affected 预检, so the summaries the object
       // tree and the stage's gate read are no longer to be trusted.
       void queryClient.invalidateQueries({ queryKey: draftTableKeys.configurations(draftId) });
     },
   });
+}
+
+export function useRecordMappingRule(draftId: string) {
+  return useWorkspaceMutation(draftId, (request: RecordMappingRuleRequest) =>
+    postJson<DraftTableWorkspace>(`${draftPath(draftId)}/mapping-rules`, request),
+  );
+}
+
+/** ADR-0003's second exit: cut an offending column, and rerun the 预检 without it. */
+export function usePruneColumn(draftId: string) {
+  return useWorkspaceMutation(draftId, (request: PruneColumnRequest) =>
+    postJson<DraftTableWorkspace>(`${draftPath(draftId)}/pruned-columns`, request),
+  );
+}
+
+/** ADR-0003's first exit: the source was fixed outside DBX; read the facts again. */
+export function useRerunPreflight(draftId: string) {
+  return useWorkspaceMutation(draftId, (sourceTable: string) =>
+    postJson<DraftTableWorkspace>(
+      `${draftPath(draftId)}/tables/${encodeURIComponent(sourceTable)}/preflight-runs`,
+      {},
+    ),
+  );
 }
