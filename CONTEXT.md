@@ -24,9 +24,25 @@ _Avoid_: JDBC URL, datasource
 An immutable version of secret authentication material referenced by connections and runs. A run retains its initial version and any explicitly adopted recovery replacement as audited bindings; historical use remains auditable after the recoverable secret is destroyed.
 _Avoid_: Password field, current password
 
+**Mapping rule**:
+A structured, reviewable exception to DBX's automatic table or column mapping. A rule names one source coordinate, one bounded action, its target value, and whether DBX or the user produced it; user rules override automatic rules. Rules never contain arbitrary SQL or regular expressions in v1.
+_Avoid_: Mapping script, route expression
+
+**Preflight**:
+A source-side proof required before a table write contract may be approved. It evaluates exact value-domain and transport facts and concludes `SUPPORTED`, `UNSUPPORTED`, or `INCONCLUSIVE`; only `SUPPORTED` may proceed, and a new source baseline is still required after the write freeze.
+_Avoid_: Validation, estimate, warning acknowledgement
+
 **Table write contract**:
-The immutable, single-table write intent that DBX must prove before starting a Sink, derived from approved source metadata, preflight findings, and mapping exceptions. DDL is one rendering of this contract, not an independent configuration.
+The immutable, single-table write intent that DBX must prove before starting a Sink, derived from approved source metadata, preflight findings, and mapping rules. DDL is one rendering of this contract, not an independent configuration.
 _Avoid_: Editable DDL, sink schema
+
+**Structural proof**:
+The deterministic comparison of the actual PostgreSQL table, identifiers, types, nullability, defaults, primary key, identity or sequence, routing, and JDBC binding compatibility against the approved table write contract. Only zero difference permits the Sink to start.
+_Avoid_: Probe insert, table exists check
+
+**Supplemental SQL**:
+The executable post-migration script that preserves source metadata for target structures deliberately outside the v1 writable-table contract, such as unique constraints, ordinary indexes, foreign keys, comments, and collation-related work. DBX v1 delivers it but does not execute it as part of migration.
+_Avoid_: Migrated constraints, automatic post-DDL
 
 **Source dialect**:
 The versioned description of one supported source database family, responsible for interpreting its metadata, value and identifier semantics, exact source-side facts, and extraction requirements. It supplies facts and plans but never advances migration workflow.
@@ -39,6 +55,14 @@ _Avoid_: Sink connector, target adapter
 **Database pair**:
 An explicitly supported, directed and versioned conversion relationship from one source dialect to one target dialect. It owns cross-database mapping and compatibility decisions; the presence of two endpoint dialects alone does not imply a supported pair.
 _Avoid_: Automatic dialect combination, bidirectional pair
+
+**Validation plan**:
+The immutable, versioned set of enabled, disabled, and not-applicable validation checks for one table migration unit, with comparison semantics and evidence requirements fixed before execution.
+_Avoid_: Validation options, best-effort checks
+
+**Validation execution**:
+One retained attempt to execute a validation plan after write completion. Its items conclude `PASS`, `FAIL`, `INCONCLUSIVE`, `NOT_APPLICABLE`, or `NOT_RUN`; a later execution or disposition never rewrites the original result.
+_Avoid_: Validation status, check retry
 
 **Validation disposition**:
 An operator's audited decision about a failed or inconclusive validation result. Accepting risk may close the workflow but never changes the technical validation result to passed.

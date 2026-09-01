@@ -1,62 +1,34 @@
 # DBX
 
-DBX 是一个面向企业数据平台的异构数据库离线迁移平台，用于在不同数据库系统之间进行可控、可追溯、可验证的数据迁移。
+DBX v1 is an offline, one-time full-migration platform for **MySQL 8.0 → PostgreSQL 15**. It presents migration as independently observable table migration units while using Kafka and Kafka Connect as an internal, run-isolated data plane.
 
-## 项目定位
+The v1 goal is a controlled path for a DBA: discover source metadata, review automatic mappings and exact preflight evidence, approve a platform-owned target DDL contract, transfer data, validate each table, and retain actionable diagnostic evidence. DBX prioritizes correctness and explicit boundaries over silent coercion or broad configurability.
 
-在数据库替换、数据平台升级、跨系统整合、国产化适配等场景中，业务系统往往需要将数据从一种数据库迁移到另一种数据库。DBX 关注离线迁移场景，目标是在不依赖实时同步链路的前提下，完成结构、数据与迁移结果的统一管理。
+## Canonical documentation
 
-## 核心能力
+Read these in order before implementation:
 
-- **异构数据库迁移**：支持不同类型数据库之间的数据迁移流程编排。
-- **离线迁移任务管理**：以任务为单位管理迁移配置、执行状态与结果。
-- **结构与数据分离处理**：支持围绕表结构、字段映射、数据抽取、数据写入等环节组织迁移过程。
-- **迁移过程可追踪**：记录迁移任务的执行状态、日志与结果，便于排查问题。
-- **结果校验**：支持对迁移后的数据进行数量、完整性或一致性检查。
-- **可扩展适配**：为新增数据库类型、迁移策略和校验规则预留扩展空间。
+1. [`CONTEXT.md`](CONTEXT.md) — canonical domain language.
+2. [`docs/technical-plan.md`](docs/technical-plan.md) — integrated v1 architecture, mapping, interfaces, operations, limits, and acceptance plan.
+3. [`docs/adr/`](docs/adr/) — architectural decisions and their consequences.
 
-## 典型使用场景
+When the technical plan and an ADR disagree, stop and reconcile the documents; do not choose silently.
 
-- 数据库类型替换，例如从传统关系型数据库迁移到新的数据库平台。
-- 历史数据归档或离线搬迁。
-- 测试、预生产、灾备环境的数据初始化。
-- 多系统数据整合和平台升级。
-- 国产数据库适配与迁移验证。
+## V1 at a glance
 
-## 基本流程
+- Kafka + Confluent JDBC Source/Sink is the sole record path; DBX owns orchestration, completion, recovery, validation, and cleanup.
+- Avro + Schema Registry fixes typed transport.
+- DBX generates and executes target DDL from an immutable table write contract; Sink uses `auto.create=false` and `auto.evolve=false`.
+- A table migration unit owns durable progress and results; a box is a disposable scheduling artifact.
+- Exact source preflight enforces a 20 MiB (20,971,520-byte) value and row-payload boundary; Kafka uses a separate 25 MiB (26,214,400-byte) transport envelope.
+- V1 has no CDC, no single-table sharding, no data-level checkpoint resume, and no second path for oversized records.
+- A rerun is a new migration run and a complete copy of each selected table.
+- Green means all enabled v1 validation checks passed under an externally maintained source write freeze; it does not claim full row-by-row proof.
 
-```text
-创建迁移任务
-    ↓
-配置源库与目标库
-    ↓
-配置表、字段和类型映射
-    ↓
-执行离线数据抽取
-    ↓
-写入目标数据库
-    ↓
-执行迁移校验
-    ↓
-查看结果与日志
-```
+## Project status
 
-## 目录说明
+The v1 domain and technical specification are complete enough to hand off to implementation. Research, task, and prototype branches remain provenance and reproducibility evidence; production code should follow the canonical documents above.
 
-当前仓库处于初始化阶段，后续可按实际实现逐步补充目录结构说明，例如：
+## License
 
-```text
-.
-├── docs/                 # 项目文档
-├── src/                  # 源代码
-├── tests/                # 测试代码
-└── README.md             # 项目说明
-```
-
-## 开发状态
-
-项目正在早期建设中，具体数据库适配范围、任务模型、执行引擎和校验策略将随实现逐步完善。
-
-## 许可证
-
-待补充。
+Project licensing is not yet declared. Third-party distribution constraints, including Confluent components and customer-provided MySQL Connector/J, are documented in the technical plan and must be resolved in every release package.
