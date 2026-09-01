@@ -6,7 +6,9 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'playwright-report', 'test-results'] },
+  // `public/mockServiceWorker.js` is MSW's generated service worker, kept byte-for-byte as
+  // the package ships it (regenerate with `npx msw init public/ --save`).
+  { ignores: ['dist', 'coverage', 'playwright-report', 'test-results', 'public'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
