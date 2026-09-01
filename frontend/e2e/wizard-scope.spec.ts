@@ -177,6 +177,36 @@ test.describe('阶段二：在 1200 张表里选迁移范围', () => {
     await expect(excluded).toContainText('还没有显式排除任何表');
   });
 
+  test('a 迁移范围 chosen under a filter is not widened when the filter is cleared', async ({
+    page,
+  }) => {
+    // D19: 「the selection count survives a search that hides every selected row, survives
+    // clearing the search, and survives scrolling」. Survives means *stays what it was* —
+    // a 迁移范围 that grows on its own is the one failure this stage cannot afford, because
+    // what it grows into is the set of tables a production migration will write.
+    await draftAtScope(page);
+    const table = scopeTable(page);
+    const search = page.getByRole('searchbox', { name: '按名称搜索源表' });
+
+    await search.fill('order');
+    await table.getByRole('button', { name: '选中符合当前筛选的全部' }).click();
+
+    const counter = page.getByText(/^迁移范围共 [\d,]+ 张/);
+    const chosen = await counter.innerText();
+    expect(chosen, '筛选后的全选不应当等于整库').not.toContain('1200');
+
+    // D19's other two halves, on the all-matching scope this time: a search that hides
+    // every selected row does not change what was chosen…
+    await search.fill('zzz_no_such_table');
+    await expect(table).toContainText('没有匹配项');
+    await expect(counter).toHaveText(chosen);
+
+    // …and neither does clearing the search.
+    await search.fill('');
+    await expect(table).toContainText('order');
+    await expect(counter).toHaveText(chosen);
+  });
+
   test('shows each table its own current condition, and calls estimates estimates', async ({
     page,
   }) => {

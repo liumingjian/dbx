@@ -89,7 +89,22 @@ export interface DbxTableErrorCopy {
  */
 export type DbxSelectionScope =
   | { readonly kind: 'rows'; readonly selectedIds: readonly DbxRowId[] }
-  | { readonly kind: 'allMatchingFilter'; readonly excludedIds: readonly DbxRowId[] };
+  | {
+      readonly kind: 'allMatchingFilter';
+      /**
+       * The filter this scope was stated under.
+       *
+       * 「符合当前筛选的全部」 names a filter, so the scope is only meaningful while that
+       * filter is the one in force. Without the binding, clearing a search silently turned
+       * 「符合 order 的全部」 into 「整库的全部」 — and what it turned into is the set of
+       * tables a production migration would write.
+       *
+       * Opaque to this module: the caller decides what identifies its filter, and the empty
+       * string means 「没有筛选」.
+       */
+      readonly filterKey: string;
+      readonly excludedIds: readonly DbxRowId[];
+    };
 
 export interface DbxSelectionModel {
   readonly scope: DbxSelectionScope;

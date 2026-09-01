@@ -56,7 +56,11 @@ export function StageScope({ context, onPatch }: StageScopeProps) {
   // The selection starts where the draft left off, so a refresh — or a walk back from a
   // later stage — restores the decision the operator actually made rather than an empty one.
   const initialScope = useRef(selectionScopeOfDraft(draft)).current;
-  const model = useDbxSelection(matchingIds, initialScope);
+  // The search *is* the filter, so it is what an 「符合当前筛选的全部」 scope is bound to.
+  // Clearing it then keeps the 迁移范围 the operator chose instead of widening it to the
+  // whole database (D19: the count survives clearing the search).
+  const filterKey = search.trim().toLowerCase();
+  const model = useDbxSelection(matchingIds, initialScope, filterKey);
 
   // What the draft would say about the selection as it stands.
   //

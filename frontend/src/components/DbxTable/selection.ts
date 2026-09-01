@@ -18,10 +18,16 @@ import type { DbxRowId, DbxSelectionModel, DbxSelectionScope, DbxSelectionSnapsh
 
 export const emptySelection: DbxSelectionScope = { kind: 'rows', selectedIds: [] };
 
-export const allMatchingFilterSelection: DbxSelectionScope = {
-  kind: 'allMatchingFilter',
-  excludedIds: [],
-};
+/**
+ * 「选中符合当前筛选的全部」, stated under one named filter.
+ *
+ * The filter travels with the scope because the scope is *about* it. An all-matching scope
+ * that outlived its filter would keep selecting whatever happened to match next — which is
+ * how clearing a search widened a recorded 迁移范围 from 71 tables to 1200.
+ */
+export function allMatchingFilterSelection(filterKey: string): DbxSelectionScope {
+  return { kind: 'allMatchingFilter', filterKey, excludedIds: [] };
+}
 
 export function isRowSelected(scope: DbxSelectionScope, id: DbxRowId): boolean {
   return scope.kind === 'rows' ? scope.selectedIds.includes(id) : !scope.excludedIds.includes(id);
@@ -36,8 +42,16 @@ export function toggleRow(scope: DbxSelectionScope, id: DbxRowId): DbxSelectionS
   // Unticking a row inside an all-matching selection is an exclusion, not a deselection:
   // the operator is recording an exception to a scope they already stated.
   return scope.excludedIds.includes(id)
-    ? { kind: 'allMatchingFilter', excludedIds: scope.excludedIds.filter((entry) => entry !== id) }
-    : { kind: 'allMatchingFilter', excludedIds: [...scope.excludedIds, id] };
+    ? {
+        kind: 'allMatchingFilter',
+        filterKey: scope.filterKey,
+        excludedIds: scope.excludedIds.filter((entry) => entry !== id),
+      }
+    : {
+        kind: 'allMatchingFilter',
+        filterKey: scope.filterKey,
+        excludedIds: [...scope.excludedIds, id],
+      };
 }
 
 export function excludeRow(scope: DbxSelectionScope, id: DbxRowId): DbxSelectionScope {
@@ -51,6 +65,7 @@ export function selectPage(
   if (scope.kind === 'allMatchingFilter') {
     return {
       kind: 'allMatchingFilter',
+      filterKey: scope.filterKey,
       excludedIds: scope.excludedIds.filter((entry) => !idsOnPage.includes(entry)),
     };
   }
@@ -64,7 +79,11 @@ export function clearPage(
 ): DbxSelectionScope {
   if (scope.kind === 'allMatchingFilter') {
     const added = idsOnPage.filter((id) => !scope.excludedIds.includes(id));
-    return { kind: 'allMatchingFilter', excludedIds: [...scope.excludedIds, ...added] };
+    return {
+      kind: 'allMatchingFilter',
+      filterKey: scope.filterKey,
+      excludedIds: [...scope.excludedIds, ...added],
+    };
   }
   return { kind: 'rows', selectedIds: scope.selectedIds.filter((id) => !idsOnPage.includes(id)) };
 }
@@ -115,6 +134,16 @@ export function selectionSnapshot(
 interface SelectionState {
   readonly scope: DbxSelectionScope;
   readonly history: readonly DbxSelectionScope[];
+  /**
+   * The filter in force when this state was last adjusted, and the rows it was matching.
+   *
+   * Held in state rather than in a ref because it is read during render: a ref written
+   * during render is exactly the impurity StrictMode's double invocation eats, and the
+   * rows the *previous* filter matched exist nowhere else once the new ones have replaced
+   * them.
+   */
+  readonly filterKey: string;
+  readonly matchingIds: readonly DbxRowId[];
 }
 
 export function useDbxSelection(
@@ -126,8 +155,52 @@ export function useDbxSelection(
    * from a list of ticked rows.
    */
   initialScope: DbxSelectionScope = emptySelection,
+  /**
+   * What identifies the filter currently in force. The empty string means 「没有筛选」.
+   *
+   * 「符合当前筛选的全部」 names a filter, and a scope that outlived its filter would go on
+   * selecting whatever matched next. So when the filter moves, an all-matching scope is
+   * **frozen into the rows it actually covered** — the operator keeps the 迁移范围 they
+   * chose, and it never widens behind their back.
+   */
+  filterKey = '',
 ): DbxSelectionModel {
-  const [state, setState] = useState<SelectionState>({ scope: initialScope, history: [] });
+  const [state, setState] = useState<SelectionState>({
+    scope: initialScope,
+    history: [],
+    filterKey,
+    matchingIds,
+  });
+
+  // Adjusted during render — the documented React pattern — rather than in an effect: an
+  // effect would let one commit go out with the widened scope, and stage two writes its
+  // 迁移范围 through to the 迁移草稿 on every change.
+  if (state.filterKey !== filterKey || state.matchingIds !== matchingIds) {
+    setState((current) => {
+      if (current.filterKey === filterKey && current.matchingIds === matchingIds) {
+        return current;
+      }
+      const staleScope =
+        current.filterKey !== filterKey &&
+        current.scope.kind === 'allMatchingFilter' &&
+        current.scope.filterKey === current.filterKey;
+      // The freeze does not go on the undo stack: it is not a decision the operator made,
+      // it is the same decision written down in the only form that still means what they
+      // chose. Putting it there would offer 撤销 as a way back to a scope that now names a
+      // different set of tables.
+      return staleScope
+        ? {
+            scope: {
+              kind: 'rows',
+              selectedIds: selectedIdsWithin(current.scope, current.matchingIds),
+            },
+            history: current.history,
+            filterKey,
+            matchingIds,
+          }
+        : { ...current, filterKey, matchingIds };
+    });
+  }
   const { scope, history } = state;
 
   const change = useCallback((next: (current: DbxSelectionScope) => DbxSelectionScope) => {
@@ -137,7 +210,7 @@ export function useDbxSelection(
       const updated = next(current.scope);
       return updated === current.scope
         ? current
-        : { scope: updated, history: [...current.history, current.scope] };
+        : { ...current, scope: updated, history: [...current.history, current.scope] };
     });
   }, []);
 
@@ -152,7 +225,7 @@ export function useDbxSelection(
       toggleRow: (id) => change((current) => toggleRow(current, id)),
       selectPage: (idsOnPage) => change((current) => selectPage(current, idsOnPage)),
       clearPage: (idsOnPage) => change((current) => clearPage(current, idsOnPage)),
-      selectAllMatchingFilter: () => change(() => allMatchingFilterSelection),
+      selectAllMatchingFilter: () => change(() => allMatchingFilterSelection(filterKey)),
       exclude: (id) => change((current) => excludeRow(current, id)),
       clear: () => change(() => emptySelection),
       canUndo: history.length > 0,
@@ -161,10 +234,10 @@ export function useDbxSelection(
           const previous = current.history[current.history.length - 1];
           return previous === undefined
             ? current
-            : { scope: previous, history: current.history.slice(0, -1) };
+            : { ...current, scope: previous, history: current.history.slice(0, -1) };
         });
       },
     }),
-    [scope, count, history, change],
+    [scope, count, history, change, filterKey],
   );
 }

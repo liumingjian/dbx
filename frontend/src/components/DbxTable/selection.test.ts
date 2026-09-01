@@ -38,7 +38,7 @@ describe('cross-page selection model', () => {
   });
 
   it('selects everything matching the filter as a scope, not as a snapshot', () => {
-    const scope = allMatchingFilterSelection;
+    const scope = allMatchingFilterSelection('');
     expect(selectedCount(scope, matching)).toBe(4);
     // The filter widening later must not leave newly matching rows unselected: the scope
     // said "everything matching", and it still does.
@@ -46,15 +46,19 @@ describe('cross-page selection model', () => {
   });
 
   it('records an untick inside an all-matching selection as an exclusion', () => {
-    const scope = toggleRow(allMatchingFilterSelection, 'c');
-    expect(scope).toEqual({ kind: 'allMatchingFilter', excludedIds: ['c'] });
+    const scope = toggleRow(allMatchingFilterSelection(''), 'c');
+    expect(scope).toEqual({ kind: 'allMatchingFilter', filterKey: '', excludedIds: ['c'] });
     expect(selectedCount(scope, matching)).toBe(3);
     expect(isRowSelected(scope, 'c')).toBe(false);
   });
 
   it('can take an exclusion back', () => {
-    const excluded = excludeRow(allMatchingFilterSelection, 'c');
-    expect(toggleRow(excluded, 'c')).toEqual({ kind: 'allMatchingFilter', excludedIds: [] });
+    const excluded = excludeRow(allMatchingFilterSelection(''), 'c');
+    expect(toggleRow(excluded, 'c')).toEqual({
+      kind: 'allMatchingFilter',
+      filterKey: '',
+      excludedIds: [],
+    });
   });
 
   it('never excludes a row that was not selected in the first place', () => {
@@ -63,12 +67,12 @@ describe('cross-page selection model', () => {
   });
 
   it('clears one page out of an all-matching selection by excluding it', () => {
-    const scope = clearPage(allMatchingFilterSelection, ['a', 'b']);
+    const scope = clearPage(allMatchingFilterSelection(''), ['a', 'b']);
     expect(selectedIdsWithin(scope, matching)).toEqual(['c', 'd']);
   });
 
   it('hands a batch action the rows that are selected right now', () => {
-    const snapshot = selectionSnapshot(toggleRow(allMatchingFilterSelection, 'a'), matching);
+    const snapshot = selectionSnapshot(toggleRow(allMatchingFilterSelection(''), 'a'), matching);
     expect(snapshot.selectedCount).toBe(3);
     expect(snapshot.selectedIds).toEqual(['b', 'c', 'd']);
     expect(snapshot.scope.kind).toBe('allMatchingFilter');
@@ -85,7 +89,8 @@ describe('cross-page selection model', () => {
  * `src/main.tsx` but seam ② renders without it — so it is asserted here directly.
  */
 describe('撤销 survives a doubly-invoked updater', () => {
-  const strict = ({ children }: { children: ReactNode }) => createElement(StrictMode, null, children);
+  const strict = ({ children }: { children: ReactNode }) =>
+    createElement(StrictMode, null, children);
 
   it('takes exactly one 撤销 to undo one change', () => {
     const { result } = renderHook(() => useDbxSelection(matching), { wrapper: strict });
@@ -114,5 +119,58 @@ describe('撤销 survives a doubly-invoked updater', () => {
     act(() => result.current.undo());
     expect(result.current.selectedCount).toBe(0);
     expect(result.current.canUndo).toBe(false);
+  });
+});
+
+/**
+ * 「符合当前筛选的全部」 is bound to the filter it was stated under.
+ *
+ * The scope names a filter, so it stops meaning anything once that filter moves. Left
+ * unbound it went on selecting whatever matched next, and clearing a search silently
+ * widened a recorded 迁移范围 from the 71 tables the operator chose to all 1200 — the set a
+ * production migration would then write.
+ */
+describe('an all-matching scope does not outlive its filter', () => {
+  it('freezes into the rows it covered when the filter is cleared', () => {
+    const { result, rerender } = renderHook(
+      ({ ids, key }: { ids: readonly string[]; key: string }) =>
+        useDbxSelection(ids, emptySelection, key),
+      { initialProps: { ids: ['a', 'b'], key: 'ab' } },
+    );
+
+    act(() => result.current.selectAllMatchingFilter());
+    expect(result.current.selectedCount).toBe(2);
+    expect(result.current.scope.kind).toBe('allMatchingFilter');
+
+    // The filter widens: four rows match now where two did before.
+    rerender({ ids: ['a', 'b', 'c', 'd'], key: '' });
+
+    expect(result.current.selectedCount).toBe(2);
+    expect(result.current.isSelected('c')).toBe(false);
+    // Frozen into the decision that was actually made, rather than re-evaluated.
+    expect(result.current.scope).toEqual({ kind: 'rows', selectedIds: ['a', 'b'] });
+
+    // The freeze is not itself a decision, so 撤销 goes back past it to the state before
+    // the operator pressed 全选 — never to a scope that now names a different set of rows.
+    act(() => result.current.undo());
+    expect(result.current.selectedCount).toBe(0);
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it('keeps the exclusions it carried while the filter stands still', () => {
+    const { result, rerender } = renderHook(
+      ({ ids, key }: { ids: readonly string[]; key: string }) =>
+        useDbxSelection(ids, emptySelection, key),
+      { initialProps: { ids: matching, key: 'x' } },
+    );
+
+    act(() => result.current.selectAllMatchingFilter());
+    act(() => result.current.exclude('b'));
+    expect(result.current.excludedIds).toEqual(['b']);
+
+    // Same filter, different row identities: the scope still applies.
+    rerender({ ids: [...matching], key: 'x' });
+    expect(result.current.scope.kind).toBe('allMatchingFilter');
+    expect(result.current.excludedIds).toEqual(['b']);
   });
 });

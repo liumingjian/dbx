@@ -73,7 +73,7 @@ describe('迁移范围 selection', () => {
         excludedTables: ['c'],
       }),
     );
-    expect(restored).toEqual({ kind: 'allMatchingFilter', excludedIds: ['c'] });
+    expect(restored).toEqual({ kind: 'allMatchingFilter', filterKey: '', excludedIds: ['c'] });
   });
 
   it('writes both the materialised tables and which decision produced them', () => {
@@ -83,7 +83,10 @@ describe('迁移范围 selection', () => {
       excludedTables: [],
     });
     expect(
-      draftPatchOfSelection({ kind: 'allMatchingFilter', excludedIds: ['c'] }, ['a', 'b']),
+      draftPatchOfSelection({ kind: 'allMatchingFilter', filterKey: '', excludedIds: ['c'] }, [
+        'a',
+        'b',
+      ]),
     ).toEqual({
       scopeKind: 'ALL_TABLES_EXCEPT',
       selectedTables: ['a', 'b'],
