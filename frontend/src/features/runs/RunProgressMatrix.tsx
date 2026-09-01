@@ -51,7 +51,9 @@ function isLagging(unit: TableMigrationUnit, snapshot: RunProgressSnapshot): boo
 
 export function RunProgressMatrix({ snapshot, units, filterActive }: RunProgressMatrixProps) {
   const copy = messages.run.matrix;
-  const stalled = snapshot.stuck?.stalledUnitIds ?? [];
+  // The units the run's 卡死 diagnosis names, memoised so the column definitions below do
+  // not rebuild on every render.
+  const stalled = useMemo(() => snapshot.stuck?.stalledUnitIds ?? [], [snapshot]);
 
   const columns = useMemo<readonly DbxTableColumn<TableMigrationUnit>[]>(
     () => [
@@ -73,9 +75,23 @@ export function RunProgressMatrix({ snapshot, units, filterActive }: RunProgress
       {
         id: 'phase',
         header: copy.columns.phase,
-        width: 160,
-        textValue: (unit) => phaseLabel(unit.phase),
-        renderCell: (unit) => phaseLabel(unit.phase),
+        width: 220,
+        textValue: (unit) =>
+          stalled.includes(unit.id)
+            ? `${phaseLabel(unit.phase)} ${messages.phase.stuck}`
+            : phaseLabel(unit.phase),
+        // 卡死 is marked beside the phase and **not** in the 技术结果 column, because
+        // ADR-0004 makes `STUCK` a diagnosis rather than a table outcome: the table
+        // stopped where it was, and DBX has reached no technical result for it at all.
+        renderCell: (unit) =>
+          stalled.includes(unit.id) ? (
+            <span className="dbx-run__phase">
+              {phaseLabel(unit.phase)}
+              <ConclusionIndicator conclusion="STUCK" label={messages.phase.stuck} />
+            </span>
+          ) : (
+            phaseLabel(unit.phase)
+          ),
       },
       {
         id: 'progress',
@@ -124,13 +140,9 @@ export function RunProgressMatrix({ snapshot, units, filterActive }: RunProgress
           unit.outcome === null ? messages.run.matrix.noOutcome : outcomeLabel(unit.outcome),
         renderCell: (unit) => (
           <ConclusionIndicator
-            conclusion={tableMigrationConclusion(unit.outcome, stalled.includes(unit.id))}
+            conclusion={tableMigrationConclusion(unit.outcome)}
             label={
-              stalled.includes(unit.id)
-                ? messages.phase.stuck
-                : unit.outcome === null
-                  ? messages.run.matrix.noOutcome
-                  : outcomeLabel(unit.outcome)
+              unit.outcome === null ? messages.run.matrix.noOutcome : outcomeLabel(unit.outcome)
             }
           />
         ),

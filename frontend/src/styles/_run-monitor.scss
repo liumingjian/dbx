@@ -102,6 +102,12 @@
   margin-top: $spacing-03;
 }
 
+.dbx-run__phase {
+  display: flex;
+  align-items: center;
+  gap: $spacing-03;
+}
+
 .dbx-run__progress {
   display: flex;
   align-items: center;

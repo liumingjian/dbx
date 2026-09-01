@@ -26,16 +26,17 @@ import {
  *  - a 取消 is a terminal stop that leaves already-terminal results alone.
  */
 
-function storeOf(scenarioId: string, rate = 0) {
+function storeOf(scenarioId: string) {
   const scenario = scenarios.get(scenarioId) as ScenarioDefinition;
-  let realTime = 0;
-  const clock = createControllableClock({ rate, realNow: () => realTime });
+  // Frozen real time: everything below moves the clock explicitly, so no assertion here
+  // depends on how long the test itself took.
+  const clock = createControllableClock({ rate: 0, realNow: () => 0 });
   const store = createMockStore({
     scenario,
     clock,
     draftPersistence: createMemoryDraftPersistence(),
   });
-  return { store, clock, advance: (ms: number) => clock.advance(ms), tickReal: () => realTime };
+  return { store, advance: (ms: number) => clock.advance(ms) };
 }
 
 function quanta(count: number): number {
@@ -72,27 +73,30 @@ describe('the seeded 迁移运行', () => {
 describe('progress observations', () => {
   it('jump rather than advance smoothly', () => {
     const { store, advance } = storeOf('default');
-    const first = store.getRunProgress(MONITORED_RUN_ID) as RunProgressSnapshot;
-    // A table that is still moving: a finished one reports the same number forever, which
-    // would prove nothing either way.
-    const tracked = first.units.find((unit) => unit.phase === 'TRANSFERRING');
-    expect(tracked).toBeDefined();
 
-    const readings: number[] = [];
+    // Twenty consecutive observations of every table, one quantum apart.
+    const readings = new Map<string, number[]>();
     for (let step = 0; step < 20; step += 1) {
       const snapshot = store.getRunProgress(MONITORED_RUN_ID) as RunProgressSnapshot;
-      const unit = snapshot.units.find((entry) => entry.id === tracked?.id);
-      readings.push(unit?.progress?.sourceRowsRead ?? 0);
+      for (const unit of snapshot.units) {
+        readings.set(unit.id, [
+          ...(readings.get(unit.id) ?? []),
+          unit.progress?.sourceRowsRead ?? 0,
+        ]);
+      }
       advance(quanta(1));
     }
 
-    const deltas = readings.slice(1).map((value, index) => value - (readings[index] ?? 0));
-    // Monotonic — a row count never goes backwards — but emphatically not uniform, and at
-    // least one interval reports nothing new at all. Both are what ADR-0004 permits, and
-    // both are what a bar animating between two polls would hide.
-    expect(deltas.every((delta) => delta >= 0)).toBe(true);
-    expect(new Set(deltas).size).toBeGreaterThan(2);
-    expect(deltas.some((delta) => delta === 0)).toBe(true);
+    const deltasOf = (values: number[]): number[] =>
+      values.slice(1).map((value, index) => value - (values[index] ?? 0));
+    const allDeltas = [...readings.values()].flatMap(deltasOf);
+
+    // A row count never goes backwards…
+    expect(allDeltas.every((delta) => delta >= 0)).toBe(true);
+    // …but the steps are uneven, and some report nothing new at all. Both are what
+    // ADR-0004 permits, and both are what a bar animating between two polls would hide.
+    expect([...readings.values()].some((values) => new Set(deltasOf(values)).size > 2)).toBe(true);
+    expect(allDeltas.some((delta) => delta === 0)).toBe(true);
   });
 
   it("lets a unit's observation lag behind the snapshot without being at fault", () => {

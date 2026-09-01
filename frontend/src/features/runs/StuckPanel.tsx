@@ -42,7 +42,9 @@ export function StuckPanel({ stuck, snapshot }: StuckPanelProps) {
   const blocked = namesOf(snapshot.units, stuck.blockedUnitIds);
 
   return (
-    <section className="dbx-run__stuck" aria-label={copy.heading} role="alert">
+    // A region rather than an alert: it is a diagnosis to be read and acted on, present
+    // from first paint, not something that arrives and needs announcing.
+    <section className="dbx-run__stuck" aria-label={copy.heading}>
       <h3 className="dbx-run__panel-title">
         <ConclusionIndicator conclusion="STUCK" label={messages.phase.stuck} size={20} />
       </h3>

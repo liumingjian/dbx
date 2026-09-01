@@ -733,7 +733,8 @@ export const messages = {
       blockedHeading: '因关联失败而阻塞的表',
       blockedExplanation:
         '这些表自己没有失败：它们的技术结果未定，而不是失败，因此是重新迁移的候选。',
-      nextStep: '下一步由人判断：可以取消这次迁移运行，也可以在排查后用新的迁移运行重新迁移受影响的表。',
+      nextStep:
+        '下一步由人判断：可以取消这次迁移运行，也可以在排查后用新的迁移运行重新迁移受影响的表。',
     },
     events: {
       heading: '事件流',
@@ -769,7 +770,8 @@ export const messages = {
       terminal: (count: number) =>
         `已经终局的 ${count} 个表迁移单元不受影响，它们的技术结果保持不变。`,
       preserved: '已经写入目标的数据与诊断证据都会保留：取消不是丢弃，也不回滚。',
-      terminalStop: '取消是终局性的停止：这次迁移运行不会恢复，未完成的表需要新的迁移运行重新迁移。',
+      terminalStop:
+        '取消是终局性的停止：这次迁移运行不会恢复，未完成的表需要新的迁移运行重新迁移。',
       confirmAction: '确认取消迁移运行',
       dismissAction: '返回',
       alreadyRequested: '这次迁移运行已经收到取消请求。',

@@ -148,10 +148,7 @@ export interface RunProgressChannel {
 }
 
 export interface ChannelRunProgressSourceOptions {
-  readonly open: (
-    runId: MigrationRunId,
-    subscriber: RunProgressSubscriber,
-  ) => RunProgressChannel;
+  readonly open: (runId: MigrationRunId, subscriber: RunProgressSubscriber) => RunProgressChannel;
 }
 
 /**

@@ -835,7 +835,8 @@ export function createMockStore({
       // reads the same way twice.
       return [...tasks.values()]
         .sort(
-          (a, b) => b.approvedAt.localeCompare(a.approvedAt, 'en') || a.id.localeCompare(b.id, 'en'),
+          (a, b) =>
+            b.approvedAt.localeCompare(a.approvedAt, 'en') || a.id.localeCompare(b.id, 'en'),
         )
         .map(observedTask);
     },

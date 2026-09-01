@@ -107,8 +107,8 @@ describe('conclusion → indicator mapping', () => {
     expect(tableMigrationConclusion('CANCELLED')).toBe('NOT_APPLICABLE');
     expect(tableMigrationConclusion('SKIPPED')).toBe('NOT_APPLICABLE');
     // Accepting risk never becomes a pass.
-    expect(conclusionIndicatorKind[tableMigrationConclusion('COMPLETED_WITH_ACCEPTED_RISK')]).not.toBe(
-      'succeeded',
-    );
+    expect(
+      conclusionIndicatorKind[tableMigrationConclusion('COMPLETED_WITH_ACCEPTED_RISK')],
+    ).not.toBe('succeeded');
   });
 });

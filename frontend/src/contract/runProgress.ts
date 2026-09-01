@@ -1,8 +1,4 @@
-import type {
-  IsoTimestamp,
-  MigrationRunId,
-  TableMigrationUnitId,
-} from './primitives';
+import type { IsoTimestamp, MigrationRunId, TableMigrationUnitId } from './primitives';
 import type { MigrationRun, MigrationRunStatus } from './migrationRun';
 import type {
   TableMigrationOutcome,

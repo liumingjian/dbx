@@ -22,13 +22,13 @@ export function RunLogPanel({ snapshot }: { readonly snapshot: RunProgressSnapsh
         <p className="dbx-run__muted">{copy.empty}</p>
       ) : (
         <pre className="dbx-run__log">
-          {snapshot.log
-            .map((line) => `${formatTimestamp(line.at)}  ${line.text}`)
-            .join('\n')}
+          {snapshot.log.map((line) => `${formatTimestamp(line.at)}  ${line.text}`).join('\n')}
         </pre>
       )}
       {snapshot.logTotalCount > snapshot.log.length ? (
-        <p className="dbx-run__bound">{copy.bounded(snapshot.log.length, snapshot.logTotalCount)}</p>
+        <p className="dbx-run__bound">
+          {copy.bounded(snapshot.log.length, snapshot.logTotalCount)}
+        </p>
       ) : null}
     </section>
   );

@@ -202,11 +202,7 @@ export function buildRunPlan({
     const blocked = runPlan === 'stuck-table' && blockedIndices.has(index);
 
     const outcome: TableMigrationOutcome =
-      runPlan === 'accepted-risk'
-        ? 'COMPLETED_WITH_ACCEPTED_RISK'
-        : fails
-          ? 'FAILED'
-          : 'SUCCEEDED';
+      runPlan === 'accepted-risk' ? 'COMPLETED_WITH_ACCEPTED_RISK' : fails ? 'FAILED' : 'SUCCEEDED';
 
     return {
       id: `${MONITORED_RUN_ID}-unit-${index + 1}`,
@@ -614,6 +610,20 @@ function buildEvents(
 }
 
 /**
+ * The outcome as the log names it.
+ *
+ * `BLOCKED_BY_BOX_FAILURE` is written out as the glossary's own English term for the same
+ * concept — **Blocked by an upstream failure** — because Gate 7 binds server-produced
+ * evidence too: a log a DBA pastes into a ticket must not be where the execution platform
+ * finally introduces itself. Nothing is invented here; `CONTEXT.md` names the term.
+ */
+function logOutcomeToken(outcome: TableMigrationOutcome): string {
+  return outcome === 'BLOCKED_BY_BOX_FAILURE'
+    ? 'blocked_by_upstream_failure'
+    : outcome.toLowerCase();
+}
+
+/**
  * The run's technical log: one line per delivered observation, most recent first.
  *
  * Table-centric by construction. The execution platform's own vocabulary — its scheduling
@@ -647,7 +657,7 @@ function buildLog(
       lines.push({
         at: at(state.frozenAt ?? unit.validationEndsAt),
         sourceTable: unit.sourceTable,
-        text: `${unit.sourceTable} terminal outcome=${state.outcome}`,
+        text: `${unit.sourceTable} terminal outcome=${logOutcomeToken(state.outcome)}`,
       });
     }
   }
