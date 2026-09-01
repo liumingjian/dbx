@@ -88,7 +88,9 @@ export function StageConfirm({ context, onPatch }: StageConfirmProps) {
         header: copy.tableColumns.contract,
         width: 140,
         textValue: (row) =>
-          row.contractVersion === null ? copy.contractMissing : copy.contractVersion(row.contractVersion),
+          row.contractVersion === null
+            ? copy.contractMissing
+            : copy.contractVersion(row.contractVersion),
         renderCell: (row) =>
           row.contractVersion === null ? (
             copy.contractMissing
@@ -167,9 +169,7 @@ export function StageConfirm({ context, onPatch }: StageConfirmProps) {
         textValue: (row) => messages.wizard.tables.preflight.codes[row.code],
         renderCell: (row) => (
           <span>
-            {messages.wizard.tables.preflight.codes[row.code]}
-            {' '}
-            <Identifier>{row.detail}</Identifier>
+            {messages.wizard.tables.preflight.codes[row.code]} <Identifier>{row.detail}</Identifier>
           </span>
         ),
       },
@@ -225,7 +225,13 @@ export function StageConfirm({ context, onPatch }: StageConfirmProps) {
         />
       ) : null}
 
-      <section className="dbx-confirm__panel" aria-label={copy.findingsHeading}>
+      {/* Deliberately unlabelled, unlike the panels below it. The DbxTable inside is
+          already a region named 未解决的发现 and it is the whole content of this panel, so
+          naming the wrapper as well would publish two nested landmarks under one name and
+          「未解决的发现」 would stop identifying anything in particular. The question does
+          not arise for the other panels: 本次执行范围 contains a region of a different name
+          (选中的表). The heading still names the section on screen. */}
+      <section className="dbx-confirm__panel">
         <h3 className="dbx-confirm__heading">{copy.findingsHeading}</h3>
         <DbxTable
           label={copy.findingsHeading}

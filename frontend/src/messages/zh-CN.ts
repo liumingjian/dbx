@@ -235,8 +235,7 @@ export const messages = {
        * Nothing is wrong, and the stage still does not lead anywhere: 运行监控 belongs to a
        * 迁移运行, and a 迁移运行 only exists once the operator starts one deliberately.
        */
-      runNotStarted:
-        '执行确认不通往下一步：按「开始迁移」创建迁移运行之后，运行监控才会出现。',
+      runNotStarted: '执行确认不通往下一步：按「开始迁移」创建迁移运行之后，运行监控才会出现。',
       stageBelongsToRun: '本阶段属于迁移运行，执行确认之后才会出现。',
     },
     connections: {

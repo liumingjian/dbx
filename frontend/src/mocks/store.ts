@@ -175,7 +175,6 @@ export const SEEDED_DRAFT_ID = 'draft-ready-for-tables';
  */
 export const CONFIRM_DRAFT_ID = 'draft-ready-for-confirm';
 
-
 /**
  * How long a rerun of one table's 预检 takes, in **mock** milliseconds.
  *
@@ -423,7 +422,9 @@ export function createMockStore({
    * for the reason `draftTableConfigurationOf` gives: a cheaper approximation is how a
    * summary and the screen behind it end up disagreeing about what is about to be run.
    */
-  const summaryOf = (draft: MigrationDraft | undefined): ExecutionConfirmationSummary | undefined => {
+  const summaryOf = (
+    draft: MigrationDraft | undefined,
+  ): ExecutionConfirmationSummary | undefined => {
     if (
       draft === undefined ||
       draft.sourceConnectionId === null ||
@@ -502,8 +503,7 @@ export function createMockStore({
       structuralProof: {
         // Counted over distinct tables: one table can be short of a 结构证明 for more than
         // one reason, and a count that double-subtracted would understate the scope.
-        provableTableCount:
-          tables.length - new Set(gaps.map((entry) => entry.sourceTable)).size,
+        provableTableCount: tables.length - new Set(gaps.map((entry) => entry.sourceTable)).size,
         gaps,
       },
       assembledAt: clock.nowIso(),
@@ -919,9 +919,7 @@ export function createMockStore({
         },
         sourceBaseline: {
           capturedAt: now,
-          entries: summary.tables.map((table) =>
-            baselineEntryOf(byName.get(table.sourceTable)),
-          ),
+          entries: summary.tables.map((table) => baselineEntryOf(byName.get(table.sourceTable))),
         },
         selectedTableCount: summary.tables.length,
         excludedTableCount: summary.excludedTables.length,

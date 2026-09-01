@@ -1,8 +1,4 @@
-import type {
-  DatabaseConnectionId,
-  IsoTimestamp,
-  MigrationDraftId,
-} from './primitives';
+import type { DatabaseConnectionId, IsoTimestamp, MigrationDraftId } from './primitives';
 import type { MigrationDraftScopeKind } from './migrationTask';
 import type { PreflightConclusion, PreflightFindingCode } from './tableMigrationUnit';
 

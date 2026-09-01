@@ -220,6 +220,33 @@ describe('wizard stage gating', () => {
     expect(resolveStageEntry('tables', context(configured))).toBe('scope');
   });
 
+  it('does not move a draft off the stage it asked for while a fact is still being read', () => {
+    // Every stage is deep-linkable, and the reads behind the later gates settle after the
+    // 迁移草稿 itself does. A redirect during that window would send an operator who typed
+    // 执行确认 back to 逐表配置与预检 on nothing but request ordering, and lose the address
+    // they asked for. Unread is 「not known yet」, not 「not allowed」.
+    const withTables = { ...configured, selectedTables: ['order_item'] };
+    const reading = context(withTables, [source, target], null, null);
+    expect(furthestReachableStage(reading)).toBe('tables');
+    expect(resolveStageEntry('confirm', reading)).toBe('confirm');
+
+    // Nothing is unlocked by waiting: the stage the operator is standing on still refuses.
+    expect(evaluateStageGate('confirm', reading)).toEqual({
+      blocked: true,
+      reason: messages.wizard.gates.executionSummaryUnread,
+    });
+    expect(mayStartMigration(reading)).toBe(false);
+
+    // And the moment the fact arrives and does block, the redirect follows.
+    const answered = context(
+      withTables,
+      [source, target],
+      [configuration({ preflightConclusion: 'UNSUPPORTED' })],
+      null,
+    );
+    expect(resolveStageEntry('confirm', answered)).toBe('tables');
+  });
+
   it('stops 逐表配置与预检 while a table in the 迁移范围 has no 表写入契约', () => {
     // ADR-0011: a 表写入契约 is the complete single-table write intent, and DBX may not
     // assemble one while an exception it refuses to decide for the operator — the

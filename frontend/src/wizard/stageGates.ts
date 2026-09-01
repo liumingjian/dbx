@@ -319,14 +319,46 @@ export function isStageComplete(stage: WizardStage, context: WizardGateContext):
 }
 
 /**
+ * The gate reasons that mean 「not read yet」 rather than 「not allowed」.
+ *
+ * A gate blocks on an unread fact for the same reason it blocks on a failed rule — an
+ * unknown safety fact is not a satisfied one — but the two are not the same instruction
+ * about *where the operator belongs*. A failed rule says: this draft's place is the stage
+ * that stopped it. An unread fact says only: DBX does not know yet.
+ *
+ * Compared by identity against the messages, exactly as `mayStartMigration` compares
+ * `runNotStarted`. The alternative is a second flag on `StageGateResult` that every gate
+ * would have to remember to set.
+ */
+const unreadGateReasons: readonly string[] = [
+  messages.wizard.gates.tableConfigurationsUnread,
+  messages.wizard.gates.executionSummaryUnread,
+];
+
+/**
  * The stage a request for `requested` actually lands on.
  *
  * A reachable stage is served as asked. An unreachable one is not a 404 and not an error:
  * the operator asked for somewhere real that this draft has not earned yet, so they land on
  * the stage that is actually stopping them, where the reason is written down.
+ *
+ * **A draft is never moved on the strength of a fact DBX has not read.** Every stage is
+ * deep-linkable, and the reads behind the later gates — the 逐表配置 summaries, the 执行确认
+ * summary — settle after the 迁移草稿 itself does. Redirecting during that window would
+ * throw an operator who typed `/confirm` back to 逐表配置与预检 depending on which request
+ * happened to answer first, and the address they asked for would be lost. So while the only
+ * thing stopping this draft is an unread fact, the requested stage is served and its own
+ * loading state does the talking; the redirect follows the moment the fact arrives and turns
+ * out to block. Nothing is unlocked by waiting: the gates still refuse 下一步 and 开始迁移
+ * on the same unread reason.
  */
 export function resolveStageEntry(requested: WizardStage, context: WizardGateContext): WizardStage {
-  return isStageReachable(requested, context) ? requested : furthestReachableStage(context);
+  if (isStageReachable(requested, context)) {
+    return requested;
+  }
+  const destination = furthestReachableStage(context);
+  const gate = evaluateStageGate(destination, context);
+  return gate.blocked && unreadGateReasons.includes(gate.reason) ? requested : destination;
 }
 
 export function nextStage(stage: WizardStage): WizardStage | null {
