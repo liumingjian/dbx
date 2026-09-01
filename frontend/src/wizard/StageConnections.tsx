@@ -91,7 +91,7 @@ export function StageConnections({ context, onPatch }: StageConnectionsProps) {
     <section className="dbx-wizard__panes" aria-label={messages.wizard.stages.connections}>
       <p className="dbx-wizard__lead">
         {messages.wizard.connections.lead}{' '}
-        <RouterLink to={paths.databaseConnections}>
+        <RouterLink to={paths.databaseConnections()}>
           {messages.wizard.connections.manageConnectionsLink}
         </RouterLink>
       </p>

@@ -37,6 +37,53 @@ export const routePatterns = {
   densitySample: '/design/density',
 } as const;
 
+/**
+ * The query parameters every DBX URL carries through client-side navigation.
+ *
+ * `?scenario=` (and its `?clockRate=` companion) select which mocked world the operator is
+ * looking at — ADR-0016 makes them the entry point for every failure state, and #30's
+ * state-coverage matrix walks many views in one session. A parameter that only survives
+ * until the first link is pressed is not a deep link, it is a first paint: #35 found the
+ * wizard's own stage navigation silently dropping it, so a reviewer following a
+ * 「部分表失败」 link landed back in the default world one click later.
+ *
+ * The fix belongs **here**, in the one module that builds URLs, and not at the call sites.
+ * A per-caller fix is a rule nobody can check; a builder that carries the parameters is a
+ * rule that cannot be forgotten. This is why every entry of `paths` below is a function:
+ * a constant would be evaluated once at module load and freeze whatever the URL happened
+ * to say then.
+ *
+ * The names are duplicated from `src/mocks/scenarios.ts` on purpose — routing is product
+ * code and must not import mock infrastructure — and `paths.test.ts` asserts the two lists
+ * agree, so the duplication cannot drift.
+ */
+export const carriedSearchParams = ['scenario', 'clockRate'] as const;
+
+function activeSearch(): string {
+  return typeof globalThis.location === 'undefined' ? '' : globalThis.location.search;
+}
+
+/**
+ * Adds the active scenario parameters to a path, without disturbing its own query.
+ *
+ * A parameter the path already states wins: `?table=` and a deliberate `?scenario=` are
+ * both decisions the caller has made, and carrying is only meant to stop a decision being
+ * lost, never to overrule one.
+ */
+export function carrySearch(path: string, search: string = activeSearch()): string {
+  const active = new URLSearchParams(search);
+  const [pathname = path, own = ''] = path.split('?');
+  const merged = new URLSearchParams(own);
+  for (const name of carriedSearchParams) {
+    const value = active.get(name);
+    if (value !== null && !merged.has(name)) {
+      merged.set(name, value);
+    }
+  }
+  const query = merged.toString();
+  return query === '' ? pathname : `${pathname}?${query}`;
+}
+
 function buildPath(pattern: string, params: Record<string, string>): string {
   return pattern.replace(/:(\w+)/g, (_match, name: string) => {
     const value = params[name];
@@ -48,14 +95,15 @@ function buildPath(pattern: string, params: Record<string, string>): string {
 }
 
 export const paths = {
-  migrationTasks: routePatterns.migrationTasks,
-  databaseConnections: routePatterns.databaseConnections,
-  settings: routePatterns.settings,
-  densitySample: routePatterns.densitySample,
+  migrationTasks: () => carrySearch(routePatterns.migrationTasks),
+  databaseConnections: () => carrySearch(routePatterns.databaseConnections),
+  settings: () => carrySearch(routePatterns.settings),
+  densitySample: () => carrySearch(routePatterns.densitySample),
   wizardStage: (draftId: string, stage: WizardStage) =>
-    buildPath(routePatterns.wizardStage, { draftId, stage }),
-  migrationTaskRuns: (taskId: string) => buildPath(routePatterns.migrationTaskRuns, { taskId }),
-  migrationRun: (runId: string) => buildPath(routePatterns.migrationRun, { runId }),
+    carrySearch(buildPath(routePatterns.wizardStage, { draftId, stage })),
+  migrationTaskRuns: (taskId: string) =>
+    carrySearch(buildPath(routePatterns.migrationTaskRuns, { taskId })),
+  migrationRun: (runId: string) => carrySearch(buildPath(routePatterns.migrationRun, { runId })),
   tableMigrationUnit: (runId: string, unitId: string) =>
-    buildPath(routePatterns.tableMigrationUnit, { runId, unitId }),
+    carrySearch(buildPath(routePatterns.tableMigrationUnit, { runId, unitId })),
 } as const;

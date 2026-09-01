@@ -89,7 +89,7 @@ export function MigrationTaskRunsPage() {
   return (
     <Page title={task.data?.name ?? messages.tasks.runs.title} lead={messages.tasks.runs.lead}>
       <p>
-        <CarbonLink as={Link} to={paths.migrationTasks}>
+        <CarbonLink as={Link} to={paths.migrationTasks()}>
           {messages.tasks.runs.backAction}
         </CarbonLink>
       </p>

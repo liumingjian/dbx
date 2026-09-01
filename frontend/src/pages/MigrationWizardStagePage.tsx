@@ -129,7 +129,7 @@ export function MigrationWizardStagePage() {
     <WizardShell
       stage={stage}
       context={context}
-      onDiscard={() => discard.mutate(draftId, { onSuccess: () => navigate(paths.migrationTasks) })}
+      onDiscard={() => discard.mutate(draftId, { onSuccess: () => navigate(paths.migrationTasks()) })}
     >
       {Stage === undefined ? (
         <p>{messages.wizard.notYetBuilt}</p>

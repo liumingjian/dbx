@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 import { AppShell } from '@/shell/AppShell';
 import { DatabaseConnectionsPage } from '@/pages/DatabaseConnectionsPage';
 import { DensitySamplePage } from '@/pages/DensitySamplePage';
@@ -9,13 +9,14 @@ import { MigrationWizardStagePage } from '@/pages/MigrationWizardStagePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { TableMigrationUnitPage } from '@/pages/TableMigrationUnitPage';
-import { paths, routePatterns } from './paths';
+import { MigrationTasksRedirect } from './MigrationTasksRedirect';
+import { routePatterns } from './paths';
 
 export const routes = [
   {
     element: <AppShell />,
     children: [
-      { index: true, element: <Navigate to={paths.migrationTasks} replace /> },
+      { index: true, element: <MigrationTasksRedirect /> },
       { path: routePatterns.migrationTasks, element: <MigrationTasksPage /> },
       { path: routePatterns.wizardStage, element: <MigrationWizardStagePage /> },
       { path: routePatterns.migrationTaskRuns, element: <MigrationTaskRunsPage /> },
