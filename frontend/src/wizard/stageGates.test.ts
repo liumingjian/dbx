@@ -97,7 +97,6 @@ function draft(overrides: Partial<MigrationDraft> = {}): MigrationDraft {
     prunedColumns: [],
     mappingRules: [],
     writeFreeze: null,
-    completedStages: [],
     ...overrides,
   };
 }

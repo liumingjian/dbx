@@ -89,7 +89,9 @@ export function ObjectTreePane({
       <TreeView
         label={messages.wizard.tables.treeLabel}
         hideLabel
-        size="xs"
+        // ADR-0014 fixes 32px as the smallest usable row height for Chinese body text and
+        // treats 24px as unavailable; `xs` is that 24px row, so the tree uses `sm`.
+        size="sm"
         selected={selectedTable === null ? [] : [selectedTable]}
         active={selectedTable ?? undefined}
         onSelect={(_event: unknown, node: { id?: unknown } | undefined) => {

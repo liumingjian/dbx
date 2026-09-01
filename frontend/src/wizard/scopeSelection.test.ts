@@ -25,7 +25,6 @@ function draft(overrides: Partial<MigrationDraft> = {}): MigrationDraft {
     excludedTables: [],
     writeFreeze: null,
     prunedColumns: [],
-    completedStages: [],
     ...overrides,
   };
 }

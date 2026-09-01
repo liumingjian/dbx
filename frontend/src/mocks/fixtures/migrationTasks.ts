@@ -30,7 +30,6 @@ interface TaskPlan {
   readonly runs: readonly {
     readonly status: MigrationRunStatus;
     readonly startedHoursAgo: number;
-    readonly durationMinutes: number | null;
     readonly selectedTableCount: number;
     readonly excludedTableCount: number;
     /**
@@ -67,7 +66,6 @@ const taskPlans: readonly TaskPlan[] = [
       {
         status: 'COMPLETED_WITH_FAILURES',
         startedHoursAgo: 119,
-        durationMinutes: 214,
         selectedTableCount: 1164,
         excludedTableCount: 36,
       },
@@ -76,7 +74,6 @@ const taskPlans: readonly TaskPlan[] = [
       {
         status: 'COMPLETED',
         startedHoursAgo: 96,
-        durationMinutes: 47,
         selectedTableCount: 18,
         excludedTableCount: 0,
         remigrationOfPreviousRun: true,
@@ -97,7 +94,6 @@ const taskPlans: readonly TaskPlan[] = [
       {
         status: 'ATTENTION_REQUIRED',
         startedHoursAgo: 5,
-        durationMinutes: null,
         selectedTableCount: 412,
         excludedTableCount: 4,
       },
@@ -117,14 +113,12 @@ const taskPlans: readonly TaskPlan[] = [
       {
         status: 'CANCELLED',
         startedHoursAgo: 29,
-        durationMinutes: 12,
         selectedTableCount: 96,
         excludedTableCount: 0,
       },
       {
         status: 'RUNNING',
         startedHoursAgo: 1,
-        durationMinutes: null,
         selectedTableCount: 96,
         excludedTableCount: 0,
       },
@@ -144,7 +138,6 @@ const taskPlans: readonly TaskPlan[] = [
       {
         status: 'COMPLETED_WITH_ACCEPTED_RISK',
         startedHoursAgo: 799,
-        durationMinutes: 63,
         selectedTableCount: 55,
         excludedTableCount: 2,
       },
@@ -164,13 +157,31 @@ const taskPlans: readonly TaskPlan[] = [
       {
         status: 'COMPLETED',
         startedHoursAgo: 1999,
-        durationMinutes: 21,
         selectedTableCount: 27,
         excludedTableCount: 0,
       },
     ],
   },
 ];
+
+/**
+ * The recorded statuses of a 迁移运行 that has come to rest.
+ *
+ * The seeded history states *that* a run finished; **when** it finished is derived from
+ * its own plan by the store. `ATTENTION_REQUIRED` is deliberately absent: a 卡死 run has
+ * stopped moving but has not ended — DBX preserves the target data and the diagnostic
+ * evidence and waits for a decision — so it has no end time to state.
+ */
+const endedRunStatuses: ReadonlySet<MigrationRunStatus> = new Set([
+  'COMPLETED',
+  'COMPLETED_WITH_FAILURES',
+  'COMPLETED_WITH_ACCEPTED_RISK',
+  'CANCELLED',
+]);
+
+export function hasSeededRunEnded(status: MigrationRunStatus): boolean {
+  return endedRunStatuses.has(status);
+}
 
 export interface SeededMigrationTasks {
   readonly tasks: readonly MigrationTask[];
@@ -192,16 +203,16 @@ export function seedMigrationTasks(plan: SeedPlan, clock: ControllableClock): Se
     const taskRuns: MigrationRun[] = taskPlan.runs.map((runPlan, index) => {
       const startedAt = at(runPlan.startedHoursAgo * hour);
       const previousRunId = `${taskPlan.id}-run-${index}`;
-      const endedAt =
-        runPlan.durationMinutes === null
-          ? null
-          : at(runPlan.startedHoursAgo * hour - runPlan.durationMinutes * minute);
       return {
         id: `${taskPlan.id}-run-${index + 1}`,
         taskId: taskPlan.id,
         status: runPlan.status,
         startedAt,
-        endedAt,
+        // Left open here on purpose. A run that has come to rest is closed by the store,
+        // at the quantum its **own plan** comes to rest at (`runPlanEndQuantum`), so the
+        // recorded 结束时间 and the projection that replays the plan cannot state
+        // different things. See `hasSeededRunEnded` below.
+        endedAt: null,
         sourceConnectionId: taskPlan.sourceConnectionId,
         sourceDatabase: taskPlan.sourceDatabase,
         targetConnectionId: taskPlan.targetConnectionId,

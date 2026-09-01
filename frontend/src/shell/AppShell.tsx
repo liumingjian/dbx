@@ -8,7 +8,7 @@ import {
   SkipToContent,
   Theme,
 } from '@carbon/react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { messages } from '@/messages';
 import { paths, routePatterns } from '@/routes/paths';
 
@@ -49,7 +49,13 @@ export function AppShell() {
     <Theme theme="g10">
       <Header aria-label={messages.product.name}>
         <SkipToContent />
-        <HeaderName href={paths.migrationTasks()} prefix="">
+        {/*
+          A client-side link, not an `href`. A full page load would tear down the store and
+          re-seed it from the fixture generator, so pressing the product name while a
+          迁移运行 was being watched would silently discard it — and the built path is what
+          carries the active `?scenario=` through (D25).
+        */}
+        <HeaderName<typeof Link> as={Link} to={paths.migrationTasks()} prefix="">
           {messages.product.name}
         </HeaderName>
       </Header>

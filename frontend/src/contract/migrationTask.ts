@@ -33,12 +33,13 @@ export interface MigrationTask {
   readonly latestRunStatus: MigrationRunStatus | null;
 }
 
-/**
- * The wizard stages a draft can have completed. Only the four configuration stages appear
- * here: 运行监控 and 校验报告 belong to a migration run, not to a draft. The gate that
- * stops a draft skipping ahead is #34's, not this module's.
+/*
+ * A 迁移草稿 deliberately records **no** completed-stage high-water mark. Lead decision
+ * D18: 「Stage reachability is derived, never stored」 — walk the stages in journey order
+ * and the first whose gate blocks is as far as the draft goes. A stored mark is a second
+ * source of truth that a deep link walks straight past, and every stage is deep-linkable
+ * by design.
  */
-export type MigrationDraftStage = 'connections' | 'scope' | 'tables' | 'confirm';
 
 /**
  * How the operator stated the 迁移范围.
@@ -113,7 +114,6 @@ export interface MigrationDraft {
    * stamps `confirmedAt` and `expiresAt` from its own clock when the 迁移运行 is created.
    */
   readonly writeFreeze: WriteFreezeDeclaration | null;
-  readonly completedStages: readonly MigrationDraftStage[];
 }
 
 /** Everything a draft holds is optional while it is being filled in. */

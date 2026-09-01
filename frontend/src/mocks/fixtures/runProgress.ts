@@ -783,6 +783,34 @@ function terminalQuantum(
   return q >= last ? last : null;
 }
 
+/**
+ * The quantum a run built from this plan comes to rest at, or null if it never does.
+ *
+ * Exported because the seeded history reads its 迁移运行 end times from here rather than
+ * stating a duration of its own. A recorded 结束时间 and the projection that replays the
+ * plan are two numbers describing one fact, and two independent numbers eventually
+ * disagree: a `COMPLETED` run whose recorded duration stopped the clock forty quanta into
+ * a hundred-quantum plan renders tables still 等待调度 and a 校验报告 that says the
+ * 校验执行 are still running. Deriving one from the other makes that unrepresentable
+ * rather than merely unlikely.
+ *
+ * It answers with the same `terminalQuantum` the projection uses, evaluated past the end
+ * of the plan, so the two cannot be given different rules.
+ */
+export function runPlanEndQuantum(plan: RunPlan, cancelledAtQuantum: number | null): number | null {
+  const natural =
+    plan.units.length === 0 ? 0 : Math.max(...plan.units.map((unit) => unit.validationEndsAt));
+  const horizon = Math.max(natural, (cancelledAtQuantum ?? 0) + CANCELLATION_DRAIN_QUANTA);
+  const stuckCandidate = stuckDiagnosisQuantum(plan);
+  const stuckAt =
+    stuckCandidate !== null &&
+    (cancelledAtQuantum === null || stuckCandidate <= cancelledAtQuantum) &&
+    stuckCandidate <= horizon
+      ? stuckCandidate
+      : null;
+  return terminalQuantum(plan, horizon, cancelledAtQuantum, stuckAt);
+}
+
 function buildEvents(
   plan: RunPlan,
   q: number,

@@ -81,6 +81,11 @@ afterEach(() => {
   server.resetHandlers();
   // A scenario's store must not survive into the next test.
   resetMockContext();
+  // Neither may anything written to the Map-backed `localStorage` above: the density
+  // preference and the persisted 迁移草稿 are browser-owned facts, and a test that
+  // inherited the previous test's browser would be asserting against a world it did not
+  // set up.
+  globalThis.localStorage?.clear();
 });
 
 afterAll(() => {

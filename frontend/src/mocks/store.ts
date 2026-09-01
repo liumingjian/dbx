@@ -37,13 +37,14 @@ import type {
 } from '@/contract';
 import type { ControllableClock } from './clock';
 import { seedDatabaseConnections, unreachableConnectionIds } from './fixtures/databaseConnections';
-import { seedMigrationTasks } from './fixtures/migrationTasks';
+import { hasSeededRunEnded, seedMigrationTasks } from './fixtures/migrationTasks';
 import {
   EXCLUDED_TABLE_COUNT,
   MONITORED_UNIT_COUNT,
   OBSERVATION_INTERVAL_MOCK_MS,
   buildRunPlan,
   projectRunProgress,
+  runPlanEndQuantum,
   seedMonitoredRun,
   validationExecutionIdOf,
   withDispositions,
@@ -337,8 +338,16 @@ export function createMockStore({
   );
 
   const seededTasks = seedMigrationTasks(scenario.seedPlan, clock);
-  const tasks = new Map<string, MigrationTask>(seededTasks.tasks.map((task) => [task.id, task]));
-  const runs = new Map<string, MigrationRun>(seededTasks.runs.map((run) => [run.id, run]));
+  // Frozen exactly like the tasks and runs the wizard creates. A seeded 迁移任务 is the
+  // same kind of record as an approved one — 「one immutable execution attempt」 — and
+  // leaving the seeded half writable would mean the mock's own guarantee held for the
+  // history a reviewer creates and not for the history they arrive to.
+  const tasks = new Map<string, MigrationTask>(
+    seededTasks.tasks.map((task) => [task.id, deepFreeze(task)]),
+  );
+  const runs = new Map<string, MigrationRun>(
+    seededTasks.runs.map((run) => [run.id, deepFreeze(run)]),
+  );
 
   /**
    * The 迁移运行 that 运行监控 is entered through, and the plans behind every run.
@@ -374,6 +383,12 @@ export function createMockStore({
    */
   function runPlanShapeOf(run: MigrationRun): SeedPlan['runPlan'] {
     switch (run.status) {
+      // A run recorded as 迁移完成 gets the plan in which every table succeeds, whatever
+      // the scenario's own plan is. Falling through to the scenario would hand a
+      // `COMPLETED` run of the seeded history an `inconclusive-validation` plan, whose
+      // units never reach a terminal state — a finished run that never finishes.
+      case 'COMPLETED':
+        return 'all-tables-succeed';
       case 'COMPLETED_WITH_FAILURES':
         return 'partial-table-failure';
       case 'COMPLETED_WITH_ACCEPTED_RISK':
@@ -496,6 +511,48 @@ export function createMockStore({
   }
 
   /**
+   * Closing the seeded history's runs at the instant their **own plan** closes.
+   *
+   * The fixture records *that* a 迁移运行 finished; when it finished is derived here, from
+   * the plan the projection replays, so the record and the projection cannot drift. A
+   * duration written beside the status is a second, independent number for one fact — and
+   * the two disagreeing is what made a `COMPLETED` run render tables still 等待调度 and a
+   * 校验报告 announce that its 校验执行 were still running.
+   *
+   * Done after the dispositions above, because a run closed by a 校验处置 only comes to
+   * rest once the disposition exists: a table whose validation did not pass has no outcome
+   * of its own until a person closes the workflow (D35).
+   */
+  for (const seeded of seededTasks.runs) {
+    const run = runs.get(seeded.id);
+    if (run === undefined || !hasSeededRunEnded(run.status)) {
+      continue;
+    }
+    const startedAtMs = Date.parse(run.startedAt);
+    const cancelledAtQuantum =
+      run.cancellationRequestedAt === null
+        ? null
+        : Math.max(
+            0,
+            Math.ceil(
+              (Date.parse(run.cancellationRequestedAt) - startedAtMs) /
+                OBSERVATION_INTERVAL_MOCK_MS,
+            ),
+          );
+    const endQuantum = runPlanEndQuantum(effectivePlanOf(run), cancelledAtQuantum);
+    if (endQuantum === null) {
+      continue;
+    }
+    runs.set(
+      run.id,
+      deepFreeze({
+        ...run,
+        endedAt: new Date(startedAtMs + endQuantum * OBSERVATION_INTERVAL_MOCK_MS).toISOString(),
+      }),
+    );
+  }
+
+  /**
    * 校验报告 for one run, at the instant 运行监控 is looking at.
    *
    * Frozen like every other read: a report a reviewer could write to is not evidence.
@@ -572,7 +629,6 @@ export function createMockStore({
     mappingRules: [],
     prunedColumns: [],
     writeFreeze: null,
-    completedStages: ['connections', 'scope'] as const,
   });
 
   if (seedPlan.migrationDrafts === 'ready-for-tables' && drafts.length === 0) {
@@ -671,7 +727,6 @@ export function createMockStore({
           .filter((table) => table.preflightConclusion === 'UNSUPPORTED')
           .slice(0, 2)
           .map((table) => table.name),
-        completedStages: ['connections', 'scope', 'tables'],
       },
     ];
   }
@@ -1196,7 +1251,6 @@ export function createMockStore({
         mappingRules: [],
         prunedColumns: [],
         writeFreeze: null,
-        completedStages: [],
         ...patch,
       };
       drafts = [...drafts, draft];

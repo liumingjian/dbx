@@ -30,7 +30,12 @@ export interface DbxTableColumn<TRow> {
   /** Header wording, taken from `src/messages`. */
   readonly header: string;
   readonly renderCell: (row: TRow) => ReactNode;
-  /** Plain-text form of the cell, for the accessible row label and for sorting. */
+  /**
+   * Plain-text form of the cell, for the accessible row label and for the exported and
+   * copied forms a view builds from the same columns. **Not** for sorting: DBX tables are
+   * rendered in a deterministic domain order (story 31 — the same database opens the same
+   * way twice) and `DbxTable` offers no column sort, so nothing here is compared.
+   */
   readonly textValue?: (row: TRow) => string;
   /** Initial width in pixels. Operators may resize from there. */
   readonly width?: number;
