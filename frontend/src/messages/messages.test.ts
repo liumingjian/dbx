@@ -132,7 +132,9 @@ describe('messages module', () => {
       '20,971,521',
     );
     expect(overEnvelope).toContain('超过 DBX v1 的 20 MiB（20,971,520 字节）上限');
-    expect(overEnvelope).toContain('请选择排除此表、裁剪超限字段后重新预检，或中止并在源端缩减数据');
+    expect(overEnvelope).toContain(
+      '请选择排除此表、裁剪超限字段后重新预检，或中止并在源端缩减数据',
+    );
 
     const exits = messages.wizard.tables.preflight.exits;
     expect(exits.fixSource.title).toBe('修正源');

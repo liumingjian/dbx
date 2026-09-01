@@ -144,7 +144,10 @@ test.describe('Gate 4: DDL 只读', () => {
     expect(before).not.toBe('');
 
     const findings = page.getByRole('region', { name: '发现' });
-    const rule = findings.getByRole('combobox').first();
+    // Scoped to 映射例外: the 发现 pane also carries the 预检 conclusion and its three exits
+    // (#36), and the bounded control this gate is about is the mapping rule's.
+    const rule = findings.getByRole('region', { name: '映射例外' }).getByRole('combobox').first();
+    await expect(rule).toBeVisible();
     // A closed list of target values. There is no free-text control anywhere in the pane.
     await expect(findings.locator('textarea')).toHaveCount(0);
     const options = await rule.locator('option').allTextContents();
@@ -193,9 +196,12 @@ test.describe('Gate 4: DDL 只读', () => {
     await expect(contract.locator('pre')).toHaveCount(0);
     await expect(page.getByRole('region', { name: '发现' })).toContainText('DBX 不会替你选');
 
-    // And the stage says so rather than letting the draft walk on to 执行确认.
+    // And the stage says so rather than letting the draft walk on to 执行确认. In a
+    // 迁移范围 this wide the reason the footer states is the earlier one in the safety
+    // sequence — a 预检 that is not SUPPORTED (Gate 2, #36) — because deciding this
+    // mapping would not make those tables migratable. Either way the draft does not move.
     const url = page.url();
-    await expect(page.getByText(/没有生成表写入契约/)).toBeVisible();
+    await expect(page.getByText(/只有 SUPPORTED 的预检可以继续/)).toBeVisible();
     await page.getByRole('button', { name: '下一步' }).click();
     await expect(page).toHaveURL(url);
   });

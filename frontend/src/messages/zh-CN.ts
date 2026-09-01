@@ -361,8 +361,7 @@ export const messages = {
           LARGE_RECORD_VALUE: '单个源值的精确字节数。超过 20 MiB 上限即无法迁移。',
           LARGE_RECORD_ROW: '整行序列化前载荷的精确字节数。裁掉一个字段不豁免整行检查。',
           VALUE_DOMAIN_OUT_OF_RANGE: '源值域超出表写入契约将写入的目标类型可以承载的范围。',
-          ZERO_DATE_VALUE_REJECTED:
-            '按当前映射规则保持 NOT NULL，源端的零日期值在目标端会被拒绝。',
+          ZERO_DATE_VALUE_REJECTED: '按当前映射规则保持 NOT NULL，源端的零日期值在目标端会被拒绝。',
           ENVELOPE_SCAN_INCONCLUSIVE: 'DBX 未能完成 20 MiB 精确预检，因此无法判定这张表。',
         },
         /** ADR-0003 fixes this sentence for a value above the 大记录包络. */

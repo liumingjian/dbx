@@ -63,7 +63,12 @@ describe('预检 as the interface reads it', () => {
       preflightBlocks(
         preflight({
           findings: [
-            { code: 'VALUE_DOMAIN_OUT_OF_RANGE', sourceColumn: 'amount', blocking: true, detail: '' },
+            {
+              code: 'VALUE_DOMAIN_OUT_OF_RANGE',
+              sourceColumn: 'amount',
+              blocking: true,
+              detail: '',
+            },
           ],
         }),
       ),
@@ -78,7 +83,12 @@ describe('预检 as the interface reads it', () => {
           { code: 'LARGE_RECORD_VALUE', sourceColumn: 'payload', blocking: true, detail: '1' },
           { code: 'LARGE_RECORD_ROW', sourceColumn: null, blocking: true, detail: '2' },
           { code: 'LARGE_RECORD_VALUE', sourceColumn: 'payload', blocking: true, detail: '1' },
-          { code: 'VALUE_DOMAIN_OUT_OF_RANGE', sourceColumn: 'remark', blocking: false, detail: '' },
+          {
+            code: 'VALUE_DOMAIN_OUT_OF_RANGE',
+            sourceColumn: 'remark',
+            blocking: false,
+            detail: '',
+          },
         ],
       }),
     );

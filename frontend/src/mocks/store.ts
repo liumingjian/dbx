@@ -181,6 +181,14 @@ export function createMockStore({
           table.mappingExceptionCount > 0,
       ),
     );
+    // A table blocked *because* one value is over the 20 MiB 大记录包络. This is the one
+    // condition ADR-0003's second exit can actually act on, so without it the interface
+    // could only ever describe 「裁剪超限字段后重新预检」 rather than let it be taken.
+    include(
+      generated.find(
+        (table) => table.preflightConclusion === 'UNSUPPORTED' && table.largeRecordTable,
+      ),
+    );
     include(generated.find((table) => requiresZeroDateDecision(scenario.seed, table)));
 
     drafts = [
@@ -248,7 +256,8 @@ export function createMockStore({
    * resurrect a running scan on a page nobody has open.
    */
   const preflightRerunUntil = new Map<string, number>();
-  const rerunKey = (draftId: string, sourceTable: string): string => `${draftId}\u0000${sourceTable}`;
+  const rerunKey = (draftId: string, sourceTable: string): string =>
+    `${draftId}\u0000${sourceTable}`;
 
   const markPreflightRerun = (draftId: string, sourceTable: string): void => {
     preflightRerunUntil.set(rerunKey(draftId, sourceTable), clock.now() + PREFLIGHT_RERUN_MOCK_MS);
@@ -267,10 +276,7 @@ export function createMockStore({
     return true;
   };
 
-  const workspaceOf = (
-    draft: MigrationDraft,
-    table: SourceTableSummary,
-  ): DraftTableWorkspace =>
+  const workspaceOf = (draft: MigrationDraft, table: SourceTableSummary): DraftTableWorkspace =>
     draftTableWorkspaceOf({
       seed: scenario.seed,
       table,

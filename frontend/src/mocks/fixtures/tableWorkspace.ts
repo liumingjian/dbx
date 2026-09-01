@@ -678,7 +678,8 @@ function preflightOf({
       : carrierSelected
         ? table.largestValueBytes
         : ORDINARY_VALUE_BYTES;
-  const largestRowBytes = largestValueBytes === null ? null : largestValueBytes + ORDINARY_VALUE_BYTES;
+  const largestRowBytes =
+    largestValueBytes === null ? null : largestValueBytes + ORDINARY_VALUE_BYTES;
 
   if (largestValueBytes !== null && largestValueBytes > LARGE_RECORD_ENVELOPE_BYTES) {
     findings.push(finding('LARGE_RECORD_VALUE', carrier, true, String(largestValueBytes)));
@@ -884,9 +885,7 @@ export function draftTableWorkspaceOf({
     objectTree: objectTreeOf(columns, objects, pruned),
     mappingExceptions: exceptions,
     preflight,
-    prunedColumns: columns
-      .filter((column) => pruned.has(column.name))
-      .map((column) => column.name),
+    prunedColumns: columns.filter((column) => pruned.has(column.name)).map((column) => column.name),
     tableWriteContract: contract,
   };
 }

@@ -56,9 +56,7 @@ export function useDraftTableConfigurations(draftId: string) {
     // A missing conclusion means a scan is still running, and the stage's gate reads this
     // list: leaving it stale would leave the wizard reporting a fact that has expired.
     refetchInterval: (query) =>
-      (query.state.data ?? []).some(
-        (configuration) => configuration.preflightConclusion === null,
-      )
+      (query.state.data ?? []).some((configuration) => configuration.preflightConclusion === null)
         ? PREFLIGHT_POLL_MS
         : false,
   });

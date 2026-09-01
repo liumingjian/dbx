@@ -27,7 +27,9 @@ export function preflightNoticeKind(conclusion: PreflightConclusion): PreflightN
 }
 
 /** The conclusion to render, where a scan still running is a state of its own. */
-export function preflightIndicatorConclusion(conclusion: PreflightConclusion | null): DbxConclusion {
+export function preflightIndicatorConclusion(
+  conclusion: PreflightConclusion | null,
+): DbxConclusion {
   return conclusion ?? 'IN_FLIGHT';
 }
 
@@ -39,8 +41,7 @@ export function preflightIndicatorConclusion(conclusion: PreflightConclusion | n
  */
 export function preflightBlocks(preflight: Preflight): boolean {
   return (
-    preflight.conclusion !== 'SUPPORTED' ||
-    preflight.findings.some((finding) => finding.blocking)
+    preflight.conclusion !== 'SUPPORTED' || preflight.findings.some((finding) => finding.blocking)
   );
 }
 
@@ -54,7 +55,11 @@ export function preflightBlocks(preflight: Preflight): boolean {
 export function prunableColumnsOf(preflight: Preflight): readonly string[] {
   const columns: string[] = [];
   for (const finding of preflight.findings) {
-    if (finding.blocking && finding.sourceColumn !== null && !columns.includes(finding.sourceColumn)) {
+    if (
+      finding.blocking &&
+      finding.sourceColumn !== null &&
+      !columns.includes(finding.sourceColumn)
+    ) {
       columns.push(finding.sourceColumn);
     }
   }
