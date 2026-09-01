@@ -7,6 +7,7 @@ import type {
   MigrationTaskId,
 } from './primitives';
 import type { MigrationRunStatus } from './migrationRun';
+import type { MappingRule } from './tableConfiguration';
 
 /**
  * A migration task is a *user-approved* migration of one source MySQL database into one
@@ -50,6 +51,11 @@ export type MigrationDraftStage = 'connections' | 'scope' | 'tables' | 'confirm'
  */
 export type MigrationDraftScopeKind = 'SELECTED_TABLES' | 'ALL_TABLES_EXCEPT';
 
+/** A user 映射规则 together with the table it applies to. */
+export interface DraftMappingRule extends MappingRule {
+  readonly sourceTable: string;
+}
+
 /**
  * An unapproved, discardable working set of wizard selections and per-table configuration
  * that has not yet become a migration task (`CONTEXT.md`). It produces no migration run,
@@ -72,6 +78,15 @@ export interface MigrationDraft {
   readonly selectedTables: readonly string[];
   /** Tables the operator explicitly took out of an `ALL_TABLES_EXCEPT` scope. */
   readonly excludedTables: readonly string[];
+  /**
+   * The user-authored 映射规则 of the draft's per-table configuration, keyed by table.
+   *
+   * `CONTEXT.md` puts 「per-table configuration」 inside the definition of a 迁移草稿, and
+   * a user rule overrides the automatic one, so this is the operator's decision and
+   * nothing else — the rules DBX proposes are derived from source metadata and are not
+   * stored here. It is also why these survive a refresh with the rest of the draft.
+   */
+  readonly mappingRules: readonly DraftMappingRule[];
   readonly completedStages: readonly MigrationDraftStage[];
 }
 

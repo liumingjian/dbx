@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { MigrationDraft, MigrationDraftPatch } from '@/contract';
+import { draftTableKeys } from './draftTables';
 import { getJson, patchJson, postJson, remove } from './http';
 import { dbxQueryKey } from './queryKeys';
 
@@ -74,6 +75,9 @@ export function useUpdateMigrationDraft() {
     onSuccess: (draft) => {
       queryClient.setQueryData(migrationDraftKeys.one(draft.id), draft);
       void queryClient.invalidateQueries({ queryKey: migrationDraftKeys.all() });
+      // The 迁移范围 is what decides which tables have a 逐表配置 at all, so changing it
+      // changes the answer stage three and its gate read (#35).
+      void queryClient.invalidateQueries({ queryKey: draftTableKeys.configurations(draft.id) });
     },
   });
 }

@@ -67,7 +67,14 @@ Any route takes a scenario and a clock rate in its query string:
 /connections?scenario=loading    # every read hangs
 /connections?scenario=error      # every read fails
 /runs/run-1?scenario=stuck-table&clockRate=600
+/tasks/new/draft-ready-for-tables/tables?scenario=stage-tables-error
 ```
+
+A scenario only holds while its parameter is on the URL, and client-side navigation drops
+it — so a stage the operator would normally _walk_ to cannot be reached under a fault
+unless the draft is already there when the page loads. `stage-tables-loading` and
+`stage-tables-error` therefore seed a 迁移草稿 already parked at 逐表配置与预检, with the
+fixed identifier `draft-ready-for-tables`.
 
 `src/mocks/scenarios.ts` is the registry and the list of ids. Mock time is accelerated by
 default so a three-hour migration replays in seconds; `clockRate=0` freezes it for a
