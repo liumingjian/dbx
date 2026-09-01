@@ -19,21 +19,6 @@ export const messages = {
     databaseConnections: '数据源',
     settings: '系统设置',
   },
-  domain: {
-    migrationTask: '迁移任务',
-    migrationDraft: '迁移草稿',
-    migrationRun: '迁移运行',
-    tableMigrationUnit: '表迁移单元',
-    databaseConnection: '数据库连接',
-    credentialVersion: '凭据版本',
-    preflight: '预检',
-    tableWriteContract: '表写入契约',
-    structuralProof: '结构证明',
-    validationExecution: '校验执行',
-    validationDisposition: '校验处置',
-    writeFreeze: '写冻结',
-    sourceBaseline: '源基线',
-  },
   tasks: {
     title: '迁移任务',
     lead: '这里列出全部迁移任务与尚未批准的迁移草稿。',
@@ -70,6 +55,9 @@ export const messages = {
     lead: '用于人工确认：32px 行高下的中文正文是否清晰可读。左右两档分别为密集（32px）与舒适（40px）。',
     condensedHeading: '密集 32px',
     comfortableHeading: '舒适 40px',
+    controlsHeading: '表单控件',
+    tableNameLabel: '源表名称',
+    tableNameHelper: '标签与辅助文字为 13px，字距归零。',
     columns: {
       sourceTable: '源表',
       targetTable: '目标表',
@@ -83,10 +71,14 @@ export const messages = {
       migrationComplete: '迁移完成',
       stuck: '卡死',
     },
+    // Preflight conclusions have no `_中文_` line in CONTEXT.md, so DBX shows the enum
+    // literal rather than inventing a translation. #30 writes them this way too
+    // ("预检结论是 `SUPPORTED`、`UNSUPPORTED` 还是 `INCONCLUSIVE`"). If a Chinese wording
+    // is ever wanted, it is added to CONTEXT.md first.
     conclusions: {
-      supported: '受支持',
-      unsupported: '不受支持',
-      inconclusive: '无法判定',
+      supported: 'SUPPORTED',
+      unsupported: 'UNSUPPORTED',
+      inconclusive: 'INCONCLUSIVE',
     },
   },
   placeholder: {

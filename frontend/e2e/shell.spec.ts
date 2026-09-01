@@ -36,8 +36,12 @@ test.describe('Chinese typography layer (ADR-0014)', () => {
       /^"IBM Plex Sans", "IBM Plex Sans SC", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif$/,
     );
 
-    // label-01 / helper-text-01 / caption-01 are 13px, not Carbon's 12px.
-    await expect(page.locator('.cds--label').first()).toHaveCSS('font-size', '13px');
+    // label-01 and helper-text-01 are 13px, not Carbon's 12px — asserted on Carbon's own
+    // markup, because the point of overriding the tokens rather than patching selected
+    // classes is that every Carbon component inherits the change.
+    await expect(page.getByText(/源表名称/)).toHaveCSS('font-size', '13px');
+    await expect(page.locator('.cds--form__helper-text')).toHaveCSS('font-size', '13px');
+    await expect(page.locator('.cds--form__helper-text')).toHaveCSS('letter-spacing', 'normal');
 
     // body-compact-01 line height is 1.45; at 14px that is 20.3px.
     const cell = page.locator('[data-testid="density-sample-condensed"] tbody td').first();

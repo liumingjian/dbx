@@ -1,3 +1,4 @@
+import { TextInput } from '@carbon/react';
 import { messages } from '@/messages';
 import { Page } from './Page';
 
@@ -84,12 +85,29 @@ function SampleTable({ density }: { density: 'condensed' | 'comfortable' }) {
 export function DensitySamplePage() {
   return (
     <Page title={messages.densitySample.title} lead={messages.densitySample.lead}>
-      <p className="cds--label">{messages.densitySample.condensedHeading}</p>
+      <p className="dbx-type-label-01">{messages.densitySample.condensedHeading}</p>
       <SampleTable density="condensed" />
-      <p className="cds--label" style={{ marginTop: '2rem' }}>
+      <p className="dbx-type-label-01" style={{ marginTop: '2rem' }}>
         {messages.densitySample.comfortableHeading}
       </p>
       <SampleTable density="comfortable" />
+
+      {/*
+        A real Carbon form control, so the token override can be judged — and tested — on
+        Carbon's own markup rather than only on DBX's. Its label and helper text are what
+        `label-01` and `helper-text-01` look like at 13px with letter-spacing zeroed.
+      */}
+      <p className="dbx-type-label-01" style={{ marginTop: '2rem' }}>
+        {messages.densitySample.controlsHeading}
+      </p>
+      <div style={{ maxWidth: '20rem' }}>
+        <TextInput
+          id="density-sample-table-name"
+          labelText={messages.densitySample.tableNameLabel}
+          helperText={messages.densitySample.tableNameHelper}
+          defaultValue="order_item"
+        />
+      </div>
     </Page>
   );
 }

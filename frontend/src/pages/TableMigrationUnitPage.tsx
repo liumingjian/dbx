@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { messages } from '@/messages';
+import { Identifier } from './Identifier';
 import { Page } from './Page';
 
 /**
@@ -13,12 +14,10 @@ export function TableMigrationUnitPage() {
   return (
     <Page title={messages.run.evidenceTitle} lead={messages.placeholder.notYetBuilt}>
       <p>
-        {messages.run.runLabel}
-        <span className="dbx-identifier"> {runId}</span>
+        {messages.run.runLabel} <Identifier>{runId}</Identifier>
       </p>
       <p>
-        {messages.run.unitLabel}
-        <span className="dbx-identifier"> {unitId}</span>
+        {messages.run.unitLabel} <Identifier>{unitId}</Identifier>
       </p>
     </Page>
   );

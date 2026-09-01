@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { messages } from '@/messages';
 import { isWizardStage } from '@/routes/paths';
+import { Identifier } from './Identifier';
 import { Page } from './Page';
 import { NotFoundPage } from './NotFoundPage';
 
@@ -21,8 +22,7 @@ export function MigrationWizardStagePage() {
       lead={`${messages.wizard.stageLabel}：${messages.wizard.stages[stage]}`}
     >
       <p>
-        {messages.wizard.draftLabel}
-        <span className="dbx-identifier"> {draftId}</span>
+        {messages.wizard.draftLabel} <Identifier>{draftId}</Identifier>
       </p>
       <p>{messages.placeholder.notYetBuilt}</p>
     </Page>

@@ -1,19 +1,40 @@
-// Chinese typography override layer (ADR-0014).
+// Chinese typography override layer (ADR-0014) — the token values.
 //
-// This is the single place where DBX departs from `@carbon/type`. Every value here is
-// fixed by ADR-0014 and must be re-tested whenever Carbon is upgraded:
+// This module holds values only and imports nothing from Carbon, so that
+// `src/styles/index.scss` can feed it straight into `@use '@carbon/react/scss/type'
+// with (...)`. Overriding the tokens themselves, rather than patching selected Carbon
+// classes, is what makes the layer reach every Carbon component instead of only the
+// handful DBX happens to render today.
 //
-//   * letter-spacing is zeroed — Carbon's 0.16px / 0.32px are tuned for small Latin text
-//     and visibly loosen Chinese words;
+// Every value here is fixed by ADR-0014 and must be re-tested whenever Carbon is upgraded:
+//
+//   * letter-spacing is zeroed on all 18 type tokens that carry one — Carbon's 0.16px and
+//     0.32px are tuned for small Latin text and visibly loosen Chinese words;
 //   * `label-01` / `helper-text-01` / `caption-01` move 12px -> 13px (not 14px, which would
 //     collide with `body-compact-01`);
-//   * `body-compact-01` line height moves 1.28572 -> 1.45;
-//   * the family stack puts Latin first so identifiers and numbers keep Plex letterforms.
+//   * `body-compact-01` line height moves 1.28572 -> 1.45.
 //
 // Consequence, also fixed by ADR-0014: the smallest usable table row height in Chinese is
 // `sm` (32px). `xs` (24px) is unavailable and table density is planned against 32px.
+//
+// Each map below restates Carbon's own definition with only the intended properties
+// changed. Sass configuration replaces a map wholesale, so every key the original carries
+// — including `font-family` on the code tokens — has to be repeated here.
 
-$dbx-font-family-sans:
+$size-13px: 0.8125rem;
+$size-14px: 0.875rem;
+$size-12px: 0.75rem;
+$mono-stack:
+  'IBM Plex Mono',
+  system-ui,
+  -apple-system,
+  BlinkMacSystemFont,
+  '.SFNSText-Regular',
+  monospace;
+
+/// The DBX family stack. Latin first, so identifiers and numbers keep Plex letterforms
+/// rather than the Latin glyphs of a Chinese face.
+$font-family-sans:
   'IBM Plex Sans',
   'IBM Plex Sans SC',
   -apple-system,
@@ -21,101 +42,126 @@ $dbx-font-family-sans:
   'Microsoft YaHei',
   sans-serif;
 
-$dbx-letter-spacing: 0;
-$dbx-label-01-font-size: 0.8125rem; // 13px
-$dbx-helper-text-01-font-size: 0.8125rem; // 13px
-$dbx-caption-01-font-size: 0.8125rem; // 13px
-$dbx-body-compact-01-line-height: 1.45;
-// Carbon's own value, restated rather than overridden, so `body-compact-01` can be
-// applied as a whole type style instead of a line height floating free of a font size.
-$dbx-body-compact-01-font-size: 0.875rem; // 14px
+// --- 12px -> 13px, letter-spacing zeroed ------------------------------------------------
+
+$caption-01: (
+  font-size: $size-13px,
+  font-weight: 400,
+  line-height: 1.33333,
+  letter-spacing: 0,
+);
+$label-01: (
+  font-size: $size-13px,
+  font-weight: 400,
+  line-height: 1.33333,
+  letter-spacing: 0,
+);
+// `helper-text-01` carries no font-weight in Carbon; keep it that way.
+$helper-text-01: (
+  font-size: $size-13px,
+  line-height: 1.33333,
+  letter-spacing: 0,
+);
+
+// --- line height 1.28572 -> 1.45, letter-spacing zeroed ---------------------------------
+
+$body-compact-01: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.45,
+  letter-spacing: 0,
+);
+
+// --- letter-spacing zeroed, otherwise unchanged -----------------------------------------
+
+$caption-02: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$label-02: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$helper-text-02: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$body-short-01: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$body-long-01: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.42857,
+  letter-spacing: 0,
+);
+$body-01: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.42857,
+  letter-spacing: 0,
+);
+$code-01: (
+  font-family: $mono-stack,
+  font-size: $size-12px,
+  font-weight: 400,
+  line-height: 1.33333,
+  letter-spacing: 0,
+);
+$code-02: (
+  font-family: $mono-stack,
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.42857,
+  letter-spacing: 0,
+);
+$heading-01: (
+  font-size: $size-14px,
+  font-weight: 600,
+  line-height: 1.42857,
+  letter-spacing: 0,
+);
+$heading-compact-01: (
+  font-size: $size-14px,
+  font-weight: 600,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$productive-heading-01: (
+  font-size: $size-14px,
+  font-weight: 600,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
+$expressive-heading-01: (
+  font-size: $size-14px,
+  font-weight: 600,
+  line-height: 1.42857,
+  letter-spacing: 0,
+);
+$legal-01: (
+  font-size: $size-12px,
+  font-weight: 400,
+  line-height: 1.33333,
+  letter-spacing: 0,
+);
+$legal-02: (
+  font-size: $size-14px,
+  font-weight: 400,
+  line-height: 1.28572,
+  letter-spacing: 0,
+);
 
 // Row heights. `xs` (24px) is deliberately absent: it is unusable for Chinese at this
 // line height, so it is not expressible as a token.
-$dbx-row-height-condensed: 2rem; // 32px
-$dbx-row-height-comfortable: 2.5rem; // 40px
-
-:root {
-  --dbx-font-family-sans: #{$dbx-font-family-sans};
-  --dbx-label-01-font-size: #{$dbx-label-01-font-size};
-  --dbx-helper-text-01-font-size: #{$dbx-helper-text-01-font-size};
-  --dbx-caption-01-font-size: #{$dbx-caption-01-font-size};
-  --dbx-body-compact-01-line-height: #{$dbx-body-compact-01-line-height};
-  --dbx-body-compact-01-font-size: #{$dbx-body-compact-01-font-size};
-  --dbx-row-height-condensed: #{$dbx-row-height-condensed};
-  --dbx-row-height-comfortable: #{$dbx-row-height-comfortable};
-}
-
-// Family stack. Carbon writes `font-family` into most component classes, so the override
-// has to reach them rather than relying on inheritance from `body`.
-html,
-body,
-button,
-input,
-optgroup,
-select,
-textarea,
-[class^='cds--'],
-[class*=' cds--'] {
-  font-family: var(--dbx-font-family-sans);
-}
-
-// Carbon emits `letter-spacing` inside each type style, so zeroing it means reaching the
-// same set of classes rather than setting it once on `body`.
-html,
-body,
-button,
-input,
-optgroup,
-select,
-textarea,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-[class^='cds--'],
-[class*=' cds--'] {
-  letter-spacing: var(--dbx-letter-spacing, #{$dbx-letter-spacing});
-}
-
-// label-01
-.cds--label,
-.dbx-type-label-01 {
-  font-size: var(--dbx-label-01-font-size);
-}
-
-// helper-text-01
-.cds--form__helper-text,
-.dbx-type-helper-text-01 {
-  font-size: var(--dbx-helper-text-01-font-size);
-}
-
-// caption-01
-.cds--snippet__caption,
-.dbx-type-caption-01 {
-  font-size: var(--dbx-caption-01-font-size);
-}
-
-// body-compact-01 — the type style dense tables are built on.
-.cds--data-table td,
-.cds--data-table tbody th,
-.cds--structured-list-td,
-.cds--list-box__menu-item {
-  line-height: var(--dbx-body-compact-01-line-height);
-}
-
-.dbx-type-body-compact-01 {
-  font-size: var(--dbx-body-compact-01-font-size);
-  line-height: var(--dbx-body-compact-01-line-height);
-}
-
-// Identifiers (table names, column names, row counts). Latin comes first in the family
-// stack, so these already resolve to Plex letterforms rather than a Chinese face's Latin
-// glyphs — which is what keeps `order_id` and `orderid` distinguishable. Tabular figures
-// are added so counts line up column-wise.
-.dbx-identifier {
-  font-family: var(--dbx-font-family-sans);
-  font-variant-numeric: tabular-nums;
-}
+$row-height-condensed: 2rem; // 32px
+$row-height-comfortable: 2.5rem; // 40px

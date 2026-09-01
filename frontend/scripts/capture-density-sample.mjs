@@ -22,7 +22,10 @@ const preview = spawn('npx', ['vite', 'preview', '--port', String(port), '--stri
 try {
   await delay(2000);
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
+  const page = await browser.newPage({
+    viewport: { width: 1280, height: 900 },
+    deviceScaleFactor: 2,
+  });
   await page.goto(url, { waitUntil: 'networkidle' });
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: outFile, fullPage: true });

@@ -20,18 +20,10 @@ export function isWizardStage(value: string | undefined): value is WizardStage {
   return wizardStages.includes(value as WizardStage);
 }
 
-export const paths = {
-  migrationTasks: '/tasks',
-  wizardStage: (draftId: string, stage: WizardStage) => `/tasks/new/${draftId}/${stage}`,
-  migrationRun: (runId: string) => `/runs/${runId}`,
-  tableMigrationUnit: (runId: string, unitId: string) => `/runs/${runId}/tables/${unitId}`,
-  databaseConnections: '/connections',
-  settings: '/settings',
-  /** Design reference surface: the 32px Chinese density sample from ADR-0014. */
-  densitySample: '/design/density',
-} as const;
-
-/** Route patterns, kept next to the builders so the two cannot drift apart. */
+/**
+ * Route patterns are the single source of truth. The builders below are derived from
+ * them by substituting parameters, so a pattern and its URL cannot drift apart.
+ */
 export const routePatterns = {
   migrationTasks: '/tasks',
   wizardStage: '/tasks/new/:draftId/:stage',
@@ -39,5 +31,28 @@ export const routePatterns = {
   tableMigrationUnit: '/runs/:runId/tables/:unitId',
   databaseConnections: '/connections',
   settings: '/settings',
+  /** Design reference surface: the 32px Chinese density sample from ADR-0014. */
   densitySample: '/design/density',
+} as const;
+
+function buildPath(pattern: string, params: Record<string, string>): string {
+  return pattern.replace(/:(\w+)/g, (_match, name: string) => {
+    const value = params[name];
+    if (value === undefined) {
+      throw new Error(`Missing route parameter "${name}" for pattern "${pattern}"`);
+    }
+    return encodeURIComponent(value);
+  });
+}
+
+export const paths = {
+  migrationTasks: routePatterns.migrationTasks,
+  databaseConnections: routePatterns.databaseConnections,
+  settings: routePatterns.settings,
+  densitySample: routePatterns.densitySample,
+  wizardStage: (draftId: string, stage: WizardStage) =>
+    buildPath(routePatterns.wizardStage, { draftId, stage }),
+  migrationRun: (runId: string) => buildPath(routePatterns.migrationRun, { runId }),
+  tableMigrationUnit: (runId: string, unitId: string) =>
+    buildPath(routePatterns.tableMigrationUnit, { runId, unitId }),
 } as const;

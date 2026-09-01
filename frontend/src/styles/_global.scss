@@ -26,37 +26,3 @@ body {
   color: $text-secondary;
   margin-bottom: $spacing-06;
 }
-
-.dbx-density-sample__table {
-  width: 100%;
-  border-collapse: collapse;
-  background-color: $layer-01;
-}
-
-.dbx-density-sample__table th,
-.dbx-density-sample__table td {
-  text-align: left;
-  padding: 0 $spacing-05;
-  border-bottom: 1px solid $border-subtle-01;
-  white-space: nowrap;
-}
-
-.dbx-density-sample__table th {
-  height: var(--dbx-row-height-condensed);
-  color: $text-secondary;
-  font-size: var(--dbx-label-01-font-size);
-  font-weight: 600;
-}
-
-.dbx-density-sample--condensed td {
-  height: var(--dbx-row-height-condensed);
-}
-
-.dbx-density-sample--comfortable td {
-  height: var(--dbx-row-height-comfortable);
-}
-
-.dbx-density-sample__table td {
-  font-size: var(--dbx-body-compact-01-font-size);
-  line-height: var(--dbx-body-compact-01-line-height);
-}
