@@ -102,8 +102,17 @@ export function selectionSnapshot(
  * 1200-row selector the expensive mistake is a stray 「当前页全选」 after twenty minutes of
  * individual ticking, and there is no other way back from it.
  */
-export function useDbxSelection(matchingIds: readonly DbxRowId[]): DbxSelectionModel {
-  const [scope, setScope] = useState<DbxSelectionScope>(emptySelection);
+export function useDbxSelection(
+  matchingIds: readonly DbxRowId[],
+  /**
+   * Where the selection starts. It exists because a selection can outlive the component:
+   * a 迁移草稿 restored after a browser refresh (#34) has to come back as the same
+   * decision the operator made, and 「符合当前筛选的全部，除了这几张」 cannot be rebuilt
+   * from a list of ticked rows.
+   */
+  initialScope: DbxSelectionScope = emptySelection,
+): DbxSelectionModel {
+  const [scope, setScope] = useState<DbxSelectionScope>(initialScope);
   const [history, setHistory] = useState<readonly DbxSelectionScope[]>([]);
 
   const change = useCallback((next: (current: DbxSelectionScope) => DbxSelectionScope) => {

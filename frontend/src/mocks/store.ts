@@ -123,6 +123,9 @@ export function createMockStore({
         host: request.host,
         port: request.port,
         database: request.database,
+        // A freshly registered connection has only been told about one database; the rest
+        // are discovered when it is checked.
+        databases: [request.database],
         tls: request.tls,
         currentCredentialVersion: credentialVersion,
         credentialVersionCount: 1,
@@ -223,6 +226,7 @@ export function createMockStore({
         sourceDatabase: null,
         targetConnectionId: null,
         targetSchema: null,
+        scopeKind: 'SELECTED_TABLES',
         selectedTables: [],
         excludedTables: [],
         completedStages: [],

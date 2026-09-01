@@ -31,6 +31,9 @@ export function seedDatabaseConnections(
       host: 'mysql-orders.prod.internal',
       port: 3306,
       database: 'orders',
+      // A production MySQL server holds more than one database, and which one is being
+      // migrated is the operator's choice rather than the endpoint's default.
+      databases: ['orders', 'orders_archive', 'orders_reporting'],
       tls: 'SERVER_AUTHENTICATED',
       currentCredentialVersion: {
         id: 'cred-mysql-orders-3',
@@ -60,6 +63,7 @@ export function seedDatabaseConnections(
       host: 'pg-analytics.prod.internal',
       port: 5432,
       database: 'analytics',
+      databases: ['analytics'],
       tls: 'MUTUAL',
       currentCredentialVersion: {
         id: 'cred-pg-analytics-2',
@@ -89,6 +93,7 @@ export function seedDatabaseConnections(
       host: 'pg-analytics.staging.internal',
       port: 5432,
       database: 'analytics',
+      databases: ['analytics'],
       tls: 'SERVER_AUTHENTICATED',
       currentCredentialVersion: {
         id: 'cred-pg-staging-1',
@@ -118,6 +123,7 @@ export function seedDatabaseConnections(
       host: 'mysql-billing.prod.internal',
       port: 3306,
       database: 'billing',
+      databases: ['billing', 'billing_archive'],
       tls: 'SERVER_AUTHENTICATED',
       currentCredentialVersion: {
         id: 'cred-mysql-billing-1',

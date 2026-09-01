@@ -18,6 +18,26 @@ body {
   max-width: 66rem;
 }
 
+// The full-bleed variant (lead decision D7). Reading width is right for configuration
+// pages and wrong for the 1200-row 迁移范围 selector and the three-pane single-table
+// workspace, so the exception is a named variant rather than a per-page override.
+.dbx-page--full {
+  max-width: none;
+}
+
+.dbx-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-05;
+}
+
+.dbx-page__actions {
+  display: flex;
+  gap: $spacing-03;
+  flex-shrink: 0;
+}
+
 .dbx-page__title {
   margin-bottom: $spacing-03;
 }

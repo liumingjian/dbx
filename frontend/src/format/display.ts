@@ -25,3 +25,30 @@ export function formatDialect(dialect: SourceDialect | TargetDialect): string {
 export function formatCredentialVersion(version: number): string {
   return `v${version}`;
 }
+
+/**
+ * A byte count, in the units a DBA quotes.
+ *
+ * Binary units, computed by hand rather than through `Intl`, for the same reason as the
+ * timestamp above: the same value has to produce the same characters on CI's Linux and on
+ * a reviewer's mac. `CONTEXT.md` states the large-record boundaries in MiB, so the units
+ * here are the units the domain already uses.
+ */
+export function formatBytes(bytes: number): string {
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'] as const;
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const rounded = unit === 0 ? String(Math.round(value)) : value.toFixed(1);
+  return `${rounded} ${units[unit]}`;
+}
+
+/** A row count with thousands separators, grouped by hand so every platform agrees. */
+export function formatCount(count: number): string {
+  const digits = String(Math.trunc(Math.abs(count)));
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return count < 0 ? `-${grouped}` : grouped;
+}

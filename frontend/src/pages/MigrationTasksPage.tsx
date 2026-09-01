@@ -15,6 +15,7 @@ import {
   type MigrationTaskFilter,
 } from '@/features/tasks/filters';
 import { formatTimestamp } from '@/format/display';
+import { MigrationDraftsSection } from '@/features/drafts/MigrationDraftsSection';
 import { messages } from '@/messages';
 import { paths } from '@/routes/paths';
 import { Identifier } from './Identifier';
@@ -25,6 +26,9 @@ import { Page } from './Page';
  *
  * Every task here is approved, because approval is part of what a migration task *is*
  * (`CONTEXT.md`). Unapproved work is a 迁移草稿 and appears separately, which #34 adds.
+ *
+ * The page is full-bleed (lead decision D7): both tables here carry eight columns at 32px
+ * row height, and reading width would put them behind a horizontal scrollbar for no gain.
  *
  * The latest run's status is rendered as an enum literal beside an indicator taken from
  * the conclusion mapping module, never as a colour alone: `CONTEXT.md` carries no `_中文_`
@@ -184,7 +188,7 @@ export function MigrationTasksPage() {
   );
 
   return (
-    <Page title={messages.tasks.title} lead={messages.tasks.lead}>
+    <Page title={messages.tasks.title} lead={messages.tasks.lead} width="full">
       <DbxTable
         label={messages.tasks.listLabel}
         columns={columns}
@@ -206,6 +210,10 @@ export function MigrationTasksPage() {
         densityPreferenceKey="migration-tasks"
         toolbar={toolbar}
       />
+      {/* 迁移草稿 keep their own list. An unapproved working set is not a migration task in
+          some earlier state — approval is part of what a migration task is — so it never
+          appears as a row above. */}
+      <MigrationDraftsSection />
     </Page>
   );
 }

@@ -46,6 +46,39 @@ describe('messages module', () => {
     expect(messages.table.noMatches.title).not.toContain('没有数据');
   });
 
+  it('keeps 迁移草稿 a concept of its own rather than an unapproved 迁移任务', () => {
+    // `Migration draft` lists 「unsaved task」, 「pending task」 and 「unapproved migration
+    // task」 under `_Avoid_`, and `Migration task`'s definition makes approval part of what
+    // a task *is*. The interface has to keep those two apart in words as well as in types.
+    expect(messages.drafts.title).toBe('迁移草稿');
+    expect(messages.drafts.lead).toContain('不产生迁移运行');
+    expect(messages.drafts.lead).toContain('经执行确认后才成为迁移任务');
+    expect(messages.drafts.discard.body).toContain('不留痕迹');
+  });
+
+  it('names the six wizard stages the way ADR-0007 orders them', () => {
+    expect(messages.wizard.stages.connections).toBe('连接与数据库');
+    expect(messages.wizard.stages.scope).toBe('迁移范围');
+    expect(messages.wizard.stages.tables).toBe('逐表配置与预检');
+    expect(messages.wizard.stages.confirm).toBe('执行确认');
+    expect(messages.wizard.stages.monitor).toBe('运行监控');
+    expect(messages.wizard.stages.validation).toBe('校验报告');
+  });
+
+  it('explains Gate 1 rather than only refusing', () => {
+    // A blocked state that cannot say what would unblock it is indistinguishable from a bug.
+    expect(messages.wizard.gates.noTableSelected).toContain('迁移范围');
+    expect(messages.wizard.gates.noTableSelected).toContain('至少一张表');
+  });
+
+  it('never calls a discovery estimate a 源基线', () => {
+    // `Source baseline` lists 「estimated row count」 under `_Avoid_`: a baseline is exact
+    // and is captured under a write freeze, and nothing in 迁移范围 is one.
+    expect(messages.wizard.scope.estimateNotice).toContain('预估值');
+    expect(messages.wizard.scope.estimateNotice).toContain('不是源基线');
+    expect(messages.wizard.scope.largeRecordTable).toBe('大记录表');
+  });
+
   it('keeps the two selection scopes verbally distinct', () => {
     // ADR-0015 leaves cross-page selection semantics to DBX. "Select all" that silently
     // means "this page" is the mistake the wording exists to prevent.

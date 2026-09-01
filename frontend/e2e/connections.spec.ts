@@ -96,11 +96,22 @@ test.describe('连接创建与凭据维护只在数据源里', () => {
   test('the migration wizard offers no way to type a credential', async ({ page }) => {
     // `Data source management`: connection creation and credential entry happen only in
     // 数据源, never inline inside the wizard. This is the guard for that.
-    await page.goto('/tasks/new/draft-1/connections');
+    //
+    // It goes through a real 迁移草稿 rather than an invented draft id: a stage that cannot
+    // load a draft renders nothing, and would pass this test by having no interface at all.
+    await page.goto('/tasks');
+    await page.getByRole('button', { name: '新建迁移草稿' }).click();
+    await expect(page).toHaveURL(/\/tasks\/new\/[^/]+\/connections$/);
+    await page
+      .getByRole('region', { name: '源端' })
+      .getByLabel('数据库连接')
+      .selectOption({ label: '订单库（生产）' });
 
     await expect(page.getByRole('button', { name: '登记数据库连接' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '新建凭据版本' })).toHaveCount(0);
     await expect(page.locator('input[type="password"]')).toHaveCount(0);
+    // The only route to a credential from here is out to 数据源.
+    await expect(page.getByRole('link', { name: '前往数据源' })).toBeVisible();
   });
 });
 
