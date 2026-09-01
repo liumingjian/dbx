@@ -1,0 +1,5 @@
+# Local agent worktrees
+/.claude/worktrees/
+
+# Generated browser automation artifacts
+/.playwright-cli/
