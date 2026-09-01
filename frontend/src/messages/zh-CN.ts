@@ -16,6 +16,11 @@ export const messages = {
   nav: {
     ariaLabel: '主导航',
     migrationTasks: '迁移任务',
+    /**
+     * `Data source management` — the navigation area, whose `_中文_` is 数据源. An
+     * individual endpoint is a 数据库连接; the two are different concepts, which is why
+     * `Database connection` still lists `datasource` under `_Avoid_`.
+     */
     databaseConnections: '数据源',
     settings: '系统设置',
   },
