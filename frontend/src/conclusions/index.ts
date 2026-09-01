@@ -4,6 +4,7 @@ export {
   connectionCheckConclusion,
   dbxConclusions,
   migrationRunConclusion,
+  tableMigrationConclusion,
   type ConclusionIndicatorKind,
   type DbxConclusion,
 } from './conclusion';

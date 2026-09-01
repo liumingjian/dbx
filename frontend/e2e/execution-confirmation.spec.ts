@@ -232,7 +232,9 @@ test.describe('启动是一个需要明确意图的动作', () => {
 
     // A 迁移运行 now exists and has its own URL, like everything else in DBX.
     await expect(page).toHaveURL(/\/runs\/[^/?]+/);
-    await expect(page.getByRole('heading', { name: '迁移运行' })).toBeVisible();
+    // #38 gave that route its stage's own name: the run's own page is 运行监控, and the
+    // 迁移运行 it observes is named on it by identifier.
+    await expect(page.getByRole('heading', { name: '运行监控' })).toBeVisible();
 
     // The draft became the task. Client-side, so the mock world is the same one the run
     // was created in.

@@ -226,6 +226,48 @@ export const handlers = [
     });
   }),
 
+  /**
+   * 运行监控's one read: the whole 迁移运行 at one instant (#38).
+   *
+   * One aggregate rather than four reads, for the same reason 执行确认's summary is one:
+   * units, 卡死, timeline and log fetched separately could disagree with each other, and a
+   * monitoring screen whose halves describe different instants is worse than no screen.
+   * The response carries its own `observedAt` so a view can say when it was true.
+   *
+   * A GET that the client repeats is deliberately all this endpoint is. ADR-0007 leaves
+   * the live-update transport undecided, so the mock offers the plainest thing a polling,
+   * an SSE or a WebSocket implementation could all deliver, and picks none of them.
+   */
+  http.get(`${API_BASE}/migration-runs/:id/progress`, async ({ params }) => {
+    const faulted = await applyTransportFault('tableMigrationUnits');
+    if (faulted) return faulted;
+    const snapshot = getMockContext().store.getRunProgress(String(params.id));
+    return snapshot ? HttpResponse.json(snapshot) : notFound();
+  }),
+
+  // What a 取消 would stop, read before it is requested rather than described in a dialog.
+  http.get(`${API_BASE}/migration-runs/:id/cancellation`, async ({ params }) => {
+    const faulted = await applyTransportFault('migrationRuns');
+    if (faulted) return faulted;
+    const consequences = getMockContext().store.describeRunCancellation(String(params.id));
+    return consequences ? HttpResponse.json(consequences) : notFound();
+  }),
+
+  /**
+   * Requesting a 取消: a terminal stop that preserves target data and diagnostic evidence.
+   *
+   * A POST to the run's cancellation rather than a PATCH of the run, because a 迁移运行 is
+   * immutable: what is created is a request, and what changes is what the platform makes
+   * of the run from that instant onwards. Nothing is deleted or rolled back — 「discard」
+   * and 「rollback」 are under 取消's `_Avoid_`, and 丢弃 is a separate operation.
+   */
+  http.post(`${API_BASE}/migration-runs/:id/cancellation`, async ({ params }) => {
+    const faulted = await applyTransportFault('migrationRuns');
+    if (faulted) return faulted;
+    const snapshot = getMockContext().store.requestRunCancellation(String(params.id));
+    return snapshot ? HttpResponse.json(snapshot) : notFound();
+  }),
+
   http.get(`${API_BASE}/source-tables`, async ({ request }) => {
     const faulted = await applyTransportFault('tableMigrationUnits');
     if (faulted) return faulted;

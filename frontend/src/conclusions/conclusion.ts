@@ -13,6 +13,7 @@ import type {
   ConnectionCheckOutcome,
   MigrationRunStatus,
   PreflightConclusion,
+  TableMigrationOutcome,
   ValidationItemState,
 } from '@/contract';
 
@@ -106,6 +107,46 @@ const runStatusConclusions: Readonly<Record<MigrationRunStatus, DbxConclusion>> 
 
 export function migrationRunConclusion(status: MigrationRunStatus): DbxConclusion {
   return runStatusConclusions[status];
+}
+
+/**
+ * One 表迁移单元's technical result, as an indicator (#38).
+ *
+ * Three rows carry a judgement and are written down as such:
+ *
+ *  - `BLOCKED_BY_BOX_FAILURE` — 因关联失败而阻塞 — is **not** a failure. `CONTEXT.md`:
+ *    「Its own technical result is undetermined rather than failed, and it is a candidate
+ *    for re-migration」, so it takes the indicator of a judgement DBX could not reach.
+ *  - `CANCELLED` and `SKIPPED` carry `NOT_APPLICABLE`: no technical conclusion applies to
+ *    a table an operator stopped or excluded.
+ *  - `COMPLETED_WITH_ACCEPTED_RISK` is not a pass. A 校验处置 closes the workflow and
+ *    never overwrites the technical result (ADR-0004).
+ *
+ * A unit with no outcome yet is `IN_FLIGHT`. 卡死 is **not** in this table at all, because
+ * ADR-0004 makes `STUCK` a diagnosis about a scheduling group rather than a table outcome
+ * — `tableMigrationConclusion`'s caller passes it separately, from the run's diagnosis.
+ */
+const tableMigrationOutcomeConclusions: Readonly<Record<TableMigrationOutcome, DbxConclusion>> = {
+  SUCCEEDED: 'PASS',
+  FAILED: 'FAIL',
+  BLOCKED_BY_BOX_FAILURE: 'INCONCLUSIVE',
+  SKIPPED: 'NOT_APPLICABLE',
+  CANCELLED: 'NOT_APPLICABLE',
+  COMPLETED_WITH_ACCEPTED_RISK: 'INCONCLUSIVE',
+};
+
+/**
+ * @param outcome the unit's one outcome, or null while it has not reached one.
+ * @param stalled whether the run's 卡死 diagnosis names this unit as having stopped.
+ */
+export function tableMigrationConclusion(
+  outcome: TableMigrationOutcome | null,
+  stalled = false,
+): DbxConclusion {
+  if (stalled) {
+    return 'STUCK';
+  }
+  return outcome === null ? 'IN_FLIGHT' : tableMigrationOutcomeConclusions[outcome];
 }
 
 /**
