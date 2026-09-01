@@ -30,7 +30,12 @@ export interface DbxTableColumn<TRow> {
   /** Header wording, taken from `src/messages`. */
   readonly header: string;
   readonly renderCell: (row: TRow) => ReactNode;
-  /** Plain-text form of the cell, for the accessible row label and for sorting. */
+  /**
+   * Plain-text form of the cell, for the accessible row label and for the exported and
+   * copied forms a view builds from the same columns. **Not** for sorting: DBX tables are
+   * rendered in a deterministic domain order (story 31 — the same database opens the same
+   * way twice) and `DbxTable` offers no column sort, so nothing here is compared.
+   */
   readonly textValue?: (row: TRow) => string;
   /** Initial width in pixels. Operators may resize from there. */
   readonly width?: number;
@@ -84,7 +89,22 @@ export interface DbxTableErrorCopy {
  */
 export type DbxSelectionScope =
   | { readonly kind: 'rows'; readonly selectedIds: readonly DbxRowId[] }
-  | { readonly kind: 'allMatchingFilter'; readonly excludedIds: readonly DbxRowId[] };
+  | {
+      readonly kind: 'allMatchingFilter';
+      /**
+       * The filter this scope was stated under.
+       *
+       * 「符合当前筛选的全部」 names a filter, so the scope is only meaningful while that
+       * filter is the one in force. Without the binding, clearing a search silently turned
+       * 「符合 order 的全部」 into 「整库的全部」 — and what it turned into is the set of
+       * tables a production migration would write.
+       *
+       * Opaque to this module: the caller decides what identifies its filter, and the empty
+       * string means 「没有筛选」.
+       */
+      readonly filterKey: string;
+      readonly excludedIds: readonly DbxRowId[];
+    };
 
 export interface DbxSelectionModel {
   readonly scope: DbxSelectionScope;

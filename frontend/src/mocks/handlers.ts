@@ -208,7 +208,12 @@ export const handlers = [
   http.get(`${API_BASE}/migration-tasks`, async () => {
     const faulted = await applyTransportFault('migrationTasks');
     if (faulted) return faulted;
-    return HttpResponse.json({ items: getMockContext().store.listMigrationTasks() });
+    const context = getMockContext();
+    // The instant the list was assembled, on the world's own clock — see `MigrationTaskList`.
+    return HttpResponse.json({
+      items: context.store.listMigrationTasks(),
+      observedAt: context.clock.nowIso(),
+    });
   }),
 
   http.get(`${API_BASE}/migration-tasks/:id`, async ({ params }) => {

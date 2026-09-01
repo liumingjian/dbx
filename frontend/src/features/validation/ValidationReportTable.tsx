@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { DbxTable, type DbxTableColumn } from '@/components/DbxTable';
 import { ConclusionIndicator } from '@/conclusions';
 import type { ValidationReportRow } from '@/contract';
-import { outcomeLabel } from '@/features/runs';
+import { unitOutcomeLabel } from '@/features/runs';
 import { messages } from '@/messages';
 import { paths } from '@/routes/paths';
 import { isDisposable, itemStateCountsOf } from './reportSummary';
@@ -123,10 +123,8 @@ export function ValidationReportTable({
       id: 'unitOutcome',
       header: copy.columns.unitOutcome,
       width: 240,
-      textValue: (row) =>
-        row.unitOutcome === null ? copy.noOutcome : outcomeLabel(row.unitOutcome),
-      renderCell: (row) =>
-        row.unitOutcome === null ? copy.noOutcome : outcomeLabel(row.unitOutcome),
+      textValue: (row) => unitOutcomeLabel(row.unitOutcome),
+      renderCell: (row) => unitOutcomeLabel(row.unitOutcome),
     },
     {
       id: 'evidence',

@@ -1,16 +1,11 @@
 import { Button, InlineNotification, Tag } from '@carbon/react';
-import { ConclusionIndicator } from '@/conclusions';
+import { ConclusionIndicator, preflightNoticeKind } from '@/conclusions';
 import { findingDetail, findingLabel } from '@/features/preflight/preflightVocabulary';
 import type { DraftTableWorkspace, PreflightFinding } from '@/contract';
 import { formatCount, formatTimestamp } from '@/format/display';
 import { messages } from '@/messages';
 import { Identifier } from '@/pages/Identifier';
-import {
-  preflightBlocks,
-  preflightIndicatorConclusion,
-  preflightNoticeKind,
-  prunableColumnsOf,
-} from './preflightExits';
+import { preflightBlocks, preflightIndicatorConclusion, prunableColumnsOf } from './preflightExits';
 
 /**
  * 预检证据与阻断门禁 (#36) — the front of the findings pane.

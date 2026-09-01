@@ -16,4 +16,5 @@ export {
   phaseLabel,
   presentRootCauseDomain,
   runEventLabel,
+  unitOutcomeLabel,
 } from './runVocabulary';

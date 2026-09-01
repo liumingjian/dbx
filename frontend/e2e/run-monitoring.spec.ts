@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expectFreeOfExecutionPlatform, visibleText, visibleTextOf } from './gate7';
 
 /**
  * Seam ① — 运行监控, and **Gate 7** of the nine journey gates (#30 §15.4, #38).
@@ -49,11 +50,6 @@ async function openMonitor(page: Page, scenario: string): Promise<void> {
   await expect(panel(page, '进度矩阵')).toBeVisible({ timeout: FIRST_PAINT_MS });
 }
 
-/** Everything the operator can actually read on this page. */
-async function visibleText(page: Page): Promise<string> {
-  return (await page.locator('body').innerText()).toLowerCase();
-}
-
 test.describe('Gate 7：监控以表迁移单元为中心，执行平台不外露', () => {
   for (const scenario of ['default', 'partial-table-failure', 'stuck-table']) {
     test(`no 箱, 连接器 or topic reaches the operator in 「${scenario}」`, async ({ page }) => {
@@ -63,23 +59,31 @@ test.describe('Gate 7：监控以表迁移单元为中心，执行平台不外�
       await expect(page.getByText('监控以表迁移单元为中心')).toBeVisible();
       await expect(panel(page, '进度矩阵')).toBeVisible();
 
-      const text = await visibleText(page);
-      // 箱 / 连接器 / topic, in every form they could arrive in: the Chinese words, the
-      // English ones, and the enum literals that are named after them.
-      for (const forbidden of [
-        '箱',
-        '连接器',
-        'topic',
-        'box',
-        'connector',
-        'kafka',
-        'waiting_for_box',
-        'blocked_by_box_failure',
-      ]) {
-        expect(text, `「${forbidden}」 must not reach the interface`).not.toContain(forbidden);
-      }
+      // One list, shared by every surface Gate 7 binds (`e2e/gate7.ts`).
+      expectFreeOfExecutionPlatform(await visibleText(page), `运行监控（${scenario}）`);
     });
   }
+
+  test('the filtered views are bound too, and so is the 取消 dialog', async ({ page }) => {
+    // 只看失败 and 只看卡死 are where a DBA goes the moment something is wrong, which is
+    // exactly when a platform literal is most likely to be reached for — and the cancel
+    // dialog is the one screen that describes the machinery being stopped.
+    await openMonitor(page, 'partial-table-failure');
+    await page.getByRole('tab', { name: '只看失败' }).click();
+    await expect(panel(page, '进度矩阵').getByText('迁移失败').first()).toBeVisible();
+    expectFreeOfExecutionPlatform(await visibleText(page), '只看失败');
+
+    await openMonitor(page, 'stuck-table');
+    await page.getByRole('tab', { name: '只看卡死' }).click();
+    await expect(panel(page, '进度矩阵').getByText('卡死').first()).toBeVisible();
+    expectFreeOfExecutionPlatform(await visibleText(page), '只看卡死');
+
+    await openMonitor(page, 'default');
+    await page.getByRole('button', { name: '取消迁移运行' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('取消不是丢弃，也不回滚');
+    expectFreeOfExecutionPlatform(await visibleTextOf(dialog), '取消迁移运行对话框');
+  });
 
   test('says 等待调度 and 因关联失败而阻塞 instead of the literals named after the box', async ({
     page,

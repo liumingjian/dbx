@@ -10,9 +10,17 @@ import type { MigrationDraft, MigrationDraftPatch, SourceTableSummary } from '@/
  * still making it.
  */
 
+/**
+ * A restored draft comes back as the decision it recorded.
+ *
+ * `ALL_TABLES_EXCEPT` is only ever written for a scope stated with **no filter in force**
+ * (see `draftPatchOfSelection`), so it is restored under the empty filter key — which is
+ * what makes the restored scope mean the same thing it meant when it was written. A scope
+ * stated under a search was frozen into its rows before it ever reached the draft.
+ */
 export function selectionScopeOfDraft(draft: MigrationDraft): DbxSelectionScope {
   return draft.scopeKind === 'ALL_TABLES_EXCEPT'
-    ? { kind: 'allMatchingFilter', excludedIds: [...draft.excludedTables] }
+    ? { kind: 'allMatchingFilter', filterKey: '', excludedIds: [...draft.excludedTables] }
     : { kind: 'rows', selectedIds: [...draft.selectedTables] };
 }
 
@@ -27,7 +35,11 @@ export function draftPatchOfSelection(
   scope: DbxSelectionScope,
   selectedNames: readonly string[],
 ): Required<Pick<MigrationDraftPatch, 'scopeKind' | 'selectedTables' | 'excludedTables'>> {
-  return scope.kind === 'allMatchingFilter'
+  // `ALL_TABLES_EXCEPT` means every table of the source database except the recorded ones,
+  // so only a scope stated with no filter in force is one. 「符合 order 的全部」 is a
+  // different, narrower decision, and recording it as 「整库除外」 is exactly how a
+  // 迁移范围 silently grows to the whole database the next time the filter moves.
+  return scope.kind === 'allMatchingFilter' && scope.filterKey === ''
     ? {
         scopeKind: 'ALL_TABLES_EXCEPT',
         selectedTables: [...selectedNames],

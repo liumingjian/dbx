@@ -58,8 +58,15 @@ export function MigrationTasksPage() {
   const query = useMigrationTasks();
   const [filter, setFilter] = useState<MigrationTaskFilter>(noMigrationTaskFilter);
 
-  const tasks = useMemo(() => query.data ?? [], [query.data]);
-  const filtered = useMemo(() => filterMigrationTasks(tasks, filter, Date.now()), [tasks, filter]);
+  const tasks = useMemo(() => query.data?.items ?? [], [query.data]);
+  // 「now」 comes from the same read as the tasks, never from the browser: the 批准时间 are
+  // written on the platform's clock, and a window measured against a different clock is a
+  // filter that quietly empties the list.
+  const observedAtMs = query.data === undefined ? null : Date.parse(query.data.observedAt);
+  const filtered = useMemo(
+    () => (observedAtMs === null ? tasks : filterMigrationTasks(tasks, filter, observedAtMs)),
+    [tasks, filter, observedAtMs],
+  );
 
   const columns = useMemo<readonly DbxTableColumn<MigrationTask>[]>(
     () => [

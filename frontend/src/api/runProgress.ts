@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { MigrationRunId, RunCancellationConsequences, RunProgressSnapshot } from '@/contract';
 import { getJson, postJson } from './http';
-import { dbxQueryKey } from './queryKeys';
+import { currentScenarioKey, dbxQueryKey } from './queryKeys';
 import { migrationTaskKeys } from './migrationTasks';
 import { defaultRunProgressSource, type RunProgressSource } from './runProgressSource';
 
@@ -43,6 +43,17 @@ export function useRunProgress(
   const [snapshot, setSnapshot] = useState<RunProgressSnapshot | null>(null);
   const [error, setError] = useState<unknown>(null);
   const subscription = useRef<{ readonly refresh: () => void } | null>(null);
+  /**
+   * The scenario is part of what identifies a subscription, not decoration.
+   *
+   * `run-monitored` is the 迁移运行 id in **every** scenario (D22), so a scenario change
+   * that does not reload the page leaves `runId` and `source` both identical and the
+   * previous world's subscription attached. And `runProgressSource` latches closed the
+   * moment a snapshot carries an `endedAt`, so the page would then hold the previous
+   * scenario's final observation for ever. #42's coverage matrix walks scenarios inside
+   * one session, which is exactly the walk that would break.
+   */
+  const scenarioKey = currentScenarioKey();
 
   useEffect(() => {
     setSnapshot(null);
@@ -59,7 +70,7 @@ export function useRunProgress(
       subscription.current = null;
       active.close();
     };
-  }, [runId, source]);
+  }, [runId, source, scenarioKey]);
 
   const refresh = useCallback(() => subscription.current?.refresh(), []);
 

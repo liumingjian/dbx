@@ -37,13 +37,14 @@ import type {
 } from '@/contract';
 import type { ControllableClock } from './clock';
 import { seedDatabaseConnections, unreachableConnectionIds } from './fixtures/databaseConnections';
-import { seedMigrationTasks } from './fixtures/migrationTasks';
+import { hasSeededRunEnded, seedMigrationTasks } from './fixtures/migrationTasks';
 import {
   EXCLUDED_TABLE_COUNT,
   MONITORED_UNIT_COUNT,
   OBSERVATION_INTERVAL_MOCK_MS,
   buildRunPlan,
   projectRunProgress,
+  runPlanEndQuantum,
   seedMonitoredRun,
   validationExecutionIdOf,
   withDispositions,
@@ -61,7 +62,7 @@ import {
   draftTableWorkspaceOf,
   requiresZeroDateDecision,
 } from './fixtures/tableWorkspace';
-import { remigrationCandidateRows } from '@/features/remigration/candidates';
+import { serverRemigrationCandidateRows } from './remigrationCandidates';
 import { deepFreeze } from './immutable';
 import type { DraftPersistence } from './persistence';
 import type { ScenarioDefinition, SeedPlan } from './scenarios';
@@ -277,7 +278,17 @@ export type RecordValidationDispositionResult =
         /** A 校验处置 without a named 责任人 or a stated 理由 is not an audited decision. */
         | 'REASON_OR_OPERATOR_MISSING'
         /** Nothing to dispose of: this table's 校验执行 concluded `PASS`, or never ran. */
-        | 'NOTHING_TO_DISPOSE';
+        | 'NOTHING_TO_DISPOSE'
+        /**
+         * This unit already carries a 校验处置.
+         *
+         * 校验处置 is 「an operator's audited decision」, and every other audit record in
+         * this store is append-only: a 迁移运行 is immutable, a 重新迁移 is a new run
+         * rather than a retry in place, and a 校验执行 is a projection nothing may write
+         * to. A second decision that silently replaced the first operator's name, reason
+         * and instant would be the one editable link in that chain.
+         */
+        | 'ALREADY_DISPOSED';
     };
 
 /** Why a start was refused, or the 迁移任务 and 迁移运行 it produced. */
@@ -326,6 +337,15 @@ export const CONFIRM_DRAFT_ID = 'draft-ready-for-confirm';
  */
 export const PREFLIGHT_RERUN_MOCK_MS = 180_000;
 
+/**
+ * How long a 预检 rerun takes while mock time is frozen, in **real** milliseconds.
+ *
+ * The same wait `PREFLIGHT_RERUN_MOCK_MS` produces at the default rate, so 「预检进行中」 is
+ * still a state a reviewer can be caught in — and a frozen clock, which `?clockRate=0`
+ * selects deliberately, no longer means a scan that never ends.
+ */
+export const PREFLIGHT_RERUN_FROZEN_REAL_MS = 3_000;
+
 export function createMockStore({
   scenario,
   clock,
@@ -337,8 +357,16 @@ export function createMockStore({
   );
 
   const seededTasks = seedMigrationTasks(scenario.seedPlan, clock);
-  const tasks = new Map<string, MigrationTask>(seededTasks.tasks.map((task) => [task.id, task]));
-  const runs = new Map<string, MigrationRun>(seededTasks.runs.map((run) => [run.id, run]));
+  // Frozen exactly like the tasks and runs the wizard creates. A seeded 迁移任务 is the
+  // same kind of record as an approved one — 「one immutable execution attempt」 — and
+  // leaving the seeded half writable would mean the mock's own guarantee held for the
+  // history a reviewer creates and not for the history they arrive to.
+  const tasks = new Map<string, MigrationTask>(
+    seededTasks.tasks.map((task) => [task.id, deepFreeze(task)]),
+  );
+  const runs = new Map<string, MigrationRun>(
+    seededTasks.runs.map((run) => [run.id, deepFreeze(run)]),
+  );
 
   /**
    * The 迁移运行 that 运行监控 is entered through, and the plans behind every run.
@@ -374,6 +402,12 @@ export function createMockStore({
    */
   function runPlanShapeOf(run: MigrationRun): SeedPlan['runPlan'] {
     switch (run.status) {
+      // A run recorded as 迁移完成 gets the plan in which every table succeeds, whatever
+      // the scenario's own plan is. Falling through to the scenario would hand a
+      // `COMPLETED` run of the seeded history an `inconclusive-validation` plan, whose
+      // units never reach a terminal state — a finished run that never finishes.
+      case 'COMPLETED':
+        return 'all-tables-succeed';
       case 'COMPLETED_WITH_FAILURES':
         return 'partial-table-failure';
       case 'COMPLETED_WITH_ACCEPTED_RISK':
@@ -496,6 +530,48 @@ export function createMockStore({
   }
 
   /**
+   * Closing the seeded history's runs at the instant their **own plan** closes.
+   *
+   * The fixture records *that* a 迁移运行 finished; when it finished is derived here, from
+   * the plan the projection replays, so the record and the projection cannot drift. A
+   * duration written beside the status is a second, independent number for one fact — and
+   * the two disagreeing is what made a `COMPLETED` run render tables still 等待调度 and a
+   * 校验报告 announce that its 校验执行 were still running.
+   *
+   * Done after the dispositions above, because a run closed by a 校验处置 only comes to
+   * rest once the disposition exists: a table whose validation did not pass has no outcome
+   * of its own until a person closes the workflow (D35).
+   */
+  for (const seeded of seededTasks.runs) {
+    const run = runs.get(seeded.id);
+    if (run === undefined || !hasSeededRunEnded(run.status)) {
+      continue;
+    }
+    const startedAtMs = Date.parse(run.startedAt);
+    const cancelledAtQuantum =
+      run.cancellationRequestedAt === null
+        ? null
+        : Math.max(
+            0,
+            Math.ceil(
+              (Date.parse(run.cancellationRequestedAt) - startedAtMs) /
+                OBSERVATION_INTERVAL_MOCK_MS,
+            ),
+          );
+    const endQuantum = runPlanEndQuantum(effectivePlanOf(run), cancelledAtQuantum);
+    if (endQuantum === null) {
+      continue;
+    }
+    runs.set(
+      run.id,
+      deepFreeze({
+        ...run,
+        endedAt: new Date(startedAtMs + endQuantum * OBSERVATION_INTERVAL_MOCK_MS).toISOString(),
+      }),
+    );
+  }
+
+  /**
    * 校验报告 for one run, at the instant 运行监控 is looking at.
    *
    * Frozen like every other read: a report a reviewer could write to is not evidence.
@@ -572,7 +648,6 @@ export function createMockStore({
     mappingRules: [],
     prunedColumns: [],
     writeFreeze: null,
-    completedStages: ['connections', 'scope'] as const,
   });
 
   if (seedPlan.migrationDrafts === 'ready-for-tables' && drafts.length === 0) {
@@ -671,7 +746,6 @@ export function createMockStore({
           .filter((table) => table.preflightConclusion === 'UNSUPPORTED')
           .slice(0, 2)
           .map((table) => table.name),
-        completedStages: ['connections', 'scope', 'tables'],
       },
     ];
   }
@@ -719,12 +793,21 @@ export function createMockStore({
    * about work, not part of the operator's unapproved working set — persisting it would
    * resurrect a running scan on a page nobody has open.
    */
-  const preflightRerunUntil = new Map<string, number>();
+  const preflightRerunUntil = new Map<string, { mockUntil: number; realUntil: number }>();
   const rerunKey = (draftId: string, sourceTable: string): string =>
     `${draftId}\u0000${sourceTable}`;
 
   const markPreflightRerun = (draftId: string, sourceTable: string): void => {
-    preflightRerunUntil.set(rerunKey(draftId, sourceTable), clock.now() + PREFLIGHT_RERUN_MOCK_MS);
+    preflightRerunUntil.set(rerunKey(draftId, sourceTable), {
+      mockUntil: clock.now() + PREFLIGHT_RERUN_MOCK_MS,
+      // Frozen mock time (`?clockRate=0`) is a supported value — `normaliseRate` says so,
+      // and a reviewer taking a screenshot wants it. But a duration denominated in a clock
+      // that does not move never elapses, and the workspace polls until the scan concludes,
+      // so a rerun under a frozen clock used to hang for ever. While time is frozen the
+      // window is measured in real milliseconds instead: the same wait the default rate
+      // produces, and the scan still finishes.
+      realUntil: Date.now() + PREFLIGHT_RERUN_FROZEN_REAL_MS,
+    });
   };
 
   const preflightInFlight = (draftId: string, sourceTable: string): boolean => {
@@ -733,7 +816,9 @@ export function createMockStore({
     if (until === undefined) {
       return false;
     }
-    if (clock.now() >= until) {
+    const elapsed =
+      clock.getRate() === 0 ? Date.now() >= until.realUntil : clock.now() >= until.mockUntil;
+    if (elapsed) {
       preflightRerunUntil.delete(key);
       return false;
     }
@@ -1016,7 +1101,7 @@ export function createMockStore({
     const ineligible: RemigrationCandidate[] = [];
     const now = clock.nowIso();
 
-    for (const row of remigrationCandidateRows(report)) {
+    for (const row of serverRemigrationCandidateRows(report)) {
       const fresh = freshPreflightOf(run.sourceDatabase, row.sourceTable);
       const candidate: RemigrationCandidate = {
         unitId: row.unitId,
@@ -1196,7 +1281,6 @@ export function createMockStore({
         mappingRules: [],
         prunedColumns: [],
         writeFreeze: null,
-        completedStages: [],
         ...patch,
       };
       drafts = [...drafts, draft];
@@ -1299,6 +1383,14 @@ export function createMockStore({
           : acceptedCheckIdsOf(row.execution);
       if (accepted.length === 0) {
         return { ok: false, code: 'NOTHING_TO_DISPOSE' };
+      }
+
+      // Append-only, like every other audit record here: a decision already recorded is
+      // not replaced, it is refused. Nothing in the interface offers a second one — 记录
+      // 校验处置 is only shown where there is none — so this answers a request that did
+      // not come from the screen.
+      if (dispositionsOf(runId).has(request.unitId)) {
+        return { ok: false, code: 'ALREADY_DISPOSED' };
       }
 
       dispositionsOf(runId).set(request.unitId, {

@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expectFreeOfExecutionPlatform, visibleText } from './gate7';
 
 /**
  * Seam ① — 单表证据抽屉 (#39).
@@ -158,18 +159,17 @@ test.describe('证据让 DBA 判断是源问题还是目标问题', () => {
     await expect(panel).toContainText('根因域 迁移平台');
 
     // Gate 7, on this surface too — read the whole screen and find none of it.
-    const text = (await page.locator('body').innerText()).toLowerCase();
-    for (const forbidden of [
-      '箱',
-      '连接器',
-      'topic',
-      'box',
-      'connector',
-      'kafka',
-      'blocked_by_box_failure',
-    ]) {
-      expect(text, `「${forbidden}」 must not reach the interface`).not.toContain(forbidden);
-    }
+    expectFreeOfExecutionPlatform(await visibleText(page), '因关联失败而阻塞的表的证据');
+  });
+
+  test('nor into the drawer of a table that actually failed', async ({ page }) => {
+    // The stalled table's drawer was the only one scanned, and it is the one whose wording
+    // was written most carefully. A failed table's drawer carries a 诊断 and 错误事件 —
+    // the two places an execution-platform literal is most likely to arrive from.
+    await page.goto(`/runs/${runId}/tables/${runId}-unit-2?scenario=partial-table-failure`);
+    await expect(drawer(page)).toBeVisible({ timeout: FIRST_PAINT_MS });
+    await expect(drawer(page)).toContainText('迁移失败');
+    expectFreeOfExecutionPlatform(await visibleText(page), '迁移失败的表的证据');
   });
 
   test('a table that has not failed gets no invented cause', async ({ page }) => {

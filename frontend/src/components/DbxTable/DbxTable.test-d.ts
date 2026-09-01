@@ -36,7 +36,11 @@ describe('the DbxTable interface is expressible in DBX domain types alone', () =
       renderCell: (table) => table.name,
     };
 
-    const scope: DbxSelectionScope = { kind: 'allMatchingFilter', excludedIds: ['orders'] };
+    const scope: DbxSelectionScope = {
+      kind: 'allMatchingFilter',
+      filterKey: '',
+      excludedIds: ['orders'],
+    };
 
     const model: DbxSelectionModel = {
       scope,

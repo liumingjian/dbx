@@ -10,7 +10,7 @@ import { ApiError } from '@/api/http';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ViewState';
 import type { MigrationDraftPatch } from '@/contract';
 import { messages } from '@/messages';
-import { isWizardStage, paths, type WizardStage } from '@/routes/paths';
+import { isWizardStage, paths, wizardStages, type WizardStage } from '@/routes/paths';
 import {
   StageConfirm,
   StageConnections,
@@ -67,11 +67,24 @@ export function MigrationWizardStagePage() {
   // part of the gate context rather than something the stage alone knows (#35). The page
   // does not wait for them: `null` is a state the gate answers for, which keeps the shell
   // rendering while the read is in flight.
-  const tableConfigurationsQuery = useDraftTableConfigurations(draftId ?? '');
+  //
+  // Read only from the stage that needs them onwards. D27: listing the configurations of a
+  // 1200-table 迁移范围 generates every table's columns, and stages one and two have no
+  // gate that reads them — they would pay the whole assembly for nothing. Where the read
+  // is off the value is `null`, which is the same state as 「还没读到」 and blocks exactly
+  // as it did before (D22).
+  const stageIndex = wizardStages.indexOf(stage as WizardStage);
+  const tableConfigurationsQuery = useDraftTableConfigurations(
+    draftId ?? '',
+    stageIndex >= wizardStages.indexOf('tables'),
+  );
   // Stage four's gate is likewise a fact the server states rather than one the browser can
   // compute: which tables a 结构证明 can be established for is a statement about the target
   // catalog (#37). Same polarity as the summaries above — `null` blocks.
-  const executionSummaryQuery = useExecutionConfirmationSummary(draftId ?? '');
+  const executionSummaryQuery = useExecutionConfirmationSummary(
+    draftId ?? '',
+    stageIndex >= wizardStages.indexOf('confirm'),
+  );
   const update = useUpdateMigrationDraft();
   const discard = useDiscardMigrationDraft();
 

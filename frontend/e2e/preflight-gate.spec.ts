@@ -82,7 +82,11 @@ function nodeFor(page: Page, name: string): Locator {
 /** Opens one table and waits for its 预检 conclusion to be on screen. */
 async function open(page: Page, node: Locator): Promise<string> {
   const name = await tableNameOf(node);
-  await node.getByRole('button').first().click();
+  // Carbon only wraps a tree label in a button when it decides the label needs a
+  // truncation tooltip, so whether a node has one depends on how long its table name is.
+  // Selecting a table is a property of the node, not of that accident.
+  const labelButton = node.getByRole('button').first();
+  await ((await labelButton.count()) > 0 ? labelButton : node).click();
   await expect(preflight(page)).toBeVisible();
   return name;
 }
@@ -98,42 +102,55 @@ function inconclusiveTable(page: Page): Locator {
 }
 
 test.describe('Gate 2：结论为不可迁移或无法判定的预检不能被批准', () => {
-  test('holds the stage shut, and offers nothing that would confirm it away', async ({ page }) => {
-    await openStage(page);
-    const name = await open(page, inconclusiveTable(page));
+  // Both blocking conclusions, because the gate names both and a case written against one
+  // of them says nothing about the other. `CONTEXT.md` on 预检: 「only `SUPPORTED` may
+  // proceed」 — 不可迁移 and 无法判定 are different facts that are refused identically.
+  for (const conclusion of ['无法判定', '不可迁移'] as const) {
+    test(`holds the stage shut for 「${conclusion}」, and offers nothing that would confirm it away`, async ({
+      page,
+    }) => {
+      await openStage(page);
+      const node = tree(page).getByRole('treeitem').filter({ hasText: conclusion }).first();
+      const name = await open(page, node);
 
-    // 「无法判定」 has its own form. It is not a warning, and the interface never softens it
-    // into one — that misreading is the whole reason this stage is written down.
-    await expect(preflight(page)).toContainText('无法判定');
-    await expect(preflight(page)).toContainText('无法确认是否可迁移');
-    await expect(preflight(page)).toContainText('不能忽略此检查继续迁移');
-    await expect(preflight(page)).not.toContainText('警告');
-    await expect(preflight(page)).not.toContainText('风险');
+      // `exact`, because 不可迁移 contains 可迁移: an unanchored match would let the
+      // opposite conclusion satisfy the assertion.
+      await expect(preflight(page).getByText(conclusion, { exact: true }).first()).toBeVisible();
 
-    // Everything pressable inside the 预检 is one of ADR-0003's three exits. There is no
-    // acknowledgement, no dismissal and no fourth way out — and the pane says so.
-    const actions = await preflight(page).getByRole('button').allInnerTexts();
-    expect(actions.length).toBeGreaterThan(0);
-    for (const action of actions) {
-      expect(action).toMatch(/重新预检|显式排除该表|裁剪字段|撤销裁剪/);
-    }
-    await expect(preflight(page).getByRole('checkbox')).toHaveCount(0);
-    await expect(preflight(page)).toContainText('没有第四条出路');
+      if (conclusion === '无法判定') {
+        // 「无法判定」 has its own form. It is not a warning, and the interface never softens
+        // it into one — that misreading is the whole reason this stage is written down.
+        await expect(preflight(page)).toContainText('无法确认是否可迁移');
+        await expect(preflight(page)).toContainText('不能忽略此检查继续迁移');
+        await expect(preflight(page)).not.toContainText('警告');
+        await expect(preflight(page)).not.toContainText('风险');
+      }
 
-    // And the stage refuses to advance, saying which table and which conclusion.
-    const url = page.url();
-    await expect(page.getByText(/只有结论为可迁移的预检可以继续/)).toBeVisible();
-    await page.getByRole('button', { name: '下一步' }).click();
-    await expect(page).toHaveURL(url);
+      // Everything pressable inside the 预检 is one of ADR-0003's three exits. There is no
+      // acknowledgement, no dismissal and no fourth way out — and the pane says so.
+      const actions = await preflight(page).getByRole('button').allInnerTexts();
+      expect(actions.length).toBeGreaterThan(0);
+      for (const action of actions) {
+        expect(action).toMatch(/重新预检|显式排除该表|裁剪字段|撤销裁剪/);
+      }
+      await expect(preflight(page).getByRole('checkbox')).toHaveCount(0);
+      await expect(preflight(page)).toContainText('没有第四条出路');
 
-    // A typed address does not get past it either — every stage is deep-linkable, so the
-    // gate has to hold against a URL and not only against a button. The `?scenario=`
-    // survives the redirect, which is what makes the blocked world reviewable at all.
-    await page.goto(`/tasks/new/${seededDraftId}/confirm?scenario=${scenario}`);
-    await expect(page).toHaveURL(new RegExp(`/tables\\?scenario=${scenario}$`));
-    await expect(page.getByText(/只有结论为可迁移的预检可以继续/)).toBeVisible();
-    expect(name).not.toBe('');
-  });
+      // And the stage refuses to advance, saying which table and which conclusion.
+      const url = page.url();
+      await expect(page.getByText(/只有结论为可迁移的预检可以继续/)).toBeVisible();
+      await page.getByRole('button', { name: '下一步' }).click();
+      await expect(page).toHaveURL(url);
+
+      // A typed address does not get past it either — every stage is deep-linkable, so the
+      // gate has to hold against a URL and not only against a button. The `?scenario=`
+      // survives the redirect, which is what makes the blocked world reviewable at all.
+      await page.goto(`/tasks/new/${seededDraftId}/confirm?scenario=${scenario}`);
+      await expect(page).toHaveURL(new RegExp(`/tables\\?scenario=${scenario}$`));
+      await expect(page.getByText(/只有结论为可迁移的预检可以继续/)).toBeVisible();
+      expect(name).not.toBe('');
+    });
+  }
 
   test('says everything a table is at once, not the most dramatic half', async ({ page }) => {
     // Story 47: a 大记录表 that also carries 映射例外 is both, and a screen that showed one
@@ -176,6 +193,25 @@ test.describe('Gate 2：结论为不可迁移或无法判定的预检不能被�
     await expect(preflight(page)).toContainText(/评估于/, { timeout: 20_000 });
     await expect(preflight(page)).toContainText('无法判定');
     await expect(preflight(page)).toContainText('无法确认是否可迁移');
+  });
+});
+
+test.describe('冻结的时钟也是一种时钟', () => {
+  test('a 预检 rerun still concludes at ?clockRate=0', async ({ page }) => {
+    // `normaliseRate` allows a rate of zero and calls it 「frozen time — useful for a
+    // screenshot」, so it is a supported value and not an edge case. The rerun window is
+    // denominated in mock time, and a duration measured in a clock that does not move never
+    // elapses: the stage polled 「预检进行中」 for ever, on a review link that was working
+    // exactly as documented.
+    await page.goto(`/tasks/new/${seededDraftId}/tables?scenario=${scenario}&clockRate=0`);
+    await expect(tree(page)).toBeVisible();
+    await open(page, inconclusiveTable(page));
+    await expect(preflight(page)).toContainText(/评估于/);
+
+    await preflight(page).getByRole('button', { name: '重新预检' }).click();
+    await expect(preflight(page)).toContainText('预检进行中');
+    await expect(preflight(page)).toContainText(/评估于/, { timeout: 20_000 });
+    await expect(preflight(page)).toContainText('无法判定');
   });
 });
 
@@ -244,6 +280,32 @@ test.describe('Gate 3：映射变更使契约失效并重跑受影响的证据',
       .first();
     const name = await open(page, node);
 
+    // A second table, read **before** anything is changed. Gate 3 is 「映射变更使受影响的
+    // 证据失效」 — 受影响的, not all of it. A screen that blanked every conclusion in the
+    // tree would satisfy 「the old conclusion left the screen」 while destroying evidence
+    // nobody touched, so what this table concluded and when is captured now and checked
+    // again at the end.
+    const otherNode = tree(page)
+      .getByRole('treeitem')
+      .filter({ hasText: '可迁移' })
+      .filter({ hasNotText: '不可迁移' })
+      .filter({ hasNotText: name })
+      .first();
+    const otherName = await open(page, otherNode);
+    expect(otherName).not.toBe(name);
+    const otherConclusion = await preflight(page)
+      .getByText('可迁移', { exact: true })
+      .first()
+      .innerText();
+    const otherEvaluatedAt = await preflight(page)
+      .getByText(/评估于/)
+      .first()
+      .innerText();
+    expect(otherEvaluatedAt).toMatch(/评估于 \d{4}-\d{2}-\d{2}/);
+
+    // Back to the table whose mapping is about to change.
+    await open(page, nodeFor(page, name));
+
     const conclusion = preflight(page).getByText('可迁移', { exact: true });
     await expect(conclusion).toBeVisible();
     await expect(preflight(page)).toContainText(/评估于/);
@@ -272,5 +334,17 @@ test.describe('Gate 3：映射变更使契约失效并重跑受影响的证据',
     await expect(preflight(page).getByText('不可迁移', { exact: true })).toBeVisible();
     await expect(preflight(page)).toContainText('零日期值在目标端会被拒绝');
     await expect(preflight(page)).toContainText('不能忽略此结论继续迁移');
+
+    // …and the table nobody touched still holds the conclusion it reached, at the instant
+    // it reached it. 受影响的证据 was rerun; unaffected evidence was left alone.
+    await open(page, nodeFor(page, otherName));
+    await expect(preflight(page).getByText('可迁移', { exact: true }).first()).toHaveText(
+      otherConclusion,
+    );
+    await expect(
+      preflight(page)
+        .getByText(/评估于/)
+        .first(),
+    ).toHaveText(otherEvaluatedAt);
   });
 });

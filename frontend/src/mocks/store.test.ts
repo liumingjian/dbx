@@ -5,6 +5,7 @@ import { scenarios } from './scenarios';
 import { CONFIRM_DRAFT_ID, createMockStore, type MockStore } from './store';
 import type { ScenarioDefinition } from './scenarios';
 import type { WriteFreezeDeclaration } from '@/contract';
+import { reportCoversEveryTableOnce } from '@/features/remigration/candidates';
 
 /**
  * 「开始迁移」 as the store performs it — the draft→task→run transition and the two
@@ -185,6 +186,8 @@ describe('startRemigration', () => {
     const store = storeOf(remigrationScenario);
     const previous = store.getMigrationRun(seededRunId);
     const offer = store.describeRemigration(seededRunId);
+    expect(previous).toBeDefined();
+    expect(offer).toBeDefined();
     if (previous === undefined || offer === undefined) return;
 
     const started = store.startRemigration(seededRunId, {
@@ -221,6 +224,8 @@ describe('startRemigration', () => {
     const store = storeOf(remigrationScenario);
     const report = store.getValidationReport(seededRunId);
     const offer = store.describeRemigration(seededRunId);
+    expect(report).toBeDefined();
+    expect(offer).toBeDefined();
     if (report === undefined || offer === undefined) return;
 
     const offered = [...offer.candidates, ...offer.ineligible];
@@ -251,6 +256,7 @@ describe('startRemigration', () => {
   it('needs a 写冻结 of its own, and at least one table', () => {
     const store = storeOf(remigrationScenario);
     const offer = store.describeRemigration(seededRunId);
+    expect(offer).toBeDefined();
     if (offer === undefined) return;
     const unitIds = offer.candidates.map((candidate) => candidate.unitId);
 
@@ -275,4 +281,91 @@ describe('startRemigration', () => {
       code: 'NOT_FOUND',
     });
   });
+});
+
+/**
+ * The seeded 迁移运行 history, checked against the plan it is a record of.
+ *
+ * A seeded run records a status; the store derives its end time from the plan the
+ * projection replays (`runPlanEndQuantum`). The property that keeps the two honest is
+ * asserted here, and it is asserted against the **projection** — the units, the diagnosis
+ * and the 校验报告 — rather than against the run record, because the record is what the
+ * projection is being checked for agreement *with*.
+ *
+ * Before this held, a `COMPLETED` run rendered tables still 等待调度 and a 校验报告 that
+ * announced its 校验执行 were still running: one fact told twice, in two numbers nobody
+ * compared.
+ *
+ * Walked over **every** scenario, because the plan a run is given depends on the scenario
+ * as well as on the recorded status, and a disagreement that only appears under one review
+ * link is exactly the kind that reaches #42.
+ */
+describe('每一条种子迁移运行的投影都与它记录的状态一致', () => {
+  for (const scenarioId of scenarios.keys()) {
+    it(`agrees with its own record in 「${scenarioId}」`, () => {
+      const store = storeOf(scenarioId);
+      const runs = store.listMigrationTasks().flatMap((task) => store.listMigrationRuns(task.id));
+
+      for (const run of runs) {
+        const snapshot = store.getRunProgress(run.id);
+        expect(snapshot, `${run.id} 应当有进度投影`).toBeDefined();
+        const report = store.getValidationReport(run.id);
+        expect(report, `${run.id} 应当有校验报告`).toBeDefined();
+        if (snapshot === undefined || report === undefined) continue;
+
+        const where = `${scenarioId}/${run.id}`;
+        const outcomes = snapshot.units.map((unit) => unit.outcome);
+
+        if (run.endedAt === null) {
+          // 卡死 stops a run without ending it: DBX preserves the target data and the
+          // evidence and waits for a decision, so there is no end time to state.
+          expect(
+            run.status === 'ATTENTION_REQUIRED' ? snapshot.stuck !== null : true,
+            `${where} 记录为需要人工处理，投影里却没有卡死诊断`,
+          ).toBe(true);
+          continue;
+        }
+
+        // An ended run holds no table still waiting to be scheduled and none still moving.
+        expect(
+          snapshot.units.every((unit) => unit.phase === 'TERMINAL'),
+          `${where} 已结束，仍有表迁移单元没有到达终局`,
+        ).toBe(true);
+        // …and no 校验执行 still in flight beside a finished run's conclusion.
+        expect(report.validationInFlight, `${where} 已结束，校验报告却说校验还没跑完`).toBe(false);
+        expect(
+          report.rows.every((row) => row.conclusion !== 'IN_FLIGHT'),
+          `${where} 已结束，校验报告里仍有进行中的结论`,
+        ).toBe(true);
+
+        // The recorded status is the one its own units project.
+        switch (run.status) {
+          case 'COMPLETED':
+            expect(
+              outcomes.every((outcome) => outcome === 'SUCCEEDED'),
+              where,
+            ).toBe(true);
+            break;
+          case 'COMPLETED_WITH_FAILURES':
+            expect(outcomes.includes('FAILED'), where).toBe(true);
+            break;
+          case 'COMPLETED_WITH_ACCEPTED_RISK':
+            expect(outcomes.includes('COMPLETED_WITH_ACCEPTED_RISK'), where).toBe(true);
+            expect(outcomes.includes('FAILED'), where).toBe(false);
+            break;
+          case 'CANCELLED':
+            expect(run.cancellationRequestedAt, where).not.toBeNull();
+            break;
+          default:
+            throw new Error(`${where}: 已结束的迁移运行不应当记录为 ${run.status}`);
+        }
+
+        // The partition the 重新迁移 candidate list depends on: 「没迁」 and 「迁了但没过」
+        // are never the same table.
+        expect(reportCoversEveryTableOnce(report), `${where} 的校验报告应当只覆盖每张表一次`).toBe(
+          true,
+        );
+      }
+    });
+  }
 });

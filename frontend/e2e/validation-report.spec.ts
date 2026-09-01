@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expectFreeOfExecutionPlatform, visibleText } from './gate7';
 
 /**
  * Seam ① — 校验报告, and **Gate 8** of the nine journey gates (#30 §15.4, #40).
@@ -107,12 +108,43 @@ test.describe('Gate 8：技术结论与校验处置在视觉与语义上都可�
     await page.getByRole('tab', { name: '只看已记录校验处置' }).click();
 
     const table = reportTable(page);
-    // The three columns are three separate facts: a technical conclusion, a decision, and
-    // a workflow outcome. 完成，已接受风险 beside a 未通过 is the report working, not a
-    // contradiction — and neither of them is 迁移完成.
-    await expect(table).toContainText('未通过');
-    await expect(table).toContainText('已记录校验处置');
-    await expect(table).toContainText('完成，已接受风险');
+
+    // **Separate columns**, named as the two different things they are. A whole-table
+    // `toContainText` would be satisfied by a single merged cell reading
+    // 「FAIL（已接受风险）」 — which is the exact failure Gate 8 exists to prevent, so the
+    // columns are located by name and asserted to be two.
+    const headers = await table.getByRole('columnheader').allInnerTexts();
+    const conclusionColumn = headers.findIndex((header) => header.trim() === '校验执行技术结论');
+    const dispositionColumn = headers.findIndex((header) => header.trim() === '校验处置');
+    const outcomeColumn = headers.findIndex((header) => header.trim() === '表迁移单元技术结果');
+    expect(conclusionColumn, '校验执行技术结论 是一列').toBeGreaterThanOrEqual(0);
+    expect(dispositionColumn, '校验处置 是它自己的一列').toBeGreaterThanOrEqual(0);
+    expect(outcomeColumn, '表迁移单元技术结果 是第三列').toBeGreaterThanOrEqual(0);
+    expect(new Set([conclusionColumn, dispositionColumn, outcomeColumn]).size).toBe(3);
+
+    // The row where the decision was actually taken, and the two cells in it.
+    const disposed = table.getByRole('row').filter({ hasText: '已记录校验处置' }).first();
+    const cells = disposed.getByRole('cell');
+    const conclusionCell = cells.nth(conclusionColumn);
+    const dispositionCell = cells.nth(dispositionColumn);
+
+    // Semantically distinguishable: a screen reader reaching the conclusion cell is told
+    // the conclusion and nothing else — not 「未通过（已接受风险）」, which would be the
+    // decision qualifying the result.
+    await expect(conclusionCell).toHaveAccessibleName('未通过');
+    // …and the disposition cell never states a technical conclusion of its own.
+    await expect(dispositionCell).not.toHaveText(/^(PASS|FAIL|INCONCLUSIVE|通过|未通过|无法判定)$/);
+    await expect(dispositionCell).toContainText('已记录校验处置');
+
+    // Visually distinguishable, asserted as the thing ADR-0014 actually requires rather
+    // than as a class name: the conclusion carries a symbol, the disposition does not.
+    // A judgement and a decision are drawn in two different vocabularies.
+    expect(await conclusionCell.locator('svg').count()).toBeGreaterThan(0);
+    expect(await dispositionCell.locator('svg').count()).toBe(0);
+
+    // And the third column is a third fact. 完成，已接受风险 beside a 未通过 is the report
+    // working, not a contradiction — and neither of them is 迁移完成.
+    await expect(cells.nth(outcomeColumn)).toHaveText('完成，已接受风险');
     await expect(table).not.toContainText('迁移完成');
 
     await expect(panel(page, '校验处置')).toContainText('技术结论仍然是未通过');
@@ -210,6 +242,10 @@ test.describe('报告是可以带走的东西', () => {
     expect(text).toContain('校验处置 已记录校验处置');
     expect(text).toContain('技术结论仍然是未通过');
     expect(text).toContain('预检排除项');
+    // Gate 7 binds what leaves the product as well as what is on screen. The export prints
+    // `outcomeLabel` and each item's `detail` verbatim, so a platform literal that reached
+    // either would travel straight into a change review.
+    expectFreeOfExecutionPlatform(text, '导出的校验报告');
   });
 
   test('copies the report and says so', async ({ page, context }) => {
@@ -221,6 +257,7 @@ test.describe('报告是可以带走的东西', () => {
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     expect(copied).toContain('校验执行技术结论 未通过');
     expect(copied).toContain('校验处置 已记录校验处置');
+    expectFreeOfExecutionPlatform(copied, '复制到剪贴板的校验报告');
   });
 });
 
@@ -246,9 +283,6 @@ test.describe('报告有自己的 loading、error 与 not-found 态', () => {
 test.describe('Gate 7 binds this surface too', () => {
   test('no 箱, 连接器 or topic reaches the 校验报告', async ({ page }) => {
     await openReport(page, 'accepted-risk');
-    const text = (await page.locator('body').innerText()).toLowerCase();
-    for (const forbidden of ['箱', '连接器', 'topic', 'box', 'connector', 'kafka']) {
-      expect(text, `「${forbidden}」 must not reach the interface`).not.toContain(forbidden);
-    }
+    expectFreeOfExecutionPlatform(await visibleText(page), '校验报告');
   });
 });
