@@ -41,6 +41,48 @@ _中文_: 数据源
 
 Its Chinese wording names the navigation area alone. An individual endpoint is a 数据库连接 and never a 数据源, which is why `Database connection` still lists `datasource` under `_Avoid_`.
 
+**System settings**:
+The navigation area reserved for product-wide configuration. It is a placeholder in v1 and owns no entity.
+_Avoid_: Preferences, admin console
+_中文_: 系统设置
+
+**Migration wizard**:
+The six-stage surface on which an operator builds a migration draft and starts its first migration run. Its stages are a single ordered journey, not independent screens: each is reachable by its own URL, and each is gated on the facts the preceding stages established.
+_Avoid_: Creation flow, setup steps
+_中文_: 迁移向导
+
+The six stages are named terms because the operator navigates by them and cites them:
+
+**Connections and databases**:
+Wizard stage one, on which the operator chooses a verified source and target database connection and the source MySQL database and target PostgreSQL schema. It selects existing connections; it never creates one.
+_Avoid_: Connection setup, endpoint step
+_中文_: 连接与数据库
+
+**Migration scope**:
+Wizard stage two, and the recorded answer it produces: which source tables this migration covers, including the tables the operator explicitly excluded. A migration run states its own scope, which may be narrower than its migration task's.
+_Avoid_: Table selection, included tables
+_中文_: 迁移范围
+
+**Per-table configuration and preflight**:
+Wizard stage three, on which the operator resolves structured mapping exceptions for each table and reads its preflight conclusion. Blocking and inconclusive preflights are refused here rather than acknowledged.
+_Avoid_: Table settings, mapping step
+_中文_: 逐表配置与预检
+
+**Execution confirmation**:
+Wizard stage four, the last review before anything is written: the whole scope, the generated table write contracts, the unresolved findings, and the write freeze that names a responsible party and a time limit.
+_Avoid_: Review step, summary page
+_中文_: 执行确认
+
+**Run monitoring**:
+Wizard stage five, and the standing view of a migration run in progress. It is organised around table migration units, and it never exposes boxes, connectors or topics.
+_Avoid_: Progress page, job monitor
+_中文_: 运行监控
+
+**Validation report**:
+Wizard stage six, and the artefact an operator submits to a change review. It keeps technical validation results, preflight exclusions, and validation dispositions separately presented.
+_Avoid_: Result summary, verification page
+_中文_: 校验报告
+
 **Mapping rule**:
 A structured, reviewable exception to DBX's automatic table or column mapping. A rule names one source coordinate, one bounded action, its target value, and whether DBX or the user produced it; user rules override automatic rules. Rules never contain arbitrary SQL or regular expressions in v1.
 _Avoid_: Mapping script, route expression
