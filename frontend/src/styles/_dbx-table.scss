@@ -1,0 +1,33 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+
+// Layout for the parts of a table DBX owns rather than the substrate: the toolbar, the
+// batch action bar and the selection-scope controls (ADR-0015).
+.dbx-table {
+  display: block;
+}
+
+.dbx-table__toolbar,
+.dbx-table__batch,
+.dbx-table__selection-scope,
+.dbx-table__undo {
+  display: flex;
+  align-items: center;
+  gap: $spacing-04;
+  flex-wrap: wrap;
+  margin-bottom: $spacing-03;
+}
+
+.dbx-table__batch {
+  background-color: $layer-01;
+  padding: $spacing-03 $spacing-05;
+}
+
+.dbx-table__batch-count {
+  font-weight: 600;
+}
+
+.dbx-table__batch-scope,
+.dbx-table__batch-excluded {
+  color: $text-secondary;
+}
