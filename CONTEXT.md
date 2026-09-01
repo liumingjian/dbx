@@ -100,6 +100,17 @@ _中文_: 校验处置
 A run-local, disposable scheduling group of table migration units that share one Source connector and one Sink connector. It is not user-selected, has no independent business lifecycle, and never owns a table's durable result.
 _Avoid_: Batch, task group, shard
 _中文_: 箱
+_Operator-facing_: Never. A box is an internal scheduling detail, and the operator is not required to understand the execution platform in order to run the product. Phases named after it are presented as **awaiting scheduling** and **blocked by an upstream failure**.
+
+**Awaiting scheduling**:
+A table migration unit admitted to a migration run that DBX has not begun reading, because the resources it needs are not yet free. It is an ordinary waiting state, not a fault, and it carries no diagnosis.
+_Avoid_: Waiting for box, queued, pending, stalled
+_中文_: 等待调度
+
+**Blocked by an upstream failure**:
+A table migration unit that DBX has not started, or has stopped, without any fault of its own, because another unit it was scheduled alongside failed. Its own technical result is undetermined rather than failed, and it is a candidate for re-migration.
+_Avoid_: Blocked by box failure, batch failure, collateral failure
+_中文_: 因关联失败而阻塞
 
 **Execution signature**:
 The connector-level configuration identity that determines whether tables may share a box. Only tables with identical execution signatures may be packed together.
@@ -190,6 +201,7 @@ _中文_: 诊断规则
 The single primary domain assigned to a diagnosis: user input, source database, target database, Kafka Connect, Kafka, runtime environment, or platform. It describes diagnostic evidence, not a person to blame.
 _Avoid_: Responsible party
 _中文_: 根因域
+_Operator-facing_: The `Kafka Connect` and `Kafka` domains are presented to the operator as a single **迁移平台** domain. The distinction between them is DBX's own to act on, not the operator's, and surfacing it would require understanding the execution platform. The specific domain is retained in the diagnostic evidence for support use, so nothing is lost from the audit record.
 
 **Routing snapshot**:
 The immutable run-local mapping from topic and connector coordinates to boxes, table migration units, source/target objects, and approved field mappings. It is the authority for table and field location; topic names and exception text are only corroborating evidence.
