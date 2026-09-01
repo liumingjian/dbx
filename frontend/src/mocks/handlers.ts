@@ -290,18 +290,21 @@ export const handlers = [
    * validation result to passed」 (`CONTEXT.md`), so the HTTP surface offers no way to
    * express the thing the domain forbids.
    */
-  http.post(`${API_BASE}/migration-runs/:id/validation-dispositions`, async ({ params, request }) => {
-    const faulted = await applyTransportFault('validationExecutions');
-    if (faulted) return faulted;
-    const body = (await request.json()) as RecordValidationDispositionRequest;
-    const result = getMockContext().store.recordValidationDisposition(String(params.id), body);
-    if (result.ok) {
-      return HttpResponse.json(result.report, { status: 201 });
-    }
-    return result.code === 'NOT_FOUND'
-      ? notFound()
-      : apiError(409, result.code, 'The validation disposition was not recorded.');
-  }),
+  http.post(
+    `${API_BASE}/migration-runs/:id/validation-dispositions`,
+    async ({ params, request }) => {
+      const faulted = await applyTransportFault('validationExecutions');
+      if (faulted) return faulted;
+      const body = (await request.json()) as RecordValidationDispositionRequest;
+      const result = getMockContext().store.recordValidationDisposition(String(params.id), body);
+      if (result.ok) {
+        return HttpResponse.json(result.report, { status: 201 });
+      }
+      return result.code === 'NOT_FOUND'
+        ? notFound()
+        : apiError(409, result.code, 'The validation disposition was not recorded.');
+    },
+  ),
 
   // What a 取消 would stop, read before it is requested rather than described in a dialog.
   http.get(`${API_BASE}/migration-runs/:id/cancellation`, async ({ params }) => {

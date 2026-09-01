@@ -42,10 +42,7 @@ type RowFilter = 'all' | 'unresolved' | 'disposed';
 
 const rowFilters: readonly RowFilter[] = ['all', 'unresolved', 'disposed'];
 
-function filteredRows(
-  report: ValidationReport,
-  filter: RowFilter,
-): readonly ValidationReportRow[] {
+function filteredRows(report: ValidationReport, filter: RowFilter): readonly ValidationReportRow[] {
   if (filter === 'unresolved') {
     return report.rows.filter(isDisposable);
   }
@@ -192,7 +189,7 @@ export function ValidationReportPage() {
       </section>
 
       {report.validationInFlight ? (
-        <section className="dbx-validation__block" aria-label={copy.inFlight.heading} role="status">
+        <section className="dbx-validation__block" aria-label={copy.inFlight.heading}>
           <h3 className="dbx-validation__heading">{copy.inFlight.heading}</h3>
           <p>{copy.inFlight.body(summary.concludedRowCount, summary.rowCount)}</p>
         </section>
@@ -237,7 +234,11 @@ export function ValidationReportPage() {
         <p className="dbx-validation__notice">{copy.summary.itemsNote}</p>
       </section>
 
-      <section className="dbx-validation__block" aria-label={copy.rows.heading}>
+      {/*
+        No `aria-label` on this section: `DbxTable` already publishes the region under
+        「逐表校验结论」, and two regions with one name is worse than none.
+      */}
+      <section className="dbx-validation__block">
         <h3 className="dbx-validation__heading">{copy.rows.heading}</h3>
         <div className="dbx-validation__filters">
           <ContentSwitcher
@@ -297,8 +298,8 @@ export function ValidationReportPage() {
               .filter((row) => row.disposition !== null)
               .map((row) => (
                 <li key={row.unitId}>
-                  <Identifier>{row.sourceTable}</Identifier>{' '}
-                  {copy.disposition.operatorLabel} {row.disposition?.accountableOperator}
+                  <Identifier>{row.sourceTable}</Identifier> {copy.disposition.operatorLabel}{' '}
+                  {row.disposition?.accountableOperator}
                   {' · '}
                   {copy.disposition.recordedAt(
                     formatTimestamp(row.disposition?.recordedAt ?? report.observedAt),

@@ -115,7 +115,7 @@ export function ValidationReportTable({
           )
         ) : (
           <Tag type="outline" size="sm">
-            {`${messages.validation.disposition.recorded}　${messages.validation.disposition.operatorLabel} ${row.disposition.accountableOperator}`}
+            {`${messages.validation.disposition.recorded} · ${messages.validation.disposition.operatorLabel} ${row.disposition.accountableOperator}`}
           </Tag>
         ),
     },
@@ -123,7 +123,8 @@ export function ValidationReportTable({
       id: 'unitOutcome',
       header: copy.columns.unitOutcome,
       width: 240,
-      textValue: (row) => (row.unitOutcome === null ? copy.noOutcome : outcomeLabel(row.unitOutcome)),
+      textValue: (row) =>
+        row.unitOutcome === null ? copy.noOutcome : outcomeLabel(row.unitOutcome),
       renderCell: (row) =>
         row.unitOutcome === null ? copy.noOutcome : outcomeLabel(row.unitOutcome),
     },

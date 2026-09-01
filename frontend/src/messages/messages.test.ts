@@ -293,6 +293,60 @@ describe('messages module', () => {
     expect(cancel.terminal(2)).toContain('技术结果保持不变');
   });
 
+  it('never says a 校验处置 changed the technical conclusion', () => {
+    // 校验处置's `_Avoid_` names 「manual pass」 and 「overridden result」 outright, and its
+    // definition is that accepting risk 「may close the workflow but never changes the
+    // technical validation result to passed」. This is the sentence the whole audit chain
+    // hangs from, so it is asserted as copy and not only as behaviour.
+    const disposition = messages.validation.disposition;
+    expect(disposition.heading).toBe('校验处置');
+    expect(disposition.statement).toContain('不会把技术结论改写为 PASS');
+    expect(disposition.statement).toContain('责任人');
+    expect(disposition.statement).toContain('关闭流程');
+    expect(disposition.modal.body('order_item', 'FAIL')).toContain('不会改变这个技术结论');
+    expect(disposition.modal.body('order_item', 'FAIL')).not.toContain('通过');
+    expect(disposition.technicalResultUnchanged('FAIL')).toBe('技术结论仍然是 FAIL');
+    // The decision asks for the two things that make it audited.
+    expect(disposition.modal.operatorLabel).toBe('责任人');
+    expect(disposition.modal.reasonLabel).toBe('理由');
+  });
+
+  it('keeps 「没迁」 and 「迁了但没过」 apart in words', () => {
+    const exclusions = messages.validation.exclusions;
+    expect(exclusions.heading).toBe('预检排除项');
+    expect(exclusions.statement).toContain('没有迁移');
+    expect(exclusions.statement).toContain('没有技术结论');
+    // 「显式排除是可复核的例外」, and 「只有 SUPPORTED 的预检可以继续」 — two different reasons.
+    expect(exclusions.reasonDetails.OPERATOR_EXCLUDED).toContain('显式排除');
+    expect(exclusions.reasonDetails.PREFLIGHT_UNSUPPORTED).toContain(
+      '只有 SUPPORTED 的预检可以继续',
+    );
+    expect(exclusions.reasonDetails.PREFLIGHT_INCONCLUSIVE).toContain('不能被确认掉');
+  });
+
+  it('says NOT_APPLICABLE and NOT_RUN are not failures to chase', () => {
+    const note = messages.validation.summary.itemsNote;
+    expect(note).toContain('NOT_APPLICABLE');
+    expect(note).toContain('NOT_RUN');
+    expect(note).toContain('都不是失败');
+    // As everywhere else, the states themselves are the enum literal.
+    expect(messages.conclusion.labels.NOT_APPLICABLE).toBe('NOT_APPLICABLE');
+    expect(messages.conclusion.labels.NOT_RUN).toBe('NOT_RUN');
+  });
+
+  it('refuses to present a half-finished 校验 as a conclusion', () => {
+    const inFlight = messages.validation.inFlight;
+    expect(inFlight.heading).toBe('校验尚未跑完');
+    expect(inFlight.body(7, 12)).toContain('不给出总体结论');
+  });
+
+  it('shows the 校验项 as the enum literal', () => {
+    // CONTEXT.md carries no `_中文_` for the checks of a 校验计划, so the interface renders
+    // the literal rather than inventing a translation.
+    expect(messages.validation.checks.ROW_COUNT).toBe('ROW_COUNT');
+    expect(messages.validation.checks.VALUE_CHECKSUM_SAMPLE).toBe('VALUE_CHECKSUM_SAMPLE');
+  });
+
   it('names the bound and the true total when a list is bounded', () => {
     // Lead decision D24: bounded rendering states its bound and the true total.
     expect(messages.run.matrix.bounded(12, 1164)).toContain('12');

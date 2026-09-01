@@ -72,12 +72,12 @@ export function formatValidationReport(report: ValidationReport): string {
         `${copy.rows.columns.unitOutcome} ${
           row.unitOutcome === null ? copy.rows.noOutcome : outcomeLabel(row.unitOutcome)
         }`,
-      ].join('　'),
+      ].join(' · '),
     );
     for (const item of row.execution?.items ?? []) {
       lines.push(
         `    ${copy.checks[item.checkId]} ${messages.conclusion.labels[item.state]}` +
-          (item.detail === null ? '' : `　${item.detail}`),
+          (item.detail === null ? '' : ` · ${item.detail}`),
       );
     }
   }
@@ -90,8 +90,8 @@ export function formatValidationReport(report: ValidationReport): string {
   }
   for (const exclusion of report.exclusions) {
     lines.push(
-      `  ${exclusion.sourceTable}　${copy.exclusions.reasons[exclusion.reason]}` +
-        `　${copy.exclusions.reasonDetails[exclusion.reason]}`,
+      `  ${exclusion.sourceTable} · ${copy.exclusions.reasons[exclusion.reason]}` +
+        ` · ${copy.exclusions.reasonDetails[exclusion.reason]}`,
     );
   }
   lines.push('');
@@ -119,7 +119,7 @@ export function formatValidationReport(report: ValidationReport): string {
         // Printed on the disposition's own line, so the record of the decision carries the
         // result it did **not** change.
         copy.disposition.technicalResultUnchanged(messages.conclusion.labels[row.conclusion]),
-      ].join('　'),
+      ].join(' · '),
     );
   }
 

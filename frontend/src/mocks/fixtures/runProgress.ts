@@ -253,13 +253,11 @@ export function buildRunPlan({
           name: table.name,
           exactRowCount: Math.max(1_000, Math.round(table.estimatedRowCount * 0.97) + 137),
         }))
-      : knownTables?.slice(0, unitCount) ?? [];
-  const exclusions: readonly ScopeExclusion[] = generated
-    .slice(unitCount)
-    .map((table, index) => ({
-      sourceTable: table.name,
-      reason: EXCLUSION_REASONS[index % EXCLUSION_REASONS.length] as ScopeExclusion['reason'],
-    }));
+      : (knownTables?.slice(0, unitCount) ?? []);
+  const exclusions: readonly ScopeExclusion[] = generated.slice(unitCount).map((table, index) => ({
+    sourceTable: table.name,
+    reason: EXCLUSION_REASONS[index % EXCLUSION_REASONS.length] as ScopeExclusion['reason'],
+  }));
 
   // The stalled unit and the units scheduled alongside it. Fixed indices rather than
   // random ones so 「某表卡死」 always names the same table in the same scenario.
@@ -292,11 +290,11 @@ export function buildRunPlan({
       ? // The write never completed, so no attempt was ever made. 「没跑」 is not a failure,
         // and it is not 「进行中」 either.
         'NOT_RUN'
-        : runPlan === 'inconclusive-validation' && validationFalters
-          ? 'INCONCLUSIVE'
-          : runPlan === 'accepted-risk' && validationFalters
-            ? 'FAIL'
-            : 'PASS';
+      : runPlan === 'inconclusive-validation' && validationFalters
+        ? 'INCONCLUSIVE'
+        : runPlan === 'accepted-risk' && validationFalters
+          ? 'FAIL'
+          : 'PASS';
 
     // 迁移完成 is 「write complete and all enabled validation checks have passed」. A table
     // whose validation concluded anything else is therefore *not* finished, and DBX refuses
@@ -641,10 +639,7 @@ export function validationStartQuantum(unit: UnitPlan, state: UnitState, q: numb
  * — never `SUCCEEDED`. The 校验执行 and its items are projected elsewhere, from the plan
  * alone, and no argument to this function could reach them.
  */
-export function withDispositions(
-  plan: RunPlan,
-  disposedUnitIds: ReadonlySet<string>,
-): RunPlan {
+export function withDispositions(plan: RunPlan, disposedUnitIds: ReadonlySet<string>): RunPlan {
   if (disposedUnitIds.size === 0) {
     return plan;
   }
