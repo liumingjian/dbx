@@ -316,7 +316,10 @@ export function createMockStore({
         (run.cancellationRequestedAt === null ? null : Date.parse(run.cancellationRequestedAt)),
       unitTotalCount: Math.max(run.selectedTableCount, planOf(run).units.length),
     });
-    return ended === null ? projected : { ...projected, run };
+    // Frozen like the record it describes: a 迁移运行 is 「one immutable execution
+    // attempt」, and a projection of one that could be written to would be a second,
+    // editable copy of audit evidence.
+    return deepFreeze(ended === null ? projected : { ...projected, run });
   }
 
   /** A run as it is observed now: its status is a projection of its units (ADR-0004). */

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { MigrationRunStatus } from '@/contract';
+import type { MigrationRunStatus, TableMigrationOutcome } from '@/contract';
 import {
   conclusionIndicatorKind,
   dbxConclusions,
   migrationRunConclusion,
+  tableMigrationConclusion,
   type DbxConclusion,
 } from './conclusion';
 
@@ -68,5 +69,46 @@ describe('conclusion → indicator mapping', () => {
       conclusionIndicatorKind[migrationRunConclusion('COMPLETED_WITH_ACCEPTED_RISK')],
     ).not.toBe('succeeded');
     expect(migrationRunConclusion('COMPLETED')).toBe('PASS');
+  });
+
+  it('never reads 因关联失败而阻塞 as a failure', () => {
+    // `CONTEXT.md`: a unit blocked by an upstream failure has an 「own technical result …
+    // undetermined rather than failed, and it is a candidate for re-migration」. Drawing it
+    // as a failure would put blame on a table that did nothing wrong, and would hide the
+    // one property a DBA needs from it — that it is worth migrating again.
+    expect(tableMigrationConclusion('BLOCKED_BY_BOX_FAILURE')).toBe('INCONCLUSIVE');
+    expect(conclusionIndicatorKind[tableMigrationConclusion('BLOCKED_BY_BOX_FAILURE')]).not.toBe(
+      'failed',
+    );
+    expect(tableMigrationConclusion('FAILED')).toBe('FAIL');
+  });
+
+  it('keeps 卡死 out of the outcome table and reaches it only from the diagnosis', () => {
+    // ADR-0004: 「STUCK is deliberately not a table outcome. It is a terminal box
+    // diagnosis.」 So no outcome maps to it; the run's diagnosis is what names the table.
+    const outcomes: TableMigrationOutcome[] = [
+      'SUCCEEDED',
+      'FAILED',
+      'BLOCKED_BY_BOX_FAILURE',
+      'SKIPPED',
+      'CANCELLED',
+      'COMPLETED_WITH_ACCEPTED_RISK',
+    ];
+    for (const outcome of outcomes) {
+      expect(tableMigrationConclusion(outcome)).not.toBe('STUCK');
+    }
+    expect(tableMigrationConclusion(null)).toBe('IN_FLIGHT');
+    // A stalled table has no outcome at all, and 卡死 is what it is shown as.
+    expect(tableMigrationConclusion(null, true)).toBe('STUCK');
+    expect(conclusionIndicatorKind[tableMigrationConclusion(null, true)]).toBe('caution-major');
+  });
+
+  it('gives a cancelled or skipped table no technical conclusion at all', () => {
+    expect(tableMigrationConclusion('CANCELLED')).toBe('NOT_APPLICABLE');
+    expect(tableMigrationConclusion('SKIPPED')).toBe('NOT_APPLICABLE');
+    // Accepting risk never becomes a pass.
+    expect(conclusionIndicatorKind[tableMigrationConclusion('COMPLETED_WITH_ACCEPTED_RISK')]).not.toBe(
+      'succeeded',
+    );
   });
 });

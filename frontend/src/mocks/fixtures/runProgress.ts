@@ -183,9 +183,17 @@ export function buildRunPlan({
   const blockedIndices = new Set([stalledIndex + 1, stalledIndex + 2]);
 
   const units = tables.map((table, index) => {
-    const admittedAt = index * 2;
+    // Tables are admitted a few quanta apart rather than all at once: resources free up
+    // over time, so at any instant a run holds tables that are 等待调度 as well as tables
+    // that are moving. Spaced so that the seeded instant always shows both.
+    const admittedAt = index * 4;
     const transferStartsAt = admittedAt + 1;
-    const transferQuanta = 12 + Math.floor(random() * 40);
+    // The last three tables are deliberately long and deliberately late reporters, so that
+    // at the seeded instant the run always holds at least one table that is still moving
+    // and whose latest observation trails the snapshot. 观测滞后 is a state the interface
+    // has to be able to show, and a state that only appears sometimes cannot be reviewed.
+    const lateReporter = index >= tables.length - 3;
+    const transferQuanta = lateReporter ? 60 : 12 + Math.floor(random() * 40);
     const transferEndsAt = transferStartsAt + transferQuanta;
     const baselineRowCount = Math.max(1_000, table.exactRowCount);
 
@@ -213,9 +221,9 @@ export function buildRunPlan({
       failsAt: fails ? transferStartsAt + 6 + Math.floor(random() * 8) : null,
       stallsAt: stalls ? transferStartsAt + 4 : null,
       blockedByStall: blocked,
-      // Every third unit reports late. Lagging is a normal state of the transport, not a
-      // fault, and the interface has to be able to show one without alarming anybody.
-      observationLagQuanta: index % 3 === 1 ? 2 : 0,
+      // Lagging is a normal state of the transport, not a fault, and the interface has to
+      // be able to show one without alarming anybody.
+      observationLagQuanta: lateReporter ? 2 : index % 3 === 1 ? 1 : 0,
       cumulativeRead: cumulativeReadCurve(random, transferQuanta),
     } satisfies UnitPlan;
   });
