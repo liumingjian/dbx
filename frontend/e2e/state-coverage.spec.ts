@@ -87,13 +87,27 @@ interface View {
   readonly cells: Readonly<Record<CoverageState, Cell>>;
 }
 
+/**
+ * The first occurrence of some wording that a reader can actually see.
+ *
+ * Not simply `getByText(...).first()`. A Carbon `Select` renders its **whole** option
+ * vocabulary into the document and hides all but the chosen one, so the 最近运行状态 filter
+ * on 迁移任务 puts a hidden 「需要人工处理」 and a hidden 「完成，已接受风险」 into the DOM
+ * ahead of any row — and a matrix that accepted those would report a state as covered on
+ * the strength of a dropdown listing it. What every cell here claims is that the *screen*
+ * says the word, so the visible occurrences are the only ones that count.
+ */
+function readsOnScreen(page: Page, wording: string | RegExp) {
+  return page.getByText(wording).filter({ visible: true }).first();
+}
+
 async function visit(page: Page, cell: Reachable): Promise<void> {
   await page.goto(cell.url);
   if (cell.then !== undefined) {
     await cell.then(page);
   }
   for (const [index, reads] of cell.reads.entries()) {
-    await expect(page.getByText(reads).first()).toBeVisible({
+    await expect(readsOnScreen(page, reads)).toBeVisible({
       timeout: index === 0 ? FIRST_PAINT_MS : 20_000,
     });
   }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Select, SelectItem } from '@carbon/react';
-import { useNavigate } from 'react-router-dom';
+import { Link as CarbonLink, Select, SelectItem } from '@carbon/react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMigrationTasks } from '@/api/migrationTasks';
 import { DbxTable, type DbxTableColumn } from '@/components/DbxTable';
 import { ConclusionIndicator, migrationRunConclusion } from '@/conclusions';
@@ -137,6 +137,23 @@ export function MigrationTasksPage() {
         width: 200,
         textValue: (task) => formatTimestamp(task.approvedAt),
         renderCell: (task) => <Identifier>{formatTimestamp(task.approvedAt)}</Identifier>,
+      },
+      {
+        // The way out of this list. 最近运行状态 is a projection of the run's own units
+        // (ADR-0004), and this page never concludes for them: 技术结果未定 is a per-table
+        // fact that lives in 运行监控 and 校验报告. So the list has to *link out*, and the
+        // link has to be something a reader can see and copy into a ticket — the same
+        // shape the run history uses for 查看校验报告. Row activation alone is invisible
+        // to anyone who has not already been told the rows are activatable.
+        id: 'runs',
+        header: messages.tasks.runs.title,
+        width: 160,
+        textValue: () => messages.tasks.openRunsAction,
+        renderCell: (task) => (
+          <CarbonLink as={Link} to={paths.migrationTaskRuns(task.id)}>
+            {messages.tasks.openRunsAction}
+          </CarbonLink>
+        ),
       },
     ],
     [],

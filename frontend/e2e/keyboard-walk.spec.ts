@@ -118,15 +118,19 @@ test.describe('只用键盘走完整条迁移向导', () => {
       timeout: FIRST_PAINT_MS,
     });
 
-    // 继续编辑 lands on the stage this draft has actually reached, which is 执行确认.
+    // 继续编辑 lands on the furthest stage **this list can vouch for**, which is
+    // 逐表配置与预检: the 迁移任务 page deliberately does not read every draft's 逐表配置
+    // (one request per row), so it cannot claim stage three was satisfied and resumes at
+    // it rather than past it. The wizard then re-evaluates the gates properly, which is
+    // why 执行确认 is reachable from here — the forward walk below is what proves it.
     await pressByKeyboard(page, button(page, '继续编辑'), '继续编辑');
-    await expectStandingAt(page, '执行确认');
+    await expectStandingAt(page, '逐表配置与预检');
     // The right draft, named by its identifier — 继续编辑 resumes work, it does not start it.
     await expect(page.getByText(confirmDraftId)).toBeVisible();
 
     // Backwards first: ADR-0007 lets an operator return to any stage they have satisfied,
     // and 上一步 has to carry them there under the keyboard as well.
-    for (const stage of ['逐表配置与预检', '迁移范围', '连接与数据库']) {
+    for (const stage of ['迁移范围', '连接与数据库']) {
       await pressByKeyboard(page, button(page, '上一步'), '上一步');
       await expectStandingAt(page, stage);
     }
@@ -191,8 +195,15 @@ test.describe('只用键盘走完整条迁移向导', () => {
     const summary = page.getByRole('status', { name: '迁移范围汇总' });
     await expect(summary).toBeVisible({ timeout: FIRST_PAINT_MS });
 
-    // The search is a text field like any other, reached and typed.
-    await typeByKeyboard(page, page.getByLabel('按名称搜索源表'), 'order', '按名称搜索源表');
+    // The search is a text field like any other, reached and typed. Named by its role
+    // rather than by its label alone: Carbon's `Search` labels both the `search` landmark
+    // it wraps the field in and the field itself, and only the field takes a keystroke.
+    await typeByKeyboard(
+      page,
+      page.getByRole('searchbox', { name: '按名称搜索源表' }),
+      'order',
+      '按名称搜索源表',
+    );
 
     // 「符合当前筛选的全部」 — the scope this stage actually uses, taken from the keyboard.
     // D19: stage two is virtualised rather than paged, so this button and the count it
