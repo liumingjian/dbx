@@ -154,6 +154,7 @@ export function MigrationDraftsSection() {
         rows={drafts}
         rowId={(draft) => draft.id}
         loading={draftsQuery.isPending}
+        loadingDescription={messages.drafts.loading}
         error={
           draftsQuery.isError
             ? {

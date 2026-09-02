@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:gates": "playwright test --grep @gate",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run test:e2e",
     "capture:density": "npm run build && node scripts/capture-density-sample.mjs"
   },

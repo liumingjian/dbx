@@ -126,29 +126,33 @@ test.describe('执行确认 shows the whole scope before anything starts', () =>
   });
 });
 
-test.describe('Gate 5：没有写冻结确认就无法启动', () => {
-  test('refuses the start, and says a 责任人 and a 时限 are what is missing', async ({ page }) => {
-    await openConfirm(page, 'stage-confirm');
+test.describe('Gate 5：没有写冻结确认就无法启动', { tag: ['@gate', '@gate-5'] }, () => {
+  test(
+    'refuses the start, and says a 责任人 and a 时限 are what is missing',
+    { tag: '@blocked-5' },
+    async ({ page }) => {
+      await openConfirm(page, 'stage-confirm');
 
-    await expect(panel(page, '写冻结')).toContainText('尚未确认写冻结');
-    await expect(page.getByText(/启动前必须确认源端写冻结，并写明责任人与时限/)).toBeVisible();
+      await expect(panel(page, '写冻结')).toContainText('尚未确认写冻结');
+      await expect(page.getByText(/启动前必须确认源端写冻结，并写明责任人与时限/)).toBeVisible();
 
-    // The refusal itself: pressing 开始迁移 opens nothing and starts nothing.
-    const url = page.url();
-    await startButton(page).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page).toHaveURL(url);
-    await expect(page.getByText(/启动前必须确认源端写冻结/)).toBeVisible();
+      // The refusal itself: pressing 开始迁移 opens nothing and starts nothing.
+      const url = page.url();
+      await startButton(page).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page).toHaveURL(url);
+      await expect(page.getByText(/启动前必须确认源端写冻结/)).toBeVisible();
 
-    // And no 迁移任务 came into existence behind the screen. Navigated client-side on
-    // purpose: a reload would rebuild the mock world and prove nothing about this one.
-    await page.getByRole('link', { name: '迁移任务' }).click();
-    await expect(page.getByRole('region', { name: '迁移任务' })).not.toContainText(
-      'orders → orders_migrated',
-    );
-    // The 迁移草稿 is still a draft, exactly where it was.
-    await expect(page.getByRole('region', { name: '迁移草稿' })).toContainText(draftId);
-  });
+      // And no 迁移任务 came into existence behind the screen. Navigated client-side on
+      // purpose: a reload would rebuild the mock world and prove nothing about this one.
+      await page.getByRole('link', { name: '迁移任务' }).click();
+      await expect(page.getByRole('region', { name: '迁移任务' })).not.toContainText(
+        'orders → orders_migrated',
+      );
+      // The 迁移草稿 is still a draft, exactly where it was.
+      await expect(page.getByRole('region', { name: '迁移草稿' })).toContainText(draftId);
+    },
+  );
 
   test('a 写冻结 with no named 责任人 is not a confirmation', async ({ page }) => {
     // 「permanent checkbox」 is under 写冻结's `_Avoid_`. A blank 责任人 leaves the freeze
@@ -165,36 +169,38 @@ test.describe('Gate 5：没有写冻结确认就无法启动', () => {
   });
 });
 
-test.describe('Gate 6：没有结构证明就不会开始写入目标', () => {
-  test('states the constraint and refuses to start while a 结构证明 is missing', async ({
-    page,
-  }) => {
-    await openConfirm(page, 'structural-proof-missing');
+test.describe('Gate 6：没有结构证明就不会开始写入目标', { tag: ['@gate', '@gate-6'] }, () => {
+  test(
+    'states the constraint and refuses to start while a 结构证明 is missing',
+    { tag: '@blocked-6' },
+    async ({ page }) => {
+      await openConfirm(page, 'structural-proof-missing');
 
-    // The constraint, in the glossary's own terms — 「the deterministic comparison of the
-    // actual PostgreSQL table … only zero difference permits the Sink to start」 — and an
-    // honest statement of who establishes it, since the frontend cannot.
-    const proof = panel(page, '结构证明');
-    await expect(proof).toContainText('结构证明是目标表与已批准的表写入契约的确定性比对');
-    await expect(proof).toContainText('只有零差异才允许开始写入');
-    await expect(proof).toContainText('没有结构证明，DBX 不会向目标表写入任何数据');
-    await expect(proof).toContainText('由平台在迁移运行内、建表之后完成');
+      // The constraint, in the glossary's own terms — 「the deterministic comparison of the
+      // actual PostgreSQL table … only zero difference permits the Sink to start」 — and an
+      // honest statement of who establishes it, since the frontend cannot.
+      const proof = panel(page, '结构证明');
+      await expect(proof).toContainText('结构证明是目标表与已批准的表写入契约的确定性比对');
+      await expect(proof).toContainText('只有零差异才允许开始写入');
+      await expect(proof).toContainText('没有结构证明，DBX 不会向目标表写入任何数据');
+      await expect(proof).toContainText('由平台在迁移运行内、建表之后完成');
 
-    // ADR-0011: a first run meeting an existing target table fails review; it is never
-    // reused, truncated or replaced.
-    await expect(proof).toContainText('无法建立结构证明的表');
-    await expect(proof).toContainText('不会复用、清空或替换');
+      // ADR-0011: a first run meeting an existing target table fails review; it is never
+      // reused, truncated or replaced.
+      await expect(proof).toContainText('无法建立结构证明的表');
+      await expect(proof).toContainText('不会复用、清空或替换');
 
-    // Even with the 写冻结 confirmed, the start is refused — and the refusal names the
-    // table it is about.
-    await confirmWriteFreeze(page);
-    await expect(page.getByText(/没有结构证明，DBX 不会开始写入目标表/)).toBeVisible();
+      // Even with the 写冻结 confirmed, the start is refused — and the refusal names the
+      // table it is about.
+      await confirmWriteFreeze(page);
+      await expect(page.getByText(/没有结构证明，DBX 不会开始写入目标表/)).toBeVisible();
 
-    const url = page.url();
-    await startButton(page).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page).toHaveURL(url);
-  });
+      const url = page.url();
+      await startButton(page).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page).toHaveURL(url);
+    },
+  );
 });
 
 test.describe('启动是一个需要明确意图的动作', () => {

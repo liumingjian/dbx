@@ -140,7 +140,10 @@ export function StageScope({ context, onPatch }: StageScopeProps) {
         id: 'condition',
         header: messages.wizard.scope.columns.condition,
         width: 320,
-        textValue: (table) => table.preflightConclusion,
+        // The 预检结论 in its `_中文_` wording, not the enum literal: `textValue` is the
+        // cell's plain-text form, and a screen reader or an exported row must read the same
+        // conclusion the screen shows (#42).
+        textValue: (table) => messages.conclusion.labels[table.preflightConclusion],
         renderCell: (table) => (
           <span className="dbx-scope__condition">
             {/* The conclusion is an indicator, never a Tag: Carbon reserves Tag for
@@ -201,6 +204,7 @@ export function StageScope({ context, onPatch }: StageScopeProps) {
         rowId={(table) => table.name}
         rowWindow={{ kind: 'virtual', visibleHeight: 480 }}
         loading={query.isPending}
+        loadingDescription={messages.wizard.scope.loading}
         error={
           query.isError
             ? {

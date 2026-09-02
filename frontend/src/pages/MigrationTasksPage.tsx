@@ -203,6 +203,7 @@ export function MigrationTasksPage() {
         rowId={(task) => task.id}
         onRowActivate={(task) => navigate(paths.migrationTaskRuns(task.id))}
         loading={query.isPending}
+        loadingDescription={messages.tasks.loading}
         error={
           query.isError
             ? {

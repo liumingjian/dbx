@@ -65,6 +65,7 @@ export function DbxTable<TRow>({
   rowId,
   onRowActivate,
   loading = false,
+  loadingDescription,
   error = null,
   empty,
   filterActive = false,
@@ -321,6 +322,14 @@ export function DbxTable<TRow>({
             {performed.action.safety.undoLabel}
           </Button>
         </div>
+      ) : null}
+
+      {loading && loadingDescription !== undefined ? (
+        // Announced rather than drawn: the skeleton rows below say 「读取中」 to anyone who
+        // can see them, and this says the same thing to anyone who cannot.
+        <p className="dbx-table__loading" role="status">
+          {loadingDescription}
+        </p>
       ) : null}
 
       {showEmpty ? (

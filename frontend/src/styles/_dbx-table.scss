@@ -31,3 +31,15 @@
 .dbx-table__batch-excluded {
   color: $text-secondary;
 }
+
+/**
+ * The sentence announced while a table is reading (#42).
+ *
+ * Drawn as well as announced: a reader who can see the skeleton rows still benefits from
+ * being told *what* is being read, and a second, quieter line above the grid is cheaper
+ * than a spinner that says nothing.
+ */
+.dbx-table__loading {
+  color: $text-secondary;
+  margin-bottom: $spacing-03;
+}

@@ -77,7 +77,10 @@ export function StageConfirm({ context, onPatch }: StageConfirmProps) {
         id: 'preflightConclusion',
         header: copy.tableColumns.preflightConclusion,
         width: 180,
-        textValue: (row) => row.preflightConclusion ?? '',
+        textValue: (row) =>
+          row.preflightConclusion === null
+            ? ''
+            : messages.conclusion.labels[row.preflightConclusion],
         // The conclusion is never carried by colour alone: the literal is beside it.
         renderCell: (row) =>
           row.preflightConclusion === null ? null : (

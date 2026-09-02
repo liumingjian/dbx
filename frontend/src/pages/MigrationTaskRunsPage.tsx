@@ -139,6 +139,7 @@ export function MigrationTaskRunsPage() {
         rowId={(run) => run.id}
         onRowActivate={(run) => navigate(paths.migrationRun(run.id))}
         loading={runs.isPending}
+        loadingDescription={messages.tasks.runs.loading}
         error={
           runs.isError
             ? {
