@@ -1,24 +1,54 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 import { AppShell } from '@/shell/AppShell';
 import { DatabaseConnectionsPage } from '@/pages/DatabaseConnectionsPage';
 import { DensitySamplePage } from '@/pages/DensitySamplePage';
 import { MigrationRunPage } from '@/pages/MigrationRunPage';
+import { MigrationTaskRunsPage } from '@/pages/MigrationTaskRunsPage';
 import { MigrationTasksPage } from '@/pages/MigrationTasksPage';
 import { MigrationWizardStagePage } from '@/pages/MigrationWizardStagePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { TableMigrationUnitPage } from '@/pages/TableMigrationUnitPage';
-import { paths, routePatterns } from './paths';
+import { ValidationReportPage } from '@/pages/ValidationReportPage';
+import { MigrationTasksRedirect } from './MigrationTasksRedirect';
+import { routePatterns } from './paths';
+
+/** `tables/:unitId` — the run-relative half of the 表迁移单元 pattern. */
+const tableMigrationUnitChildPath = routePatterns.tableMigrationUnit.slice(
+  routePatterns.migrationRun.length + 1,
+);
 
 export const routes = [
   {
     element: <AppShell />,
     children: [
-      { index: true, element: <Navigate to={paths.migrationTasks} replace /> },
+      { index: true, element: <MigrationTasksRedirect /> },
       { path: routePatterns.migrationTasks, element: <MigrationTasksPage /> },
       { path: routePatterns.wizardStage, element: <MigrationWizardStagePage /> },
-      { path: routePatterns.migrationRun, element: <MigrationRunPage /> },
-      { path: routePatterns.tableMigrationUnit, element: <TableMigrationUnitPage /> },
+      { path: routePatterns.migrationTaskRuns, element: <MigrationTaskRunsPage /> },
+      /**
+       * 单表证据 is a **child** of the run it belongs to (#39).
+       *
+       * The drawer is an overlay with its own URL, and nesting is what makes both halves
+       * of that true at once: 运行监控 stays mounted and rendered underneath, so a deep
+       * link and a reload restore the drawer *over the run* rather than on a page of its
+       * own. The child path is derived from the same pattern `paths` builds from, so the
+       * URL a link produces and the URL the router matches cannot drift apart.
+       */
+      {
+        path: routePatterns.migrationRun,
+        element: <MigrationRunPage />,
+        children: [{ path: tableMigrationUnitChildPath, element: <TableMigrationUnitPage /> }],
+      },
+      /**
+       * 校验报告 is a **sibling** of 运行监控 rather than a drawer over it (#40).
+       *
+       * The evidence drawer is an overlay because it is about one row of the screen
+       * underneath. A 校验报告 is not about the monitor at all: it is the artefact a DBA
+       * submits to a change review, read on its own, exported, and quoted. Its address
+       * names the run and says what it is.
+       */
+      { path: routePatterns.validationReport, element: <ValidationReportPage /> },
       { path: routePatterns.databaseConnections, element: <DatabaseConnectionsPage /> },
       { path: routePatterns.settings, element: <SettingsPage /> },
       { path: routePatterns.densitySample, element: <DensitySamplePage /> },

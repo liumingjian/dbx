@@ -38,6 +38,17 @@
   $theme: themes.$g10
 );
 @use '@carbon/react';
+// The table substrate's styles (ADR-0015). They are loaded after Carbon has been
+// configured above, so the Datagrid inherits the Chinese type tokens rather than
+// re-instantiating Carbon's defaults.
+@use '@carbon/ibm-products/scss/components/Datagrid';
 @use './typography';
 @use './global';
+@use './connections';
+@use './dbx-table';
+@use './wizard';
+@use './table-workspace';
+@use './confirm';
+@use './run-monitor';
+@use './validation-report';
 @use './density-sample';

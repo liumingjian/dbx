@@ -1,0 +1,79 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+
+// 校验报告 (#40).
+//
+// The page stays in the product's g10 throughout. ADR-0014 confines the inline g100 theme
+// to 运行监控's live blocks, and a report is the opposite kind of surface: it is read
+// slowly, printed, exported and attached to a change review.
+//
+// The one thing this stylesheet is responsible for is **not letting the technical
+// conclusion and the 校验处置 blur into each other**. They are separate columns carrying
+// separate elements — an indicator and a tag — and nothing here gives a disposed row a
+// background, a border or a colour of its own, because a row that looked different once a
+// decision was recorded would be showing the decision as a result.
+
+.dbx-validation__identity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-02 $spacing-06;
+  margin-bottom: $spacing-05;
+
+  p {
+    margin: 0;
+  }
+}
+
+.dbx-validation__actions {
+  display: flex;
+  gap: $spacing-03;
+}
+
+.dbx-validation__block {
+  margin-bottom: $spacing-06;
+
+  p {
+    margin: 0 0 $spacing-02;
+    max-width: 60rem;
+  }
+}
+
+.dbx-validation__heading {
+  margin: 0 0 $spacing-03;
+}
+
+.dbx-validation__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-03 $spacing-06;
+  margin: 0 0 $spacing-03;
+  padding: 0;
+  list-style: none;
+}
+
+.dbx-validation__list {
+  margin: 0 0 $spacing-03;
+  padding: 0;
+  list-style: none;
+
+  li {
+    margin-bottom: $spacing-02;
+  }
+}
+
+.dbx-validation__reason {
+  color: $text-secondary;
+}
+
+.dbx-validation__notice {
+  color: $text-secondary;
+}
+
+.dbx-validation__muted {
+  color: $text-secondary;
+}
+
+.dbx-validation__filters {
+  margin-bottom: $spacing-04;
+  max-width: 32rem;
+}

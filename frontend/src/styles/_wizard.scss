@@ -1,0 +1,84 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+
+// The migration wizard is a full page, not a wide tearsheet (ADR-0014). The layout below
+// assumes the whole viewport for that reason: stage two is a 1200-row selector and stage
+// three will be a three-pane workspace.
+
+.dbx-wizard__draft {
+  color: $text-secondary;
+  margin-bottom: $spacing-05;
+}
+
+.dbx-wizard__progress {
+  margin-bottom: $spacing-07;
+}
+
+.dbx-wizard__stage {
+  margin-bottom: $spacing-06;
+}
+
+.dbx-wizard__lead {
+  color: $text-secondary;
+  margin-bottom: $spacing-05;
+}
+
+.dbx-wizard__fact {
+  color: $text-secondary;
+  margin-bottom: $spacing-03;
+}
+
+.dbx-wizard__pane-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: $spacing-07;
+}
+
+.dbx-wizard__pane {
+  border: 1px solid $border-subtle;
+  padding: $spacing-05;
+  background-color: $layer;
+}
+
+.dbx-wizard__pane-title {
+  margin-bottom: $spacing-04;
+}
+
+.dbx-wizard__resolved {
+  margin-top: $spacing-06;
+}
+
+.dbx-wizard__footer {
+  display: flex;
+  gap: $spacing-04;
+  margin-top: $spacing-06;
+}
+
+.dbx-scope__summary {
+  margin-bottom: $spacing-04;
+}
+
+.dbx-scope__condition {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-03;
+  flex-wrap: wrap;
+}
+
+.dbx-scope__excluded {
+  margin-top: $spacing-06;
+}
+
+.dbx-scope__excluded-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+}
+
+.dbx-drafts {
+  margin-top: $spacing-08;
+}
+
+.dbx-drafts__title {
+  margin-bottom: $spacing-03;
+}

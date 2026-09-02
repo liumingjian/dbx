@@ -1,0 +1,271 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+@use '@carbon/react/scss/type' as *;
+
+// 运行监控 (#38).
+//
+// Two rules are expressed here rather than only in prose.
+//
+// 1. **Nothing animates.** ADR-0004 permits progress observations to be coalesced, so a
+//    bar that eased between two of them would be drawing rows that were never observed.
+//    The fill has an explicit `transition: none`, which is a statement rather than a
+//    default: it is what stops a later stylesheet, or a well-meaning transition on a
+//    parent, from making the interface lie.
+// 2. **Only the live blocks are dark** (ADR-0014). `.dbx-run__live` is the single inline
+//    g100 region and holds exactly the progress matrix, the event stream and the log.
+//    Everything above it — identity, the 卡死 diagnosis, the filter, the cancel control —
+//    stays in the page's g10.
+
+.dbx-run__identity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-02 $spacing-06;
+  margin-bottom: $spacing-04;
+
+  p {
+    margin: 0;
+  }
+}
+
+.dbx-run__notice {
+  @include type-style('body-compact-01');
+  color: $text-secondary;
+  margin-bottom: $spacing-03;
+  max-width: 76rem;
+}
+
+.dbx-run__muted {
+  color: $text-secondary;
+}
+
+// The 卡死 diagnosis. It is a terminal judgement rather than a live surface, so it sits in
+// the page's g10 and is separated by a border rather than by a colour that could be read
+// as one more shade of "slow".
+.dbx-run__stuck {
+  border: 1px solid $support-caution-major;
+  border-inline-start-width: $spacing-03;
+  padding: $spacing-05;
+  margin-bottom: $spacing-05;
+  background-color: $layer;
+  max-width: 76rem;
+
+  p {
+    margin-bottom: $spacing-03;
+  }
+}
+
+.dbx-run__subheading {
+  @include type-style('heading-compact-01');
+  margin-top: $spacing-04;
+  margin-bottom: $spacing-02;
+}
+
+.dbx-run__facts,
+.dbx-run__list {
+  list-style: disc;
+  padding-inline-start: $spacing-06;
+  margin-bottom: $spacing-03;
+}
+
+.dbx-run__filters {
+  margin-bottom: $spacing-04;
+  max-width: 30rem;
+}
+
+.dbx-run__live {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-05;
+  padding: $spacing-05;
+  background-color: $background;
+}
+
+.dbx-run__panel {
+  border: 1px solid $border-subtle;
+  padding: $spacing-05;
+}
+
+.dbx-run__panel-title {
+  @include type-style('heading-compact-02');
+  margin-bottom: $spacing-02;
+}
+
+.dbx-run__panel-lead {
+  @include type-style('body-compact-01');
+  color: $text-secondary;
+  margin-bottom: $spacing-04;
+}
+
+.dbx-run__bound {
+  @include type-style('label-01');
+  color: $text-secondary;
+  margin-top: $spacing-03;
+}
+
+.dbx-run__phase {
+  display: flex;
+  align-items: center;
+  gap: $spacing-03;
+}
+
+.dbx-run__progress {
+  display: flex;
+  align-items: center;
+  gap: $spacing-03;
+}
+
+.dbx-run__progress-track {
+  inline-size: 6rem;
+  block-size: $spacing-03;
+  background-color: $layer-accent;
+  flex: 0 0 auto;
+}
+
+// See the header: no transition, ever. A jump in the observation is a jump on screen.
+.dbx-run__progress-fill {
+  display: block;
+  block-size: 100%;
+  background-color: $interactive;
+  transition: none;
+  animation: none;
+}
+
+.dbx-run__progress-value {
+  white-space: nowrap;
+}
+
+.dbx-run__observed {
+  display: flex;
+  align-items: center;
+  gap: $spacing-03;
+}
+
+// 观测滞后: a normal state of the transport, drawn as a quiet annotation rather than as an
+// alarm. It must not be mistaken for 卡死, which has its own panel and its own threshold.
+.dbx-run__lagging {
+  @include type-style('label-01');
+  border: 1px solid $border-subtle;
+  padding: 0 $spacing-02;
+  color: $text-secondary;
+  white-space: nowrap;
+}
+
+.dbx-run__events {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+  max-block-size: 22rem;
+  overflow-y: auto;
+}
+
+.dbx-run__event {
+  display: flex;
+  gap: $spacing-05;
+  align-items: baseline;
+}
+
+.dbx-run__event-subject {
+  min-inline-size: 14rem;
+}
+
+.dbx-run__log {
+  @include type-style('code-01');
+  max-block-size: 22rem;
+  overflow: auto;
+  margin: 0;
+  white-space: pre;
+}
+
+// 单表证据抽屉 (#39).
+//
+// An overlay that owns a URL. It sits above 运行监控 rather than replacing it, because the
+// question it answers — 「这张表出了什么事」 — is asked while reading the run, and losing
+// the run to answer it would cost the operator their place. Nothing here animates in from
+// the side: the drawer is present or it is not, in the same spirit as the progress bar
+// that never eases between two observations.
+.dbx-drawer__scrim {
+  position: fixed;
+  inset: 0;
+  background-color: $overlay;
+  z-index: 8000;
+}
+
+.dbx-drawer__panel {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: min(42rem, 100vw);
+  display: flex;
+  flex-direction: column;
+  background-color: $layer;
+  border-inline-start: 1px solid $border-subtle;
+  z-index: 8001;
+  overflow-y: auto;
+}
+
+.dbx-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-05;
+  padding: $spacing-05;
+  border-block-end: 1px solid $border-subtle;
+  position: sticky;
+  inset-block-start: 0;
+  background-color: $layer;
+}
+
+.dbx-drawer__title {
+  @include type-style('productive-heading-03');
+  margin: 0;
+}
+
+.dbx-drawer__body {
+  padding: $spacing-05;
+}
+
+.dbx-drawer__section {
+  border-block-start: 1px solid $border-subtle;
+  padding-block: $spacing-05;
+
+  p {
+    margin-bottom: $spacing-03;
+  }
+}
+
+.dbx-drawer__section-title {
+  @include type-style('heading-compact-01');
+  margin-bottom: $spacing-03;
+}
+
+// What happened, stated first and in full sentences. ADR-0005 orders the error card:
+// what happened, where, what is affected, what one action is recommended.
+.dbx-drawer__statement {
+  @include type-style('body-01');
+}
+
+.dbx-drawer__occurrences {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dbx-drawer__occurrence + .dbx-drawer__occurrence {
+  margin-block-start: $spacing-05;
+}
+
+.dbx-drawer__detail-heading {
+  @include type-style('label-01');
+  color: $text-secondary;
+  margin-block-start: $spacing-03;
+}
+
+// Server-produced evidence, shown as it will be pasted into a ticket.
+.dbx-drawer__detail {
+  @include type-style('code-01');
+  background-color: $layer-accent;
+  padding: $spacing-03;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}

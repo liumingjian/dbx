@@ -1,0 +1,67 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+
+// 执行确认 (#37): a single reading column of panels, each one a fact the operator is being
+// asked to check. The stage is deliberately vertical rather than a grid — this is the last
+// global read-through before a production migration, and a two-column layout invites the
+// eye to skip one of the columns.
+
+.dbx-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-06;
+  max-width: 76rem;
+}
+
+.dbx-confirm__panel {
+  border: 1px solid $border-subtle;
+  padding: $spacing-05;
+  background-color: $layer;
+}
+
+.dbx-confirm__heading {
+  margin-bottom: $spacing-03;
+}
+
+.dbx-confirm__subheading {
+  margin-top: $spacing-04;
+  margin-bottom: $spacing-02;
+}
+
+.dbx-confirm__constraint,
+.dbx-confirm__state {
+  color: $text-secondary;
+  margin-bottom: $spacing-04;
+}
+
+.dbx-confirm__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: $spacing-04;
+  margin-bottom: $spacing-05;
+
+  dt {
+    color: $text-secondary;
+  }
+}
+
+.dbx-confirm__excluded,
+.dbx-confirm__gaps {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+}
+
+.dbx-confirm__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: $spacing-05;
+  margin-bottom: $spacing-05;
+}
+
+// The start sits alone at the end of the read-through, with nothing beside it to be
+// mistaken for: it is the only irreversible control on the page.
+.dbx-confirm__start {
+  display: flex;
+  justify-content: flex-end;
+}

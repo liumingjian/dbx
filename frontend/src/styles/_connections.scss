@@ -1,0 +1,81 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+@use '@carbon/react/scss/type' as type;
+
+// 数据源: the registry of 数据库连接. Small, reading-width, and card shaped rather than
+// tabular — the table surfaces that motivate the DbxTable boundary (ADR-0015) are the
+// 1200-row selector and the monitoring views, not a handful of endpoints.
+.dbx-connections {
+  display: grid;
+  gap: $spacing-05;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dbx-connections__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: $spacing-05;
+}
+
+.dbx-connection__name {
+  @include type.type-style('heading-compact-01');
+  margin-bottom: $spacing-04;
+}
+
+.dbx-connection__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: $spacing-04;
+  margin: 0;
+}
+
+.dbx-connection__fact {
+  dt {
+    @include type.type-style('label-01');
+    color: $text-secondary;
+  }
+
+  dd {
+    @include type.type-style('body-compact-01');
+    margin: 0;
+  }
+}
+
+.dbx-connection__check-time {
+  margin-left: $spacing-03;
+  color: $text-secondary;
+}
+
+.dbx-connection__meta {
+  margin-top: $spacing-04;
+}
+
+.dbx-connection__actions {
+  display: flex;
+  gap: $spacing-03;
+  margin-top: $spacing-04;
+}
+
+.dbx-view-state {
+  padding: $spacing-06 0;
+  max-width: 44rem;
+}
+
+.dbx-view-state__title {
+  @include type.type-style('heading-compact-02');
+  margin-bottom: $spacing-03;
+}
+
+.dbx-view-state__body {
+  @include type.type-style('body-compact-01');
+  margin-bottom: $spacing-05;
+  color: $text-secondary;
+}
+
+.dbx-modal__description {
+  @include type.type-style('body-compact-01');
+  color: $text-secondary;
+  margin-bottom: $spacing-05;
+}
