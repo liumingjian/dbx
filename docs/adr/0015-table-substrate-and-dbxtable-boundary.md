@@ -4,7 +4,7 @@ The table is not one control among many in DBX; it is the product surface. Selec
 
 ## Why a boundary is required
 
-`@carbon/react` provides row-height sizes, batch actions, expandable rows, pagination, and `stickyHeader`, but it has no sticky columns, no virtualisation, no column resizing, and no column visibility control. Those exist only in `@carbon/ibm-products`, whose `Datagrid` supplies `useStickyColumn`, `useInfiniteScroll` with `virtualHeight`, `useResizeTable`, `useCustomizeColumns`, `useColumnOrder`, and `useNestedRows`.
+`@carbon/react` provides row-height sizes, batch actions, expandable rows, pagination, and `stickyHeader`, but it has no sticky columns, no virtualisation, no column resizing, and no column visibility control. Those exist only in `@carbon/ibm-products`, whose `Datagrid` supplies `useStickyColumn`, `useInfiniteScroll` with `virtualHeight`, `useResizeColumns` with `useFlexResize`, `useCustomizeColumns`, `useColumnOrder`, and `useNestedRows`.
 
 That capability arrives with a liability: `Datagrid` is built on `react-table@^7.8.0`. TanStack Table v7 is no longer maintained. Binding the product's central surface directly to a frozen upstream is not acceptable, and rebuilding sticky columns, virtualisation, batch bars, and skeleton rows from scratch is not affordable in the first delivery. The boundary buys both: current capability now, a contained migration later.
 
@@ -18,7 +18,7 @@ When any of the following becomes true, `DbxTable` switches internally to TanSta
 
 ## What Carbon does not decide
 
-Carbon publishes no row-count limit or performance threshold for data tables, and no cross-page selection semantics — `useSelectAllToggle` only toggles the current page. DBX therefore owns the model, wording, and undo path for "N selected across pages", "select all matching the current filter", and per-item exclusions. Carbon supplies row-height sizes but no density switcher, so the switcher and its persisted preference are DBX's as well.
+Carbon publishes no row-count limit or performance threshold for data tables, and no cross-page selection semantics — `useSelectAllWithToggle` only toggles the current page. DBX therefore owns the model, wording, and undo path for "N selected across pages", "select all matching the current filter", and per-item exclusions. Carbon supplies row-height sizes but no density switcher, so the switcher and its persisted preference are DBX's as well.
 
 ## Consequences
 
