@@ -32,18 +32,22 @@ function scopeTable(page: Page) {
   return page.getByRole('region', { name: '源表' });
 }
 
-test.describe('Gate 1: 一张表都没选时不能前进', () => {
-  test('blocks 下一步, says why, and does not leave the stage', async ({ page }) => {
-    await draftAtScope(page);
-    const url = page.url();
+test.describe('Gate 1: 一张表都没选时不能前进', { tag: ['@gate', '@gate-1'] }, () => {
+  test(
+    'blocks 下一步, says why, and does not leave the stage',
+    { tag: '@blocked-1' },
+    async ({ page }) => {
+      await draftAtScope(page);
+      const url = page.url();
 
-    await expect(page.getByText(/请先选择至少一张表纳入迁移范围/)).toBeVisible();
-    await page.getByRole('button', { name: '下一步' }).click();
+      await expect(page.getByText(/请先选择至少一张表纳入迁移范围/)).toBeVisible();
+      await page.getByRole('button', { name: '下一步' }).click();
 
-    await expect(page).toHaveURL(url);
-    await expect(page.getByRole('heading', { name: '新建迁移草稿' })).toBeVisible();
-    await expect(page.getByText('迁移范围共 0 张')).toBeVisible();
-  });
+      await expect(page).toHaveURL(url);
+      await expect(page.getByRole('heading', { name: '新建迁移草稿' })).toBeVisible();
+      await expect(page.getByText('迁移范围共 0 张')).toBeVisible();
+    },
+  );
 
   test('blocks the next stage typed as a URL, not only the button', async ({ page }) => {
     // Every stage has its own address (#30), so a gate that only guards a button guards

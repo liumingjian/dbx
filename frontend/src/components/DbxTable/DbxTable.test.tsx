@@ -50,6 +50,7 @@ interface HarnessProps {
   readonly batchActions?: readonly DbxBatchAction[];
   readonly rowWindow?: DbxTableRowWindow;
   readonly loading?: boolean;
+  readonly loadingDescription?: string;
   readonly error?: DbxTableProps<SourceTableSummary>['error'];
   readonly filterActive?: boolean;
   readonly densityPreferenceKey?: string;
@@ -61,6 +62,7 @@ function Harness({
   batchActions,
   rowWindow = { kind: 'paged', pageSize: 2 },
   loading = false,
+  loadingDescription,
   error = null,
   filterActive = false,
   densityPreferenceKey,
@@ -75,6 +77,7 @@ function Harness({
       rowId={(row) => row.name}
       rowWindow={rowWindow}
       loading={loading}
+      loadingDescription={loadingDescription}
       error={error}
       filterActive={filterActive}
       densityPreferenceKey={densityPreferenceKey}
@@ -128,6 +131,20 @@ describe('DbxTable — seam 2', () => {
     expect(screen.queryByText('这个源库里没有表')).toBeNull();
     // Header row plus the substrate's skeleton rows.
     expect(mountedRowCount()).toBeGreaterThan(1);
+  });
+
+  it('says what it is reading while it reads, not only in skeleton rows', () => {
+    // Skeleton rows are a loading state for a reader who can see them and an empty grid
+    // for a reader who cannot — indistinguishable from 「没有数据」. #42 requires every key
+    // view's loading state to be readable in domain language, so the sentence is announced.
+    render(<Harness rows={[]} loading loadingDescription={messages.tasks.loading} />);
+    const announcement = screen.getByRole('status');
+    expect(announcement).toHaveTextContent(messages.tasks.loading);
+  });
+
+  it('stops announcing the read once the rows have arrived', () => {
+    render(<Harness rows={fixture.slice(0, 2)} loadingDescription={messages.tasks.loading} />);
+    expect(screen.queryByText(messages.tasks.loading)).toBeNull();
   });
 
   it('switches density between the two allowed row heights and remembers the choice', async () => {

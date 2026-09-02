@@ -50,54 +50,62 @@ async function openMonitor(page: Page, scenario: string): Promise<void> {
   await expect(panel(page, '进度矩阵')).toBeVisible({ timeout: FIRST_PAINT_MS });
 }
 
-test.describe('Gate 7：监控以表迁移单元为中心，执行平台不外露', () => {
-  for (const scenario of ['default', 'partial-table-failure', 'stuck-table']) {
-    test(`no 箱, 连接器 or topic reaches the operator in 「${scenario}」`, async ({ page }) => {
-      await openMonitor(page, scenario);
+test.describe(
+  'Gate 7：监控以表迁移单元为中心，执行平台不外露',
+  { tag: ['@gate', '@gate-7'] },
+  () => {
+    for (const scenario of ['default', 'partial-table-failure', 'stuck-table']) {
+      test(
+        `no 箱, 连接器 or topic reaches the operator in 「${scenario}」`,
+        { tag: '@blocked-7' },
+        async ({ page }) => {
+          await openMonitor(page, scenario);
 
-      // The organising unit, named as itself.
-      await expect(page.getByText('监控以表迁移单元为中心')).toBeVisible();
-      await expect(panel(page, '进度矩阵')).toBeVisible();
+          // The organising unit, named as itself.
+          await expect(page.getByText('监控以表迁移单元为中心')).toBeVisible();
+          await expect(panel(page, '进度矩阵')).toBeVisible();
 
-      // One list, shared by every surface Gate 7 binds (`e2e/gate7.ts`).
-      expectFreeOfExecutionPlatform(await visibleText(page), `运行监控（${scenario}）`);
+          // One list, shared by every surface Gate 7 binds (`e2e/gate7.ts`).
+          expectFreeOfExecutionPlatform(await visibleText(page), `运行监控（${scenario}）`);
+        },
+      );
+    }
+
+    test('the filtered views are bound too, and so is the 取消 dialog', async ({ page }) => {
+      // 只看失败 and 只看卡死 are where a DBA goes the moment something is wrong, which is
+      // exactly when a platform literal is most likely to be reached for — and the cancel
+      // dialog is the one screen that describes the machinery being stopped.
+      await openMonitor(page, 'partial-table-failure');
+      await page.getByRole('tab', { name: '只看失败' }).click();
+      await expect(panel(page, '进度矩阵').getByText('迁移失败').first()).toBeVisible();
+      expectFreeOfExecutionPlatform(await visibleText(page), '只看失败');
+
+      await openMonitor(page, 'stuck-table');
+      await page.getByRole('tab', { name: '只看卡死' }).click();
+      await expect(panel(page, '进度矩阵').getByText('卡死').first()).toBeVisible();
+      expectFreeOfExecutionPlatform(await visibleText(page), '只看卡死');
+
+      await openMonitor(page, 'default');
+      await page.getByRole('button', { name: '取消迁移运行' }).click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toContainText('取消不是丢弃，也不回滚');
+      expectFreeOfExecutionPlatform(await visibleTextOf(dialog), '取消迁移运行对话框');
     });
-  }
 
-  test('the filtered views are bound too, and so is the 取消 dialog', async ({ page }) => {
-    // 只看失败 and 只看卡死 are where a DBA goes the moment something is wrong, which is
-    // exactly when a platform literal is most likely to be reached for — and the cancel
-    // dialog is the one screen that describes the machinery being stopped.
-    await openMonitor(page, 'partial-table-failure');
-    await page.getByRole('tab', { name: '只看失败' }).click();
-    await expect(panel(page, '进度矩阵').getByText('迁移失败').first()).toBeVisible();
-    expectFreeOfExecutionPlatform(await visibleText(page), '只看失败');
+    test('says 等待调度 and 因关联失败而阻塞 instead of the literals named after the box', async ({
+      page,
+    }) => {
+      // 等待调度: 「an ordinary waiting state, not a fault, and it carries no diagnosis」.
+      await openMonitor(page, 'default');
+      await expect(page.getByText('等待调度').first()).toBeVisible();
 
-    await openMonitor(page, 'stuck-table');
-    await page.getByRole('tab', { name: '只看卡死' }).click();
-    await expect(panel(page, '进度矩阵').getByText('卡死').first()).toBeVisible();
-    expectFreeOfExecutionPlatform(await visibleText(page), '只看卡死');
-
-    await openMonitor(page, 'default');
-    await page.getByRole('button', { name: '取消迁移运行' }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText('取消不是丢弃，也不回滚');
-    expectFreeOfExecutionPlatform(await visibleTextOf(dialog), '取消迁移运行对话框');
-  });
-
-  test('says 等待调度 and 因关联失败而阻塞 instead of the literals named after the box', async ({
-    page,
-  }) => {
-    // 等待调度: 「an ordinary waiting state, not a fault, and it carries no diagnosis」.
-    await openMonitor(page, 'default');
-    await expect(page.getByText('等待调度').first()).toBeVisible();
-
-    // 因关联失败而阻塞: 「its own technical result is undetermined rather than failed, and
-    // it is a candidate for re-migration」.
-    await openMonitor(page, 'stuck-table');
-    await expect(page.getByText('因关联失败而阻塞').first()).toBeVisible();
-  });
-});
+      // 因关联失败而阻塞: 「its own technical result is undetermined rather than failed, and
+      // it is a candidate for re-migration」.
+      await openMonitor(page, 'stuck-table');
+      await expect(page.getByText('因关联失败而阻塞').first()).toBeVisible();
+    });
+  },
+);
 
 test.describe('每张表都带着自己的阶段、进度、技术结果与观测时间', () => {
   test('shows all four per table, and the run总体 above them', async ({ page }) => {

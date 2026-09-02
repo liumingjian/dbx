@@ -797,7 +797,53 @@ export function createMockStore({
   const rerunKey = (draftId: string, sourceTable: string): string =>
     `${draftId}\u0000${sourceTable}`;
 
+  /**
+   * When each table's 表写入契约 was last reassembled and its 预检 last re-established.
+   *
+   * Per table, not per draft. ADR-0011 invalidates 「every **affected** preflight」, and
+   * `draft.updatedAt` is moved by every table: recording a 映射规则 on one table moved the
+   * 评估于 printed against every other table in the 迁移范围 too, so evidence nobody had
+   * touched read as though it had been re-established at the instant of somebody else's
+   * edit.
+   */
+  const tableRegeneratedAt = new Map<string, string>();
+
+  /**
+   * When a draft's 逐表配置 were last assembled **wholesale**, for the tables that have no
+   * instant of their own.
+   *
+   * `draft.updatedAt` cannot serve as that fallback, because a per-table edit moves it —
+   * which is the very confusion being taken apart here. So the fallback is frozen at the
+   * value `updatedAt` held just before the first per-table edit, and released again when
+   * the 迁移范围 itself changes: adding or removing tables reassembles everything, and
+   * every table's instant then legitimately becomes 「now」.
+   */
+  const draftConfigurationsBaselineAt = new Map<string, string>();
+
+  const regeneratedAtOf = (draft: MigrationDraft, sourceTable: string): string =>
+    tableRegeneratedAt.get(rerunKey(draft.id, sourceTable)) ??
+    draftConfigurationsBaselineAt.get(draft.id) ??
+    draft.updatedAt;
+
+  /** Holds the wholesale instant still, so one table's edit cannot move the others. */
+  const freezeConfigurationsBaseline = (draft: MigrationDraft): void => {
+    if (!draftConfigurationsBaselineAt.has(draft.id)) {
+      draftConfigurationsBaselineAt.set(draft.id, draft.updatedAt);
+    }
+  };
+
+  /** The 迁移范围 changed: every 逐表配置 is assembled again, from this instant. */
+  const releaseConfigurationsBaseline = (draftId: string): void => {
+    draftConfigurationsBaselineAt.delete(draftId);
+    for (const key of [...tableRegeneratedAt.keys()]) {
+      if (key.startsWith(rerunKey(draftId, ''))) {
+        tableRegeneratedAt.delete(key);
+      }
+    }
+  };
+
   const markPreflightRerun = (draftId: string, sourceTable: string): void => {
+    tableRegeneratedAt.set(rerunKey(draftId, sourceTable), clock.nowIso());
     preflightRerunUntil.set(rerunKey(draftId, sourceTable), {
       mockUntil: clock.now() + PREFLIGHT_RERUN_MOCK_MS,
       // Frozen mock time (`?clockRate=0`) is a supported value — `normaliseRate` says so,
@@ -947,10 +993,10 @@ export function createMockStore({
       userRules: rulesOfTable(draft, table.name),
       prunedColumns: prunedOfTable(draft, table.name),
       preflightInFlight: preflightInFlight(draft.id, table.name),
-      // The moment the contract was assembled is the moment the draft last changed, not
-      // the moment it was read: 「重新生成于」 has to move when a 映射规则 is recorded and
-      // stay still when the same table is merely opened again.
-      generatedAt: draft.updatedAt,
+      // The moment **this table's** contract was assembled: 「重新生成于」 has to move when
+      // a 映射规则 is recorded against it, stay still when the same table is merely opened
+      // again, and stay still when another table's mapping changes.
+      generatedAt: regeneratedAtOf(draft, table.name),
     });
 
   /**
@@ -1296,6 +1342,9 @@ export function createMockStore({
       }
       const updated: MigrationDraft = { ...existing, ...patch, updatedAt: clock.nowIso() };
       drafts = [...drafts.slice(0, index), updated, ...drafts.slice(index + 1)];
+      // The 迁移范围 or the 落点 moved, so every 逐表配置 is assembled again against the
+      // draft as it now stands: 「重新生成于」 is 「now」 for all of them.
+      releaseConfigurationsBaseline(id);
       flushDrafts();
       return updated;
     },
@@ -1463,7 +1512,7 @@ export function createMockStore({
                 userRules: rulesOfTable(draft, name),
                 prunedColumns: prunedOfTable(draft, name),
                 preflightInFlight: preflightInFlight(draftId, name),
-                generatedAt: draft.updatedAt,
+                generatedAt: regeneratedAtOf(draft, name),
               }),
             ];
       });
@@ -1489,6 +1538,9 @@ export function createMockStore({
       if (draft === undefined) {
         return undefined;
       }
+      // 受影响的 is one table. Hold the other tables' instant where it is before
+      // `updatedAt` moves out from under them.
+      freezeConfigurationsBaseline(draft);
       const recorded: DraftMappingRule = {
         id: `${request.sourceColumn}:${request.action}`,
         sourceTable: request.sourceTable,
@@ -1535,6 +1587,9 @@ export function createMockStore({
       if (table === undefined || !draft.selectedTables.includes(request.sourceTable)) {
         return undefined;
       }
+      // As in `recordMappingRule`: excluding a field re-establishes this table's evidence
+      // and nobody else's.
+      freezeConfigurationsBaseline(draft);
       const without = draft.prunedColumns.filter(
         (column) =>
           column.sourceTable !== request.sourceTable ||

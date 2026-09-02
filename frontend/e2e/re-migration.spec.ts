@@ -60,127 +60,137 @@ async function scopeCountsOf(page: Page): Promise<{ run: number; task: number }>
   return { run: Number(match?.[1]), task: Number(match?.[2]) };
 }
 
-test.describe('Gate 9：重新迁移创建新的迁移运行，并显示它自己的选定范围', () => {
-  test('creates a new run, leaves the original untouched, and states its own smaller scope', async ({
-    page,
-  }) => {
-    // 「校验 INCONCLUSIVE」 straight from the URL: tables whose technical result is
-    // undetermined are exactly what a 重新迁移 is for.
-    await openReport(page, 'inconclusive-validation');
+test.describe(
+  'Gate 9：重新迁移创建新的迁移运行，并显示它自己的选定范围',
+  { tag: ['@gate', '@gate-9'] },
+  () => {
+    test(
+      'creates a new run, leaves the original untouched, and states its own smaller scope',
+      { tag: '@blocked-9' },
+      async ({ page }) => {
+        // 「校验 INCONCLUSIVE」 straight from the URL: tables whose technical result is
+        // undetermined are exactly what a 重新迁移 is for.
+        await openReport(page, 'inconclusive-validation');
 
-    const remigration = remigrationPanel(page);
-    // Stated before anything is selected: this creates a run, it does not retry one.
-    await expect(remigration).toContainText(
-      '重新迁移创建新的迁移运行，不修改也不重试原有的迁移运行',
-    );
-    await expect(remigration).toContainText('重新做连接检查、预检、写冻结确认、源基线与表写入契约');
+        const remigration = remigrationPanel(page);
+        // Stated before anything is selected: this creates a run, it does not retry one.
+        await expect(remigration).toContainText(
+          '重新迁移创建新的迁移运行，不修改也不重试原有的迁移运行',
+        );
+        await expect(remigration).toContainText(
+          '重新做连接检查、预检、写冻结确认、源基线与表写入契约',
+        );
 
-    await remigration.getByRole('button', { name: '当前页全选' }).click();
-    const selected = /已选 (\d+) 张表/.exec(await remigration.innerText());
-    expect(selected).not.toBeNull();
-    const selectedCount = Number(selected?.[1]);
-    expect(selectedCount).toBeGreaterThan(0);
+        await remigration.getByRole('button', { name: '当前页全选' }).click();
+        const selected = /已选 (\d+) 张表/.exec(await remigration.innerText());
+        expect(selected).not.toBeNull();
+        const selectedCount = Number(selected?.[1]);
+        expect(selectedCount).toBeGreaterThan(0);
 
-    await remigration.getByRole('button', { name: '发起重新迁移' }).click();
-    const dialog = page.getByRole('dialog', { name: '发起重新迁移' });
-    // What is about to happen to the earlier run: nothing.
-    await expect(dialog).toContainText('原有的迁移运行不会被修改，也不会被重试');
-    // 「permanent checkbox」 is under 写冻结's `_Avoid_`: a new run needs a new commitment,
-    // with a named 责任人 and a bounded 时限.
-    await expect(dialog).toContainText('需要一次新的写冻结确认');
+        await remigration.getByRole('button', { name: '发起重新迁移' }).click();
+        const dialog = page.getByRole('dialog', { name: '发起重新迁移' });
+        // What is about to happen to the earlier run: nothing.
+        await expect(dialog).toContainText('原有的迁移运行不会被修改，也不会被重试');
+        // 「permanent checkbox」 is under 写冻结's `_Avoid_`: a new run needs a new commitment,
+        // with a named 责任人 and a bounded 时限.
+        await expect(dialog).toContainText('需要一次新的写冻结确认');
 
-    const confirm = dialog.getByRole('button', { name: '发起重新迁移' });
-    await expect(confirm).toBeDisabled();
-    await dialog.getByLabel('责任人').fill('li.na');
-    await dialog.getByLabel('写冻结时限（小时）').fill('6');
-    // Starting a production migration takes intent, not a second click.
-    await expect(confirm).toBeDisabled();
-    await dialog.getByLabel('键入源 database 名称 orders 以确认').fill('orders');
-    await expect(confirm).toBeEnabled();
-    await confirm.click();
+        const confirm = dialog.getByRole('button', { name: '发起重新迁移' });
+        await expect(confirm).toBeDisabled();
+        await dialog.getByLabel('责任人').fill('li.na');
+        await dialog.getByLabel('写冻结时限（小时）').fill('6');
+        // Starting a production migration takes intent, not a second click.
+        await expect(confirm).toBeDisabled();
+        await dialog.getByLabel('键入源 database 名称 orders 以确认').fill('orders');
+        await expect(confirm).toBeEnabled();
+        await confirm.click();
 
-    // A new 迁移运行, with an address of its own.
-    await expect(page).not.toHaveURL(new RegExp(`/runs/${runId}(\\?|$)`));
-    await expect(page).toHaveURL(/\/runs\/[^/?]+/);
-    await expect(page).toHaveURL(/scenario=inconclusive-validation/);
-    await expect(page.getByRole('heading', { name: '运行监控' })).toBeVisible({
-      timeout: FIRST_PAINT_MS,
-    });
-    const newRunUrl = page.url();
+        // A new 迁移运行, with an address of its own.
+        await expect(page).not.toHaveURL(new RegExp(`/runs/${runId}(\\?|$)`));
+        await expect(page).toHaveURL(/\/runs\/[^/?]+/);
+        await expect(page).toHaveURL(/scenario=inconclusive-validation/);
+        await expect(page.getByRole('heading', { name: '运行监控' })).toBeVisible({
+          timeout: FIRST_PAINT_MS,
+        });
+        const newRunUrl = page.url();
 
-    const origin = panel(page, '本次迁移运行的来源');
-    await expect(origin).toContainText('这是一次重新迁移');
-    await expect(origin).toContainText(`没有修改也没有重试迁移运行 ${runId}`);
-    // Its own selected scope, stated beside the task's so nobody reads it as a whole rerun.
-    const counts = await scopeCountsOf(page);
-    expect(counts.run).toBe(selectedCount);
-    expect(counts.run).toBeLessThan(counts.task);
-    await expect(origin).toContainText('不是整个迁移任务的重跑');
+        const origin = panel(page, '本次迁移运行的来源');
+        await expect(origin).toContainText('这是一次重新迁移');
+        await expect(origin).toContainText(`没有修改也没有重试迁移运行 ${runId}`);
+        // Its own selected scope, stated beside the task's so nobody reads it as a whole rerun.
+        const counts = await scopeCountsOf(page);
+        expect(counts.run).toBe(selectedCount);
+        expect(counts.run).toBeLessThan(counts.task);
+        await expect(origin).toContainText('不是整个迁移任务的重跑');
 
-    // The evidence this run established for itself, each statement with its own instant.
-    const evidence = panel(page, '本次迁移运行重新建立的证据');
-    await expect(evidence).toContainText('上一次迁移运行的结论不会被带到这一次');
-    await expect(evidence).toContainText('连接检查');
-    await expect(evidence).toContainText('校验通过');
-    await expect(evidence).toContainText('写冻结确认');
-    await expect(evidence).toContainText('责任人 li.na');
-    await expect(evidence).toContainText('源基线');
-    await expect(evidence).toContainText('预检 可迁移');
-    await expect(evidence).toContainText('表写入契约 v');
+        // The evidence this run established for itself, each statement with its own instant.
+        const evidence = panel(page, '本次迁移运行重新建立的证据');
+        await expect(evidence).toContainText('上一次迁移运行的结论不会被带到这一次');
+        await expect(evidence).toContainText('连接检查');
+        await expect(evidence).toContainText('校验通过');
+        await expect(evidence).toContainText('写冻结确认');
+        await expect(evidence).toContainText('责任人 li.na');
+        await expect(evidence).toContainText('源基线');
+        await expect(evidence).toContainText('预检 可迁移');
+        await expect(evidence).toContainText('表写入契约 v');
 
-    // The history now holds both attempts, side by side, each with its own conclusion.
-    await page.getByRole('link', { name: '返回迁移运行列表' }).click();
-    const history = page.getByRole('region', { name: '迁移运行' }).first();
-    await expect(history).toBeVisible({ timeout: FIRST_PAINT_MS });
-    await expect(page.getByText('该迁移任务共有 2 次迁移运行')).toBeVisible();
-    await expect(history).toContainText('首次迁移');
-    await expect(history).toContainText(`重新迁移（对 ${runId}）`);
-    await expect(page).toHaveURL(new RegExp(`/tasks/${taskId}/runs`));
+        // The history now holds both attempts, side by side, each with its own conclusion.
+        await page.getByRole('link', { name: '返回迁移运行列表' }).click();
+        const history = page.getByRole('region', { name: '迁移运行' }).first();
+        await expect(history).toBeVisible({ timeout: FIRST_PAINT_MS });
+        await expect(page.getByText('该迁移任务共有 2 次迁移运行')).toBeVisible();
+        await expect(history).toContainText('首次迁移');
+        await expect(history).toContainText(`重新迁移（对 ${runId}）`);
+        await expect(page).toHaveURL(new RegExp(`/tasks/${taskId}/runs`));
 
-    // And the run it came from is exactly where it was: same scope, same origin, and it
-    // is still the task's first attempt rather than a record that was reused.
-    await history.getByRole('link', { name: runId }).click();
-    await expect(page.getByRole('heading', { name: '运行监控' })).toBeVisible({
-      timeout: FIRST_PAINT_MS,
-    });
-    await expect(page).toHaveURL(new RegExp(`/runs/${runId}`));
-    const originalOrigin = panel(page, '本次迁移运行的来源');
-    await expect(originalOrigin).toContainText('这是执行确认生成的首个迁移运行');
-    const originalCounts = await scopeCountsOf(page);
-    expect(originalCounts.run).toBe(originalCounts.task);
-    expect(originalCounts.run).toBeGreaterThan(counts.run);
+        // And the run it came from is exactly where it was: same scope, same origin, and it
+        // is still the task's first attempt rather than a record that was reused.
+        await history.getByRole('link', { name: runId }).click();
+        await expect(page.getByRole('heading', { name: '运行监控' })).toBeVisible({
+          timeout: FIRST_PAINT_MS,
+        });
+        await expect(page).toHaveURL(new RegExp(`/runs/${runId}`));
+        const originalOrigin = panel(page, '本次迁移运行的来源');
+        await expect(originalOrigin).toContainText('这是执行确认生成的首个迁移运行');
+        const originalCounts = await scopeCountsOf(page);
+        expect(originalCounts.run).toBe(originalCounts.task);
+        expect(originalCounts.run).toBeGreaterThan(counts.run);
 
-    expect(newRunUrl).toContain('/runs/');
-  });
-
-  test('every historical 迁移运行 is revisitable straight from its URL', async ({ page }) => {
-    // A seeded 迁移任务 whose second run migrated 18 of its 1164 tables again. Both
-    // attempts are addressable without walking anything, which is what makes a run a
-    // record rather than a screen.
-    const historicalTaskId = 'task-orders-analytics';
-    await page.goto(`/tasks/${historicalTaskId}/runs?scenario=default`);
-    await expect(page.getByText('该迁移任务共有 2 次迁移运行')).toBeVisible({
-      timeout: FIRST_PAINT_MS,
-    });
-
-    await page.goto(`/runs/${historicalTaskId}-run-1?scenario=default`);
-    await expect(panel(page, '本次迁移运行的来源')).toContainText(
-      '这是执行确认生成的首个迁移运行',
-      { timeout: FIRST_PAINT_MS },
+        expect(newRunUrl).toContain('/runs/');
+      },
     );
 
-    await page.goto(`/runs/${historicalTaskId}-run-2?scenario=default`);
-    const second = panel(page, '本次迁移运行的来源');
-    await expect(second).toContainText('这是一次重新迁移', { timeout: FIRST_PAINT_MS });
-    await expect(second).toContainText(`没有修改也没有重试迁移运行 ${historicalTaskId}-run-1`);
-    // 18 tables of a 1164-table task: its own scope, and the task's beside it.
-    const counts = await scopeCountsOf(page);
-    expect(counts.run).toBeLessThan(counts.task);
-    // And the run it names is one link away, still recorded as the first attempt.
-    await page.getByRole('link', { name: '查看上一次迁移运行' }).click();
-    await expect(panel(page, '本次迁移运行的来源')).toContainText('这是执行确认生成的首个迁移运行');
-  });
-});
+    test('every historical 迁移运行 is revisitable straight from its URL', async ({ page }) => {
+      // A seeded 迁移任务 whose second run migrated 18 of its 1164 tables again. Both
+      // attempts are addressable without walking anything, which is what makes a run a
+      // record rather than a screen.
+      const historicalTaskId = 'task-orders-analytics';
+      await page.goto(`/tasks/${historicalTaskId}/runs?scenario=default`);
+      await expect(page.getByText('该迁移任务共有 2 次迁移运行')).toBeVisible({
+        timeout: FIRST_PAINT_MS,
+      });
+
+      await page.goto(`/runs/${historicalTaskId}-run-1?scenario=default`);
+      await expect(panel(page, '本次迁移运行的来源')).toContainText(
+        '这是执行确认生成的首个迁移运行',
+        { timeout: FIRST_PAINT_MS },
+      );
+
+      await page.goto(`/runs/${historicalTaskId}-run-2?scenario=default`);
+      const second = panel(page, '本次迁移运行的来源');
+      await expect(second).toContainText('这是一次重新迁移', { timeout: FIRST_PAINT_MS });
+      await expect(second).toContainText(`没有修改也没有重试迁移运行 ${historicalTaskId}-run-1`);
+      // 18 tables of a 1164-table task: its own scope, and the task's beside it.
+      const counts = await scopeCountsOf(page);
+      expect(counts.run).toBeLessThan(counts.task);
+      // And the run it names is one link away, still recorded as the first attempt.
+      await page.getByRole('link', { name: '查看上一次迁移运行' }).click();
+      await expect(panel(page, '本次迁移运行的来源')).toContainText(
+        '这是执行确认生成的首个迁移运行',
+      );
+    });
+  },
+);
 
 test.describe('重新迁移的候选是有边界的', () => {
   test('never offers a 预检排除项, because it never migrated', async ({ page }) => {

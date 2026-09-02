@@ -54,109 +54,117 @@ function unresolvedRow(page: Page): Locator {
   return reportTable(page).getByRole('row').filter({ hasText: '校验处置' }).first();
 }
 
-test.describe('Gate 8：技术结论与校验处置在视觉与语义上都可区分', () => {
-  test('a recorded 校验处置 leaves the technical conclusion exactly where it was', async ({
-    page,
-  }) => {
-    // 「校验无法判定」, straight from the URL: nothing has to be performed first.
-    await openReport(page, 'inconclusive-validation');
-    await page.getByRole('tab', { name: '只看未通过' }).click();
+test.describe(
+  'Gate 8：技术结论与校验处置在视觉与语义上都可区分',
+  { tag: ['@gate', '@gate-8'] },
+  () => {
+    test(
+      'a recorded 校验处置 leaves the technical conclusion exactly where it was',
+      { tag: '@blocked-8' },
+      async ({ page }) => {
+        // 「校验无法判定」, straight from the URL: nothing has to be performed first.
+        await openReport(page, 'inconclusive-validation');
+        await page.getByRole('tab', { name: '只看未通过' }).click();
 
-    const table = reportTable(page);
-    await expect(table).toContainText('无法判定');
-    const conclusionsBefore = await table.getByText('无法判定', { exact: true }).count();
-    expect(conclusionsBefore).toBeGreaterThan(0);
+        const table = reportTable(page);
+        await expect(table).toContainText('无法判定');
+        const conclusionsBefore = await table.getByText('无法判定', { exact: true }).count();
+        expect(conclusionsBefore).toBeGreaterThan(0);
 
-    // The decision is an action of its own, named as itself and offered per table.
-    await table
-      .getByRole('button', { name: /记录 .+ 的校验处置/ })
-      .first()
-      .click();
-    const dialog = page.getByRole('dialog', { name: '记录校验处置' });
-    await expect(dialog).toContainText('不会改变这个技术结论');
+        // The decision is an action of its own, named as itself and offered per table.
+        await table
+          .getByRole('button', { name: /记录 .+ 的校验处置/ })
+          .first()
+          .click();
+        const dialog = page.getByRole('dialog', { name: '记录校验处置' });
+        await expect(dialog).toContainText('不会改变这个技术结论');
 
-    // 「An operator's **audited** decision」: neither field is optional.
-    const confirm = dialog.getByRole('button', { name: '记录校验处置' });
-    await expect(confirm).toBeDisabled();
-    await dialog.getByLabel('责任人').fill('li.na');
-    await dialog.getByLabel('理由').fill('差异已在变更评审 CHG-2026-0901-2 中逐行复核。');
-    await expect(confirm).toBeEnabled();
-    await confirm.click();
-    await expect(dialog).toHaveCount(0);
+        // 「An operator's **audited** decision」: neither field is optional.
+        const confirm = dialog.getByRole('button', { name: '记录校验处置' });
+        await expect(confirm).toBeDisabled();
+        await dialog.getByLabel('责任人').fill('li.na');
+        await dialog.getByLabel('理由').fill('差异已在变更评审 CHG-2026-0901-2 中逐行复核。');
+        await expect(confirm).toBeEnabled();
+        await confirm.click();
+        await expect(dialog).toHaveCount(0);
 
-    // Semantically distinguishable: the decision is recorded in its own column and its own
-    // section, carrying the result it did not change.
-    await expect(table).toContainText('已记录校验处置');
-    await expect(table).toContainText('li.na');
-    const disposition = panel(page, '校验处置');
-    await expect(disposition).toContainText('责任人 li.na');
-    await expect(disposition).toContainText('技术结论仍然是无法判定');
-    await expect(disposition).toContainText('逐行复核');
+        // Semantically distinguishable: the decision is recorded in its own column and its own
+        // section, carrying the result it did not change.
+        await expect(table).toContainText('已记录校验处置');
+        await expect(table).toContainText('li.na');
+        const disposition = panel(page, '校验处置');
+        await expect(disposition).toContainText('责任人 li.na');
+        await expect(disposition).toContainText('技术结论仍然是无法判定');
+        await expect(disposition).toContainText('逐行复核');
 
-    // And the technical conclusion is still exactly what the 校验执行 concluded.
-    await expect(table).toContainText('无法判定');
-    expect(await table.getByText('无法判定', { exact: true }).count()).toBe(conclusionsBefore);
-    // The one thing the whole audit chain rests on: no laundering into a pass. `exact`,
-    // because 未通过 contains 通过 — the row may hold neither, and must hold no 通过.
-    await expect(unresolvedRow(page).getByText('通过', { exact: true })).toHaveCount(0);
-  });
+        // And the technical conclusion is still exactly what the 校验执行 concluded.
+        await expect(table).toContainText('无法判定');
+        expect(await table.getByText('无法判定', { exact: true }).count()).toBe(conclusionsBefore);
+        // The one thing the whole audit chain rests on: no laundering into a pass. `exact`,
+        // because 未通过 contains 通过 — the row may hold neither, and must hold no 通过.
+        await expect(unresolvedRow(page).getByText('通过', { exact: true })).toHaveCount(0);
+      },
+    );
 
-  test('a disposed 未通过 is still 未通过, and the run does not read as succeeded', async ({
-    page,
-  }) => {
-    await openReport(page, 'accepted-risk');
-    await page.getByRole('tab', { name: '只看已记录校验处置' }).click();
+    test('a disposed 未通过 is still 未通过, and the run does not read as succeeded', async ({
+      page,
+    }) => {
+      await openReport(page, 'accepted-risk');
+      await page.getByRole('tab', { name: '只看已记录校验处置' }).click();
 
-    const table = reportTable(page);
+      const table = reportTable(page);
 
-    // **Separate columns**, named as the two different things they are. A whole-table
-    // `toContainText` would be satisfied by a single merged cell reading
-    // 「FAIL（已接受风险）」 — which is the exact failure Gate 8 exists to prevent, so the
-    // columns are located by name and asserted to be two.
-    const headers = await table.getByRole('columnheader').allInnerTexts();
-    const conclusionColumn = headers.findIndex((header) => header.trim() === '校验执行技术结论');
-    const dispositionColumn = headers.findIndex((header) => header.trim() === '校验处置');
-    const outcomeColumn = headers.findIndex((header) => header.trim() === '表迁移单元技术结果');
-    expect(conclusionColumn, '校验执行技术结论 是一列').toBeGreaterThanOrEqual(0);
-    expect(dispositionColumn, '校验处置 是它自己的一列').toBeGreaterThanOrEqual(0);
-    expect(outcomeColumn, '表迁移单元技术结果 是第三列').toBeGreaterThanOrEqual(0);
-    expect(new Set([conclusionColumn, dispositionColumn, outcomeColumn]).size).toBe(3);
+      // **Separate columns**, named as the two different things they are. A whole-table
+      // `toContainText` would be satisfied by a single merged cell reading
+      // 「FAIL（已接受风险）」 — which is the exact failure Gate 8 exists to prevent, so the
+      // columns are located by name and asserted to be two.
+      const headers = await table.getByRole('columnheader').allInnerTexts();
+      const conclusionColumn = headers.findIndex((header) => header.trim() === '校验执行技术结论');
+      const dispositionColumn = headers.findIndex((header) => header.trim() === '校验处置');
+      const outcomeColumn = headers.findIndex((header) => header.trim() === '表迁移单元技术结果');
+      expect(conclusionColumn, '校验执行技术结论 是一列').toBeGreaterThanOrEqual(0);
+      expect(dispositionColumn, '校验处置 是它自己的一列').toBeGreaterThanOrEqual(0);
+      expect(outcomeColumn, '表迁移单元技术结果 是第三列').toBeGreaterThanOrEqual(0);
+      expect(new Set([conclusionColumn, dispositionColumn, outcomeColumn]).size).toBe(3);
 
-    // The row where the decision was actually taken, and the two cells in it.
-    const disposed = table.getByRole('row').filter({ hasText: '已记录校验处置' }).first();
-    const cells = disposed.getByRole('cell');
-    const conclusionCell = cells.nth(conclusionColumn);
-    const dispositionCell = cells.nth(dispositionColumn);
+      // The row where the decision was actually taken, and the two cells in it.
+      const disposed = table.getByRole('row').filter({ hasText: '已记录校验处置' }).first();
+      const cells = disposed.getByRole('cell');
+      const conclusionCell = cells.nth(conclusionColumn);
+      const dispositionCell = cells.nth(dispositionColumn);
 
-    // Semantically distinguishable: a screen reader reaching the conclusion cell is told
-    // the conclusion and nothing else — not 「未通过（已接受风险）」, which would be the
-    // decision qualifying the result.
-    await expect(conclusionCell).toHaveAccessibleName('未通过');
-    // …and the disposition cell never states a technical conclusion of its own.
-    await expect(dispositionCell).not.toHaveText(/^(PASS|FAIL|INCONCLUSIVE|通过|未通过|无法判定)$/);
-    await expect(dispositionCell).toContainText('已记录校验处置');
+      // Semantically distinguishable: a screen reader reaching the conclusion cell is told
+      // the conclusion and nothing else — not 「未通过（已接受风险）」, which would be the
+      // decision qualifying the result.
+      await expect(conclusionCell).toHaveAccessibleName('未通过');
+      // …and the disposition cell never states a technical conclusion of its own.
+      await expect(dispositionCell).not.toHaveText(
+        /^(PASS|FAIL|INCONCLUSIVE|通过|未通过|无法判定)$/,
+      );
+      await expect(dispositionCell).toContainText('已记录校验处置');
 
-    // Visually distinguishable, asserted as the thing ADR-0014 actually requires rather
-    // than as a class name: the conclusion carries a symbol, the disposition does not.
-    // A judgement and a decision are drawn in two different vocabularies.
-    expect(await conclusionCell.locator('svg').count()).toBeGreaterThan(0);
-    expect(await dispositionCell.locator('svg').count()).toBe(0);
+      // Visually distinguishable, asserted as the thing ADR-0014 actually requires rather
+      // than as a class name: the conclusion carries a symbol, the disposition does not.
+      // A judgement and a decision are drawn in two different vocabularies.
+      expect(await conclusionCell.locator('svg').count()).toBeGreaterThan(0);
+      expect(await dispositionCell.locator('svg').count()).toBe(0);
 
-    // And the third column is a third fact. 完成，已接受风险 beside a 未通过 is the report
-    // working, not a contradiction — and neither of them is 迁移完成.
-    await expect(cells.nth(outcomeColumn)).toHaveText('完成，已接受风险');
-    await expect(table).not.toContainText('迁移完成');
+      // And the third column is a third fact. 完成，已接受风险 beside a 未通过 is the report
+      // working, not a contradiction — and neither of them is 迁移完成.
+      await expect(cells.nth(outcomeColumn)).toHaveText('完成，已接受风险');
+      await expect(table).not.toContainText('迁移完成');
 
-    await expect(panel(page, '校验处置')).toContainText('技术结论仍然是未通过');
-    // The count, too: a disposed 未通过 is counted as one and never quietly moved.
-    await expect(panel(page, '技术结论分布')).toContainText('未通过');
-  });
+      await expect(panel(page, '校验处置')).toContainText('技术结论仍然是未通过');
+      // The count, too: a disposed 未通过 is counted as one and never quietly moved.
+      await expect(panel(page, '技术结论分布')).toContainText('未通过');
+    });
 
-  test('states the rule in words, beside the decision it governs', async ({ page }) => {
-    await openReport(page, 'accepted-risk');
-    await expect(page.getByText('不会把技术结论改写为通过').first()).toBeVisible();
-  });
-});
+    test('states the rule in words, beside the decision it governs', async ({ page }) => {
+      await openReport(page, 'accepted-risk');
+      await expect(page.getByText('不会把技术结论改写为通过').first()).toBeVisible();
+    });
+  },
+);
 
 test.describe('三个结论、预检排除项、以及三种「没跑」', () => {
   test('states the run 选定范围 the conclusions cover', async ({ page }) => {

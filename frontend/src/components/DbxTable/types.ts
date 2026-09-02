@@ -176,6 +176,17 @@ export interface DbxTableProps<TRow> {
   readonly onRowActivate?: (row: TRow) => void;
   /** True while the first read is in flight: the table shows skeleton rows, not a blank. */
   readonly loading?: boolean;
+  /**
+   * What is being read, as a sentence, announced while `loading` holds.
+   *
+   * Skeleton rows are a state for a reader who can see them and nothing at all for a
+   * reader who cannot: a screen reader announces an empty grid, which is indistinguishable
+   * from 「there are no rows」. #42's state-coverage matrix requires every key view's
+   * loading state to be reachable from a URL **and readable in domain language**, so the
+   * sentence each view already owns — 「正在读取迁移任务。」 and its siblings — is rendered
+   * here rather than left unused in `zh-CN.ts`.
+   */
+  readonly loadingDescription?: string;
   readonly error?: DbxTableErrorCopy | null;
   readonly empty: DbxTableEmptyCopy;
   /**

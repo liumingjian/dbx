@@ -83,37 +83,41 @@ async function openContractedTable(page: Page): Promise<void> {
   await expect(page.getByRole('region', { name: targetDdl })).toContainText('CREATE TABLE');
 }
 
-test.describe('Gate 4: DDL 只读', () => {
-  test('offers nothing to type into, and a keystroke changes nothing', async ({ page }) => {
-    await draftAtTables(page);
-    await openContractedTable(page);
+test.describe('Gate 4: DDL 只读', { tag: ['@gate', '@gate-4'] }, () => {
+  test(
+    'offers nothing to type into, and a keystroke changes nothing',
+    { tag: '@blocked-4' },
+    async ({ page }) => {
+      await draftAtTables(page);
+      await openContractedTable(page);
 
-    for (const name of [sourceDdl, targetDdl]) {
-      const pane = page.getByRole('region', { name });
-      await expect(pane).toContainText('CREATE TABLE');
+      for (const name of [sourceDdl, targetDdl]) {
+        const pane = page.getByRole('region', { name });
+        await expect(pane).toContainText('CREATE TABLE');
 
-      // Nothing in the pane accepts input. This is Gate 4 stated as a shape: a read-only
-      // flag can be flipped, an absent editor cannot.
-      await expect(pane.locator('textarea')).toHaveCount(0);
-      await expect(pane.locator('input')).toHaveCount(0);
-      await expect(pane.locator('[contenteditable]')).toHaveCount(0);
+        // Nothing in the pane accepts input. This is Gate 4 stated as a shape: a read-only
+        // flag can be flipped, an absent editor cannot.
+        await expect(pane.locator('textarea')).toHaveCount(0);
+        await expect(pane.locator('input')).toHaveCount(0);
+        await expect(pane.locator('[contenteditable]')).toHaveCount(0);
 
-      // The whole pane's rendered text, before and after. Reading only the `<pre>` would
-      // have passed even if the keystrokes never landed anywhere near it — and a `<pre>`
-      // takes no focus, so where they land is not something this test can assume. What is
-      // asserted is the operator-visible fact: nothing the DBA typed shows up on the DDL.
-      const before = await pane.innerText();
-      await pane.locator('pre').click();
-      await page.keyboard.type('DROP TABLE order_item;');
-      await page.keyboard.press('Enter');
-      await page.keyboard.press('Backspace');
-      expect(await pane.innerText()).toBe(before);
-      await expect(pane).not.toContainText('DROP TABLE order_item');
-    }
+        // The whole pane's rendered text, before and after. Reading only the `<pre>` would
+        // have passed even if the keystrokes never landed anywhere near it — and a `<pre>`
+        // takes no focus, so where they land is not something this test can assume. What is
+        // asserted is the operator-visible fact: nothing the DBA typed shows up on the DDL.
+        const before = await pane.innerText();
+        await pane.locator('pre').click();
+        await page.keyboard.type('DROP TABLE order_item;');
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Backspace');
+        expect(await pane.innerText()).toBe(before);
+        await expect(pane).not.toContainText('DROP TABLE order_item');
+      }
 
-    // And the interface says why, so the operator does not go looking for the editor.
-    await expect(page.getByText(/DDL 是表写入契约的只读完整呈现/)).toBeVisible();
-  });
+      // And the interface says why, so the operator does not go looking for the editor.
+      await expect(page.getByText(/DDL 是表写入契约的只读完整呈现/)).toBeVisible();
+    },
+  );
 
   test('holds the object tree, both DDLs and the findings on one screen', async ({ page }) => {
     // Story 38, and the stated reason the wizard is a full page rather than a wide
