@@ -1,5 +1,7 @@
 # Kafka and Kafka Connect as the sole v1 data plane
 
+> **状态：部分修订（2026-09-09）。** 产品负责人裁定 **v1 只支持平台内置的单机 Kafka / Connect / Schema Registry**，「对接客户已有集群」整体推到 v2（见地图 #1 的 Out of scope）。本文件「Deployment shapes」一节中「A customer-managed deployment is accepted only after the fresh capability, configuration, secret-projection, and transport checks … succeed」一句在 v1 **不成立**：v1 根本不接受 customer-managed deployment，那些检查因此没有适用对象。ADR-0003 中与外部集群相关的主动能力验收（external Kafka/Connect admission、external-cluster 权限要求）同样在 v1 悬置。数据平面本身的结论（Kafka + Connect 是唯一通路、DBX 是控制平面、绝不成为第二个搬运引擎）**不受影响，仍然有效**。v2 重开外部集群时，本节与 ADR-0003 的对应条款直接恢复效力，不需要重新论证。
+
 DBX v1 moves every nonempty supported source row through one data plane: Confluent JDBC Source writes to Kafka and Confluent JDBC Sink writes from Kafka to PostgreSQL. DBX is the control plane. It discovers metadata, proves preconditions, assembles contracts, creates target structures and topics, generates connector configurations, schedules boxes, observes completion, validates results, diagnoses failures, and cleans up resources; it never becomes a second record-copy engine.
 
 ## Ownership and boundaries
