@@ -1,6 +1,6 @@
 # IBM Carbon as the frontend design system, with a Chinese typography layer
 
-> **状态：已被推翻，待重写（2026-09-08）。** 产品负责人决定前端整体替换为 `dbx-prototype` 高保真原型，并以该原型为基线标准；该原型的底座是 Ant Design 5 + Carbon 派生皮肤。本 ADR 选定 `@carbon/react` v11 的结论因此失效，中文排版层的结论需在新底座上重新表述。重写工作见决策票 #45 的后继票；在重写落地前，本文件的选型结论**不得**作为新前端的实现依据。
+> **Status: superseded by [ADR-0017](0017-ant-design-substrate-conclusion-indicators-and-chinese-typography.md)** (#47). Read ADR-0017 for the current design system; this file is kept as history.
 
 DBX v1 builds its operator interface on IBM Carbon (`@carbon/react` 1.x, v11). This supersedes the frontend premise recorded in the initiative map, which pinned Ant Design 5. The remaining stack from that premise — React 18, TypeScript, Vite, TanStack Query — is unchanged.
 
