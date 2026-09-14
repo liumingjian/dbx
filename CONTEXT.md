@@ -198,7 +198,7 @@ _Avoid_: Maintenance mode, pause, permanent checkbox
 _中文_: 写冻结
 
 **Task write freeze**:
-A migration task's write-freeze commitment over its whole scope, spanning every run until the task conclusion is reached, with an accountable operator and deadline reconfirmed before each run (ADR-0023). Each run's own write freeze still applies within it.
+A migration task's write-freeze commitment over its whole scope, spanning every run until the task conclusion is reached, with an accountable operator and deadline reconfirmed before each run (ADR-0024). Each run's own write freeze still applies within it.
 _Avoid_: Long freeze, batch freeze, 冻结期
 _中文_: 整库冻结承诺
 
@@ -334,8 +334,8 @@ _Avoid_: Run state, progress state
 _中文_: 迁移运行状态
 
 **Task conclusion**:
-The projection of each in-scope table's latest unit result, overlaid with the closing drift check, onto one verdict for the whole migration task (ADR-0023). It is green only when every table is 迁移完成 and no drift was found, and it never rewrites a run's results.
-_Avoid_: Task status, overall success, 全部完成, 整库完成
+The projection of each in-scope table's latest unit result, overlaid with the closing drift check, onto one verdict for the whole migration task (ADR-0024). It says how the migration turned out; migration task status says whether the task is still active. It is green only when every table is 迁移完成 and no drift was found, and it never rewrites a run's results.
+_Avoid_: Migration task status, overall success, 全部完成, 整库完成
 _中文_: 整库结论
 
 **Table migration phase**:

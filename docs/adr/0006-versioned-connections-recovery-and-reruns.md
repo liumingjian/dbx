@@ -1,5 +1,5 @@
 ---
-status: accepted (discard clause amended by ADR-0023: task-level abandonment drops DBX-owned target tables)
+status: accepted (discard clause amended by ADR-0023: task-level abandonment drops DBX-owned target tables; run-scoped write-freeze clause amended by ADR-0024: a task write freeze spans cross-window runs)
 ---
 
 # Versioned connections, evidence-based recovery, and clean reruns
