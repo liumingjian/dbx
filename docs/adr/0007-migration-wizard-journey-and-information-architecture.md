@@ -1,6 +1,6 @@
 # Migration wizard journey and information architecture
 
-> **状态：待重写（2026-09-08）。** 产品负责人决定前端整体替换为 `dbx-prototype` 高保真原型，并以该原型为基线标准；本 ADR 记录的六阶段线性旅程与该原型的 5 步向导 + 控制台式信息架构冲突。重写工作见决策票 #45 的后继票；在重写落地前，本文件的旅程与 IA 结论**不得**作为新前端的实现依据。其中「执行前确认源端写冻结」「以表迁移单元为中心的监控与验证」「区分 PASS / FAIL / INCONCLUSIVE」三项是产品负责人确认的不可让渡底线，重写后仍须成立。
+> **Status: superseded by [ADR-0020](0020-five-stage-wizard-and-task-console.md)** (#48). Read ADR-0020 for the current wizard journey and information architecture; this file is kept as history.
 
 DBX v1 uses a linear migration wizard as the primary operator journey. The intended operator is a DBA who may not write application code, so the product must expose migration scope, safety evidence, and required decisions without exposing execution-platform internals.
 
