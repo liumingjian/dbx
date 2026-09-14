@@ -103,7 +103,7 @@ _中文_: 运行状况
 
 **Table write contract**:
 The immutable, single-table write intent that DBX must prove before starting a Sink, derived from approved source metadata, preflight findings, and mapping rules. DDL is one rendering of this contract, not an independent configuration.
-_Avoid_: Editable DDL, sink schema
+_Avoid_: Editable DDL, sink schema, 建表选项 (DDL options)
 _中文_: 表写入契约
 
 **Structural proof**:
@@ -112,7 +112,7 @@ _Avoid_: Probe insert, table exists check
 _中文_: 结构证明
 
 **Supplemental SQL**:
-The executable post-migration script that preserves source metadata for target structures deliberately outside the v1 writable-table contract, such as unique constraints, ordinary indexes, foreign keys, comments, and collation-related work. DBX v1 delivers it but does not execute it as part of migration.
+The task-level post-migration script, in target names, that preserves source structures deliberately outside the v1 writable-table contract: unique constraints, ordinary indexes, foreign keys, comments, and what needs manual handling. DBX delivers it but never executes it.
 _Avoid_: Migrated constraints, automatic post-DDL
 _中文_: 补建 SQL
 
