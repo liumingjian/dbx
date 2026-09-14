@@ -1,5 +1,7 @@
 # Error translation and diagnostic evidence
 
+> **Status: amended in part by [ADR-0028](0028-diagnostic-package-scopes-manifest-and-no-values.md)** (#56). ADR-0028 governs the diagnostic package's scopes, trigger, manifest, and bound.
+
 DBX v1 separates observed failure facts, their operator-facing interpretation, and workflow state. This preserves truthful table timelines while keeping translation rules evolvable.
 
 ## Decision
