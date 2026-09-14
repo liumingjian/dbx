@@ -30,8 +30,9 @@ If two repository documents conflict, implementation stops until the documents a
 | Table write contract, platform DDL, and Sink contract | [ADR-0011](adr/0011-platform-owned-ddl-and-table-write-contract.md) |
 | Spring JDBC persistence without JPA | [ADR-0012](adr/0012-spring-jdbc-no-jpa.md) |
 | Whole-table execution without sharding | [ADR-0013](adr/0013-single-table-execution-granularity.md) |
-| Environment check: detect and explain, no host control | [ADR-0018](adr/0018-environment-check-detects-and-explains-without-host-control.md) |
 | Duration estimate, remaining-time estimate, and reference throughput band | [ADR-0019](adr/0019-migration-duration-estimate-before-the-run.md) |
+| Environment check: detect and explain, no host control | [ADR-0027](adr/0027-environment-check-detects-and-explains-without-host-control.md) |
+| Diagnostic package: scopes, manifest, and no data values | [ADR-0028](adr/0028-diagnostic-package-scopes-manifest-and-no-values.md) |
 
 Detailed mapping, DDL, validation, and identifier rules below canonicalize the accepted conclusions of [“MySQL 8.0 → PostgreSQL 15 类型映射矩阵定稿”](https://github.com/liumingjian/dbx/issues/11), [“DDL 生成器与 Sink 写入契约的一致性保证方案”](https://github.com/liumingjian/dbx/issues/12), [“数据校验规格定稿”](https://github.com/liumingjian/dbx/issues/16), [“MySQL database → PG schema 落点规则与标识符策略”](https://github.com/liumingjian/dbx/issues/17), and [“DDL 的列属性与表约束规格”](https://github.com/liumingjian/dbx/issues/23). Later end-to-end evidence at commit [`9768f8a`](https://github.com/liumingjian/dbx/commit/9768f8ac6dc6eb59ec68d0817ede2803c93e6a19) supersedes earlier research assumptions where they disagree.
 
@@ -342,7 +343,7 @@ The green wording is: **all enabled v1 validations passed**. Reports state cover
 
 ADR-0005 separates error occurrence, diagnosis, and workflow outcome. Structured DBX evidence outranks protocol/database/HTTP codes, deep causes, and constrained text patterns. The first release ships 20 versioned external-translation rule families with positive, negative, overlap, and redaction fixtures. Routing snapshots provide coordinates; shared failures remain box-scoped when table attribution is unproven.
 
-The operator sees what happened, where, affected scope, and one action, with technical evidence expandable. Diagnostic packages are local, bounded, and redacted; credentials and record/parameter values never enter them.
+The operator sees what happened, where, affected scope, and one action, with technical evidence expandable. Diagnostic packages are local, bounded, and redacted; credentials and record/parameter values never enter them. Their scopes, trigger, manifest, and bound are in [ADR-0028](adr/0028-diagnostic-package-scopes-manifest-and-no-values.md).
 
 ## 10. Operator journey
 

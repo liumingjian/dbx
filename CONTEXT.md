@@ -299,7 +299,7 @@ _Avoid_: Topic parsing, inferred table
 _中文_: 路由快照
 
 **Diagnostic package**:
-A local, bounded, redacted export of run context, timeline, rule evidence, configuration fingerprints, versions, and raw failure details for support. It never includes credentials, record values, or automatic external upload.
+A local, bounded, redacted export for support, scoped to the installation or to one migration run (a run package always includes the installation part), with a manifest naming what it holds and excludes. It never includes credentials, record or key values, or automatic external upload.
 _Avoid_: Log bundle, data dump
 _中文_: 诊断包
 
