@@ -1,6 +1,8 @@
 # Platform-owned DDL and table write contract
 
 > **Status: amended in part by [ADR-0018](0018-backend-module-boundaries-and-agent-working-surface.md)** (#57). The PostgreSQL-specific Sink settings, default whitelist, and identity rules below belong to the PostgreSQL target dialect in `dialect`; the contract reaches them only through the dialect interface.
+>
+> **Gap filled by [ADR-0025](0025-read-only-contract-rendering-and-task-level-supplemental-sql.md)** (#51): where the read-only rendering and structural proof appear, and supplemental SQL's content, timing, and delivery.
 
 DBX v1 creates and proves every target table before Kafka Connect Sink may write to it. The immutable table write contract is the single source of truth for DDL rendering, target structural proof, routing, Connect schema and JDBC binding compatibility, and Sink configuration. DDL is a complete read-only rendering of that contract, never a second editable configuration.
 
