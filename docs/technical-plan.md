@@ -31,6 +31,7 @@ If two repository documents conflict, implementation stops until the documents a
 | Spring JDBC persistence without JPA | [ADR-0012](adr/0012-spring-jdbc-no-jpa.md) |
 | Whole-table execution without sharding | [ADR-0013](adr/0013-single-table-execution-granularity.md) |
 | Environment check: detect and explain, no host control | [ADR-0018](adr/0018-environment-check-detects-and-explains-without-host-control.md) |
+| Duration estimate, remaining-time estimate, and reference throughput band | [ADR-0019](adr/0019-migration-duration-estimate-before-the-run.md) |
 
 Detailed mapping, DDL, validation, and identifier rules below canonicalize the accepted conclusions of [“MySQL 8.0 → PostgreSQL 15 类型映射矩阵定稿”](https://github.com/liumingjian/dbx/issues/11), [“DDL 生成器与 Sink 写入契约的一致性保证方案”](https://github.com/liumingjian/dbx/issues/12), [“数据校验规格定稿”](https://github.com/liumingjian/dbx/issues/16), [“MySQL database → PG schema 落点规则与标识符策略”](https://github.com/liumingjian/dbx/issues/17), and [“DDL 的列属性与表约束规格”](https://github.com/liumingjian/dbx/issues/23). Later end-to-end evidence at commit [`9768f8a`](https://github.com/liumingjian/dbx/commit/9768f8ac6dc6eb59ec68d0817ede2803c93e6a19) supersedes earlier research assumptions where they disagree.
 
@@ -286,7 +287,7 @@ Planned transfer bytes use `1.5 * max(MySQL DATA_LENGTH, frozen row count * aver
 
 Kafka disk uses 60% of available capacity for new admission. At 80% filesystem usage, DBX pauses new admission. At 90% usage or under 10 GB free, DBX stops producing Sources, allows healthy Sinks to drain, and fails affected execution rather than deleting unvalidated data. Retention is not backpressure or cleanup.
 
-Progress samples topic and Sink offsets every 10 seconds. Expensive target counts occur at completion, validation, recheck, or manual diagnosis boundaries. Estimates are confidence-qualified ranges shown only after useful observations; they never drive correctness or `STUCK` decisions.
+Progress samples topic and Sink offsets every 10 seconds. Expensive target counts occur at completion, validation, recheck, or manual diagnosis boundaries. Time estimates follow ADR-0019: a duration estimate before any run (from this deployment's history, else the shipped reference throughput band, always with the minimum window of the largest table's single stream), then a remaining-time estimate that replays the unfinished scheduling plan at observed per-stream throughput, falling back to "estimate unavailable" with its reason when no longer credible. One backend estimator feeds every surface. Estimates never drive correctness or `STUCK` decisions.
 
 Read/write completion, connector ordering, stable-poll rules, two-minute warning, ten-minute `STUCK`, idempotent REST reconciliation, emulated one-pass bulk behavior, and cleanup retries are exclusively defined by ADR-0001. Loss of required connector/topic/offset/target continuity invokes ADR-0006: the old run fails safely and a selected-table rerun starts from a clean target generation.
 
@@ -350,8 +351,8 @@ The primary experience is ADR-0007's six-stage linear wizard:
 1. **Connections and database** — select saved verified connections, one source database, and one target schema.
 2. **Migration scope** — searchable, deterministic table selection and explicit exclusions; no regular expressions.
 3. **Per-table configuration and preflight** — automatic defaults, structured exceptions, exact evidence, warnings, contract and read-only DDL.
-4. **Execution confirmation** — summarize scope, exclusions, contracts, unresolved findings, and collect the accountable expiring write-freeze confirmation.
-5. **Run monitoring** — table migration units, phases, progress, outcomes, updates, and timelines; boxes/connectors/topics remain internal.
+4. **Execution confirmation** — summarize scope, exclusions, contracts, unresolved findings, the duration estimate with its minimum window, and collect the accountable expiring write-freeze confirmation; an estimate upper bound beyond the freeze's time limit warns but never blocks. The duration estimate first appears once scope is settled and is kept on the migration draft.
+5. **Run monitoring** — table migration units, phases, progress, remaining-time estimate, outcomes, updates, and timelines; boxes/connectors/topics remain internal.
 6. **Validation report** — technical pass/fail/inconclusive, exclusions, coverage, disposition, diagnostics, and new-run remigration actions.
 
 The stage sequence is a safety gate, not decorative navigation. Unsupported or inconclusive preflight cannot be acknowledged away; DDL cannot be edited; Sink cannot start before structural proof; accepted risk cannot change a technical result; remigration creates a new run.
@@ -390,7 +391,7 @@ A release includes third-party notices and an SBOM, fixes the tested component/i
 - **Consistency**: source stability depends on an accountable external write freeze. DBX cannot prove that same-count updates did not occur.
 - **Mode**: offline one-time full copy only; no CDC or incremental synchronization.
 - **Rerun**: a rerun creates a new migration run and fully recopies each selected table after controlled target clearing. No data checkpoint resume after lost continuity.
-- **Single-table throughput**: no single-table sharding. One table is limited by one extraction stream and its Source/Kafka/Sink/target path; large records additionally use single-record polling. No throughput SLA is promised.
+- **Single-table throughput**: no single-table sharding. One table is limited by one extraction stream and its Source/Kafka/Sink/target path; large records additionally use single-record polling. No throughput SLA is promised: the published reference throughput band and its machine spec (ADR-0019) let an operator estimate a window; they do not guarantee its length.
 - **Record size**: every selected source value and pre-serialization row payload must be at most 20 MiB (20,971,520 bytes). Kafka uses a separate 25 MiB (26,214,400-byte) envelope.
 - **Time precision**: temporal values are supported to milliseconds; microseconds are not preserved.
 - **Unsigned range**: target `numeric(20,0)` preserves the declared `BIGINT UNSIGNED` target domain, but current Source reading supports only actual values through `2^63-1`.
@@ -413,7 +414,7 @@ The following are intentionally not designed by v1:
 - direct execution of indexes, unique constraints, foreign keys, comments, or collation after load; v1 still generates and delivers their executable supplemental SQL;
 - exact supplemental-SQL coverage, generation timing, and UI/download/report delivery surface;
 - non-wizard product-shell IA, authentication, multi-user permissions, and progress transport;
-- a product throughput commitment;
+- a throughput SLA (v1 publishes only ADR-0019's reference band) and a trial run that measures throughput without writing the target;
 - final offline packaging, release/version compatibility, and upgrade UX;
 - procurement policy and a continuously certified Aiven/Apicurio fallback.
 

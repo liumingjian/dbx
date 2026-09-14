@@ -214,6 +214,26 @@ A terminal diagnosis for a box that shows no observable progress for the configu
 _Avoid_: Slow, failed, timed out
 _中文_: 卡死
 
+**Duration estimate**:
+The range DBX gives before a migration run for how long its scope will take, carrying its estimate confidence, its source — this deployment's history or the shipped reference throughput band — and its minimum window. It is what an operator takes to a change board to request a downtime window, so it exists on the migration draft, before any write freeze.
+_Avoid_: ETA, SLA, promised duration, 预计完成时间
+_中文_: 预估耗时
+
+**Remaining-time estimate**:
+The range DBX gives during a migration run for how much longer it needs, projected from the unfinished part of its scheduling plan. Until the run has been observed long enough, the duration estimate stands in for it.
+_Avoid_: ETA, countdown, progress percentage, 倒计时
+_中文_: 预计剩余
+
+**Minimum window**:
+The time the largest table in scope needs through its single extraction stream; no scheduling finishes the run sooner. It accompanies every duration estimate.
+_Avoid_: Lower bound, fastest time, 最短所需时间
+_中文_: 窗口下限
+
+**Estimate unavailable**:
+The state in which DBX withholds a duration or remaining-time number because it is no longer credible, always paired with its reason and the facts that remain reliable. Like every estimate it is presentation only: it never changes a migration run status or a stuck diagnosis.
+_Avoid_: Unknown, stuck, timed out
+_中文_: 无法预估
+
 **Cancellation**:
 A user-requested terminal stop of a migration run that preserves topics, target data, and diagnostic evidence.
 _Avoid_: Discard, delete, rollback, 停止
@@ -309,6 +329,18 @@ _Operator-facing_: Never. `CONNECTOR_PROVISIONING` names connector work, which G
 ## Value vocabularies
 
 The terms above name concepts; the sets below fix the Chinese for the *values* those concepts carry. DBX persists each value as an enum literal, and a literal is not a word: it is an identifier that happens to be readable to the people who wrote it. So every value that reaches the interface has its wording here, and the interface may no more invent a synonym for it than for a term. A set marked `_Operator-facing_: Never` deliberately has none, because no operator should be asked to read it.
+
+### Estimate confidence
+
+The confidence a duration or remaining-time estimate carries. There are two values because there are two kinds of evidence; a third would draw a boundary no data supports.
+
+**Low confidence**:
+The estimate rests on the shipped reference throughput band, or on too little observation of this run.
+_中文_: 低置信
+
+**Reliable**:
+The estimate rests on this deployment's own past runs, or on stable observation of this run.
+_中文_: 可信
 
 ### Preflight conclusion
 
