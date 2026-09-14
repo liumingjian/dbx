@@ -35,7 +35,10 @@ LOB_BYTES="${LOB_BYTES:-1572864}"    # 1.5 MiB
 CHUNK=100000
 
 dc() { docker compose -f "$ENV_DIR/docker-compose.yml" "$@"; }
-rootsql() { dc exec -T mysql mysql -N -B -uroot -pdbx dbx_src 2>/dev/null; }
+# A killed earlier run can leave a session holding a metadata lock on a b_* table; without a
+# short lock_wait_timeout, the next seed hangs silently on it (observed: 75 min on DROP TABLE).
+# Fix a stuck lab with: docker compose restart mysql
+rootsql() { dc exec -T mysql mysql -N -B -uroot -pdbx --init-command="SET SESSION lock_wait_timeout=60" dbx_src 2>/dev/null; }
 rows_of() { echo "SELECT COUNT(*) FROM $1" | rootsql 2>/dev/null || echo 0; }
 
 tables_of() {  # shape count -> table names
