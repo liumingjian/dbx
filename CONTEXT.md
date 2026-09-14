@@ -319,8 +319,8 @@ _Avoid_: SSL switch, secure checkbox
 _中文_: TLS 模式
 
 **Preflight finding**:
-One exact, coded fact a preflight established about a table, marked blocking or non-blocking. A blocking finding cannot be acknowledged away; it is resolved, or the table leaves the migration scope.
-_Avoid_: Warning, alert, issue
+One exact, coded fact a preflight established about a table, carrying one 预检发现影响 (ADR-0027). A blocking finding cannot be acknowledged away; it is resolved, or the table leaves the migration scope. A non-blocking finding is accepted by approving the table write contract it belongs to, never by acknowledging the finding itself.
+_Avoid_: Warning, alert, issue, warning acknowledgement, 我已知晓
 _中文_: 预检发现
 
 **Validation check**:
@@ -594,6 +594,25 @@ _中文_: 外部信号翻译
 No rule was trustworthy, or same-strength rules disagreed. DBX says it did not establish a cause rather than inventing one.
 _Avoid_: 未知错误, 其他
 _中文_: 兜底判定
+
+### Preflight finding impact
+
+What a preflight finding costs the table. Only blocking stops a table; the other two are accepted with the table write contract. A fact that involves no trade-off, such as a 大记录表 inside the 大记录包络, carries no impact and is never presented as a warning.
+
+**Blocking**:
+The table cannot migrate while the fact holds.
+_Avoid_: 错误, 失败
+_中文_: 阻塞
+
+**Data loss**:
+The target will hold less than the source, or be able to do less with it — a relaxed `NOT NULL`, a primary key not built, sub-millisecond precision truncated.
+_Avoid_: 警告, 风险
+_中文_: 数据有损
+
+**Behaviour change only**:
+Every migrated value is intact; only writes after the migration behave differently — a default not built, a narrowed sequence ceiling, no primary key.
+_Avoid_: 警告, 提示
+_中文_: 仅行为差异
 
 ### Preflight finding code
 
