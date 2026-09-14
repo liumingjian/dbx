@@ -47,11 +47,9 @@ _Avoid_: Preferences, admin console
 _中文_: 系统设置
 
 **Migration wizard**:
-The six-stage surface on which an operator builds a migration draft and starts its first migration run. Its stages are a single ordered journey, not independent screens: each is reachable by its own URL, and each is gated on the facts the preceding stages established.
-_Avoid_: Creation flow, setup steps, 创建迁移任务 as the surface's name
+The five-stage surface on which an operator builds a migration draft and starts a migration run; it ends at 执行 and never observes a run. Its stages are one ordered journey, each gated on the facts the preceding stages established. In order: 连接与数据库, 迁移范围, 预检, 映射规则, 执行确认 — stages three and four are named by the terms **Preflight** and **Mapping rule**.
+_Avoid_: Creation flow, setup steps, 创建迁移任务 as the surface's name, 逐表配置与预检, 评估, 参数
 _中文_: 迁移向导
-
-The six stages are named terms because the operator navigates by them and cites them:
 
 **Connections and databases**:
 Wizard stage one, on which the operator chooses a verified source and target database connection and the source MySQL database and target PostgreSQL schema. It selects existing connections; it never creates one.
@@ -63,25 +61,25 @@ Wizard stage two, and the recorded answer it produces: which source tables this 
 _Avoid_: Table selection, included tables
 _中文_: 迁移范围
 
-**Per-table configuration and preflight**:
-Wizard stage three, on which the operator resolves structured mapping exceptions for each table and reads its preflight conclusion. Blocking and inconclusive preflights are refused here rather than acknowledged.
-_Avoid_: Table settings, mapping step
-_中文_: 逐表配置与预检
-
 **Execution confirmation**:
-Wizard stage four, the last review before anything is written: the whole scope, the generated table write contracts, the unresolved findings, and the write freeze that names a responsible party and a time limit.
+Wizard stage five, the last review before anything is written: the whole scope, the generated table write contracts, the unresolved findings, and the write freeze that names a responsible party and a time limit.
 _Avoid_: Review step, summary page
 _中文_: 执行确认
 
 **Run monitoring**:
-Wizard stage five, and the standing view of a migration run in progress. It is organised around table migration units, and it never exposes boxes, connectors or topics.
-_Avoid_: Progress page, job monitor
+The standing view of one migration run, organised around its table migration units; it never exposes boxes, connectors or topics. It is a view of a run, not a wizard stage.
+_Avoid_: Progress page, job monitor, 概览, 表进度
 _中文_: 运行监控
 
 **Validation report**:
-Wizard stage six, and the artefact an operator submits to a change review. It keeps technical validation results, preflight exclusions, and validation dispositions separately presented.
+The view of one migration run that an operator submits to a change review. It keeps technical validation results, preflight exclusions, and validation dispositions separately presented.
 _Avoid_: Result summary, verification page
 _中文_: 校验报告
+
+**Run snapshot**:
+The read-only record of what one migration run was started with — its scope, mapping rules, connection and credential versions, and write-freeze confirmation. It never changes after execution.
+_Avoid_: Parameters, 参数, task settings
+_中文_: 运行快照
 
 **Mapping rule**:
 A structured, reviewable exception to DBX's automatic table or column mapping. A rule names one source coordinate, one bounded action, its target value, and whether DBX or the user produced it; user rules override automatic rules. Rules never contain arbitrary SQL or regular expressions in v1.
@@ -97,6 +95,11 @@ _中文_: 预检
 DBX's proof that the environment it and its execution platform run in can carry a migration — drivers, execution-platform readiness, configuration against the release's expected snapshot, disk. It runs at platform startup and before a migration run is admitted, and it concludes per check item. Preflight asks whether a table's data can migrate; an environment check asks whether this installation can migrate anything now.
 _Avoid_: 体检, 健康检查, 预检, 环境预检
 _中文_: 环境自检
+
+**Runtime condition**:
+DBX's continuous, installation-wide account of whether it can keep migrating right now, and if not, which root-cause domain stands in the way. It observes a fixed set of items and presents the latest environment check's unmet items as reasons; it never re-runs or rewrites them, and it interrupts nothing that an existing gate does not. It is a bounded set of current conclusions, not a collection of logs or metrics, and it speaks to the operator without naming the execution platform's parts.
+_Avoid_: 监控, 健康检查, 日志, 仪表盘, 平台状态, 系统状态
+_中文_: 运行状况
 
 **Table write contract**:
 The immutable, single-table write intent that DBX must prove before starting a Sink, derived from approved source metadata, preflight findings, and mapping rules. DDL is one rendering of this contract, not an independent configuration.
@@ -155,7 +158,7 @@ _Avoid_: Waiting for box, queued, pending, stalled
 _中文_: 等待调度
 
 **Blocked by an upstream failure**:
-A table migration unit that DBX has not started, or has stopped, without any fault of its own, because another unit it was scheduled alongside failed. Its own technical result is undetermined rather than failed, and it is a candidate for re-migration.
+A table migration unit that DBX has not started, or has stopped, without any fault of its own, because its box failed without the failure being attributable to this unit — whether another member failed or a shared cause such as disk pressure or an unreachable execution platform stopped it. Its own technical result is undetermined rather than failed, and it is a candidate for re-migration.
 _Avoid_: Blocked by box failure, batch failure, collateral failure
 _中文_: 因关联失败而阻塞
 
@@ -193,6 +196,11 @@ _中文_: 源基线
 The externally enforced, time-bounded operational commitment that source data covered by a migration run does not change. It has an accountable operator and expiry; it must remain valid from source-baseline capture until every selected table reaches a validation terminal state or execution stops.
 _Avoid_: Maintenance mode, pause, permanent checkbox
 _中文_: 写冻结
+
+**Task write freeze**:
+A migration task's write-freeze commitment over its whole scope, spanning every run until the task conclusion is reached, with an accountable operator and deadline reconfirmed before each run (ADR-0024). Each run's own write freeze still applies within it.
+_Avoid_: Long freeze, batch freeze, 冻结期
+_中文_: 整库冻结承诺
 
 **Read complete**:
 The boundary at which every topic in a box contains the source baseline row count, production has remained stable for two polling intervals, and the healthy Source connector can be removed.
@@ -235,19 +243,34 @@ _Avoid_: Unknown, stuck, timed out
 _中文_: 无法预估
 
 **Cancellation**:
-A user-requested terminal stop of a migration run that preserves topics, target data, and diagnostic evidence.
-_Avoid_: Discard, delete, rollback, 停止
+A user-requested terminal stop of a migration run that preserves topics, target data, and diagnostic evidence. Its gentler form, 收尾取消 (finishing cancellation), admits no new box and lets tables already transferring finish first.
+_Avoid_: Discard, delete, rollback, 停止, 收尾停止
 _中文_: 取消
 
 **Discard**:
 A separately confirmed destructive operation that removes only a stopped run's resources that the run can still prove it exclusively owns, while retaining its audit record and original technical outcomes. A later run's target data is never discardable by an earlier run.
-_Avoid_: Cancel, retry, cleanup, rollback
+_Avoid_: Cancel, retry, cleanup, rollback, Abandonment
 _中文_: 丢弃
 
 **Target generation**:
-The exclusive write epoch created when DBX first creates or deliberately clears a target table for a migration run. It prevents an earlier run from discarding target data after a later run has taken ownership.
+The exclusive write epoch created when DBX first creates or deliberately clears a target table for a migration run, bound to that table's database object identity. It prevents an earlier run from discarding target data after a later run has taken ownership.
 _Avoid_: Table version, run number
 _中文_: 目标代际
+
+**Abandonment**:
+A separately confirmed, task-level destructive decision that the migration will not go forward: DBX removes the target tables it still owns across all the task's runs, and the task is permanently closed while its records remain (ADR-0023).
+_Avoid_: Rollback, 回滚, discard, delete task, 删除任务
+_中文_: 废弃
+
+**Abandonment list**:
+The reviewable rendering of what an abandonment would drop and what it would refuse, with the evidence each decision rests on. Before any run exists it can only be projected from the table write contracts, and a projected list is never a confirmation.
+_Avoid_: Rollback plan, deletion preview
+_中文_: 废弃清单; projected: 预估废弃清单
+
+**Migration task status**:
+The task's own lifecycle above its latest run's projection: whether the migration is still active or has been abandoned. It never rewrites any run's status or outcomes.
+_Avoid_: Task state, run status
+_中文_: 迁移任务状态
 
 **Error occurrence**:
 An immutable fact that DBX observed at a phase and scope, retaining the evidence and correlation needed to explain what happened. It is not itself a workflow outcome.
@@ -281,7 +304,7 @@ _Avoid_: Log bundle, data dump
 _中文_: 诊断包
 
 **Re-migration**:
-A new migration run created for the tables an earlier run left failed or undetermined, reusing the earlier run's approved decisions as its origin. It never repairs, resumes, or rewrites the earlier run: the earlier table migration units keep their results, and the new run produces new ones.
+A new migration run created for the task's tables that have no successful result yet — left failed or undetermined, or never run in an earlier window — reusing the earlier run's approved decisions as its origin. It never repairs, resumes, or rewrites the earlier run: the earlier table migration units keep their results, and the new run produces new ones.
 _Avoid_: Retry, resume, repair, rollback, 重跑, 重迁, 断点续跑
 _中文_: 重新迁移
 
@@ -309,6 +332,11 @@ _中文_: 校验项
 The deterministic projection of a migration run's units and boxes onto one status value (ADR-0004). It is never separately editable, so it can never disagree with the units it summarises.
 _Avoid_: Run state, progress state
 _中文_: 迁移运行状态
+
+**Task conclusion**:
+The projection of each in-scope table's latest unit result, overlaid with the closing drift check, onto one verdict for the whole migration task (ADR-0024). It says how the migration turned out; migration task status says whether the task is still active. It is green only when every table is 迁移完成 and no drift was found, and it never rewrites a run's results.
+_Avoid_: Migration task status, overall success, 全部完成, 整库完成
+_中文_: 整库结论
 
 **Table migration phase**:
 Where in the execution sequence a table migration unit currently stands (ADR-0004). A phase says what is happening, never how it turned out.
@@ -387,6 +415,28 @@ _中文_: 未执行
 Work that is under way, so no conclusion exists yet. DBX shows the absence of a conclusion rather than an optimistic one, and a stale earlier conclusion is never shown in its place.
 _Avoid_: 待定, 未知, 等待调度
 _中文_: 执行中
+
+### Migration task status
+
+**Active**:
+The migration has not been abandoned; the task presents its latest run's status.
+_Avoid_: 正常, 运行中
+_中文_: 进行中
+
+**Abandoning**:
+An abandonment is confirmed and not every owned object is resolved yet; the task still holds its target leases.
+_Avoid_: 回滚中, 删除中
+_中文_: 废弃中
+
+**Abandoned**:
+Every owned object the abandonment covered is gone, and the task is permanently closed.
+_Avoid_: 已回滚, 已删除, 已丢弃
+_中文_: 已废弃
+
+**Partially abandoned**:
+The abandonment finished what it could, but some objects were refused and are named; it can be retried once the blocker is removed.
+_Avoid_: 废弃失败, 部分回滚
+_中文_: 部分废弃
 
 ### Migration run status
 
@@ -582,6 +632,29 @@ _中文_: 不满足
 **Inconclusive**:
 The item could not establish its fact, usually because what it inspects is unreachable.
 _Avoid_: 未知, 跳过
+_中文_: 无法判定
+
+### Runtime condition value
+
+The whole condition takes its worst item's value. Only the last two stop admission, and neither can be acknowledged away.
+
+**Clear**:
+Every item is within its limits.
+_Avoid_: 正常, 就绪, 可迁移
+_中文_: 畅通
+
+**Caution**:
+An item has crossed its early-warning line; migration continues unchanged.
+_Avoid_: 警告, 需要人工处理
+_中文_: 需留意
+
+**Impeded**:
+DBX cannot admit or advance migration now, and it names the item that stops it.
+_Avoid_: 故障, 不可迁移, 异常
+_中文_: 受阻
+
+**Inconclusive**:
+DBX cannot establish an item's fact, and admits nothing it cannot see.
 _中文_: 无法判定
 
 ### Preflight inconclusive reason
