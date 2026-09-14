@@ -93,6 +93,11 @@ A source-side proof required before a table write contract may be approved. It e
 _Avoid_: Validation, estimate, warning acknowledgement, 评估, 预检查
 _中文_: 预检
 
+**Environment check**:
+DBX's proof that the environment it and its execution platform run in can carry a migration — drivers, execution-platform readiness, configuration against the release's expected snapshot, disk. It runs at platform startup and before a migration run is admitted, and it concludes per check item. Preflight asks whether a table's data can migrate; an environment check asks whether this installation can migrate anything now.
+_Avoid_: 体检, 健康检查, 预检, 环境预检
+_中文_: 环境自检
+
 **Table write contract**:
 The immutable, single-table write intent that DBX must prove before starting a Sink, derived from approved source metadata, preflight findings, and mapping rules. DDL is one rendering of this contract, not an independent configuration.
 _Avoid_: Editable DDL, sink schema
@@ -209,6 +214,26 @@ A terminal diagnosis for a box that shows no observable progress for the configu
 _Avoid_: Slow, failed, timed out
 _中文_: 卡死
 
+**Duration estimate**:
+The range DBX gives before a migration run for how long its scope will take, carrying its estimate confidence, its source — this deployment's history or the shipped reference throughput band — and its minimum window. It is what an operator takes to a change board to request a downtime window, so it exists on the migration draft, before any write freeze.
+_Avoid_: ETA, SLA, promised duration, 预计完成时间
+_中文_: 预估耗时
+
+**Remaining-time estimate**:
+The range DBX gives during a migration run for how much longer it needs, projected from the unfinished part of its scheduling plan. Until the run has been observed long enough, the duration estimate stands in for it.
+_Avoid_: ETA, countdown, progress percentage, 倒计时
+_中文_: 预计剩余
+
+**Minimum window**:
+The time the largest table in scope needs through its single extraction stream; no scheduling finishes the run sooner. It accompanies every duration estimate.
+_Avoid_: Lower bound, fastest time, 最短所需时间
+_中文_: 窗口下限
+
+**Estimate unavailable**:
+The state in which DBX withholds a duration or remaining-time number because it is no longer credible, always paired with its reason and the facts that remain reliable. Like every estimate it is presentation only: it never changes a migration run status or a stuck diagnosis.
+_Avoid_: Unknown, stuck, timed out
+_中文_: 无法预估
+
 **Cancellation**:
 A user-requested terminal stop of a migration run that preserves topics, target data, and diagnostic evidence.
 _Avoid_: Discard, delete, rollback, 停止
@@ -296,14 +321,26 @@ _Avoid_: Status, final status, validation result, 成功, 失败, 已跳过
 _中文_: 技术结果
 
 **Diagnosis classification phase**:
-The phase a diagnosis is classified under (ADR-0005): `CONNECTION`, `METADATA_READ`, `PREFLIGHT`, `TARGET_PREPARATION`, `CONTRACT_CHECK`, `CONNECTOR_PROVISIONING`, `TRANSFER`, `COMPLETION_DETECTION`, `VALIDATION`, `CLEANUP`. It is a maintenance coordinate for the diagnosis catalog, cut finer than the workflow and named after execution-platform work the operator does not run.
+The phase a diagnosis is classified under (ADR-0005): `CONNECTION`, `METADATA_READ`, `PREFLIGHT`, `TARGET_PREPARATION`, `CONTRACT_CHECK`, `CONNECTOR_PROVISIONING`, `TRANSFER`, `COMPLETION_DETECTION`, `VALIDATION`, `CLEANUP`, `ENVIRONMENT_CHECK`. It is a maintenance coordinate for the diagnosis catalog, cut finer than the workflow and named after execution-platform work the operator does not run.
 _Avoid_: Table phase, migration phase
 _中文_: 诊断分类阶段
-_Operator-facing_: Never. `CONNECTOR_PROVISIONING` names connector work, which Gate 7 keeps off the interface, and the remaining values would present a second, differently-cut phase vocabulary beside 阶段 without telling the operator anything they could act on. Where DBX must say when something happened, it shows the 表迁移单元's own 阶段, which every value of this set maps into. The classification is retained in the diagnostic evidence for support use.
+_Operator-facing_: Never. `CONNECTOR_PROVISIONING` names connector work, which Gate 7 keeps off the interface, and the remaining values would present a second, differently-cut phase vocabulary beside 阶段 without telling the operator anything they could act on. Where DBX must say when something happened, it shows the 表迁移单元's own 阶段, which every value of this set maps into — except `ENVIRONMENT_CHECK`, which belongs to no unit and is shown as the 环境自检 item it concerns. The classification is retained in the diagnostic evidence for support use.
 
 ## Value vocabularies
 
 The terms above name concepts; the sets below fix the Chinese for the *values* those concepts carry. DBX persists each value as an enum literal, and a literal is not a word: it is an identifier that happens to be readable to the people who wrote it. So every value that reaches the interface has its wording here, and the interface may no more invent a synonym for it than for a term. A set marked `_Operator-facing_: Never` deliberately has none, because no operator should be asked to read it.
+
+### Estimate confidence
+
+The confidence a duration or remaining-time estimate carries. There are two values because there are two kinds of evidence; a third would draw a boundary no data supports.
+
+**Low confidence**:
+The estimate rests on the shipped reference throughput band, or on too little observation of this run.
+_中文_: 低置信
+
+**Reliable**:
+The estimate rests on this deployment's own past runs, or on stable observation of this run.
+_中文_: 可信
 
 ### Preflight conclusion
 
@@ -364,7 +401,7 @@ _Avoid_: 正常, 健康
 _中文_: 进行中
 
 **Attention required**:
-Execution cannot advance until a person acts — review, preflight correction, or freed disk — while nonterminal units remain. It names a required action, not a fault.
+Execution cannot advance until a person acts — review, preflight correction, freed disk, or an unsatisfied environment check — while nonterminal units remain. It names a required action, not a fault.
 _Avoid_: 警告, 异常, 出错
 _中文_: 需要人工处理
 
@@ -529,6 +566,23 @@ _中文_: 零日期值将被拒绝
 **Envelope scan inconclusive**:
 DBX could not complete the exact 大记录包络 scan, so this table's conclusion is 无法判定.
 _中文_: 包络扫描无法判定
+
+### Environment check item conclusion
+
+Only satisfied lets migrations start; the other two block alike and cannot be acknowledged away.
+
+**Satisfied**:
+_中文_: 满足
+
+**Unsatisfied**:
+The item established a fact that falls short of what the release expects.
+_Avoid_: 异常, 警告
+_中文_: 不满足
+
+**Inconclusive**:
+The item could not establish its fact, usually because what it inspects is unreachable.
+_Avoid_: 未知, 跳过
+_中文_: 无法判定
 
 ### Preflight inconclusive reason
 
