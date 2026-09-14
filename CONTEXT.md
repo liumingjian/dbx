@@ -96,6 +96,11 @@ DBX's proof that the environment it and its execution platform run in can carry 
 _Avoid_: 体检, 健康检查, 预检, 环境预检
 _中文_: 环境自检
 
+**Runtime condition**:
+DBX's continuous, installation-wide account of whether it can keep migrating right now, and if not, which root-cause domain stands in the way. It observes a fixed set of items and presents the latest environment check's unmet items as reasons; it never re-runs or rewrites them, and it interrupts nothing that an existing gate does not. It is a bounded set of current conclusions, not a collection of logs or metrics, and it speaks to the operator without naming the execution platform's parts.
+_Avoid_: 监控, 健康检查, 日志, 仪表盘, 平台状态, 系统状态
+_中文_: 运行状况
+
 **Table write contract**:
 The immutable, single-table write intent that DBX must prove before starting a Sink, derived from approved source metadata, preflight findings, and mapping rules. DDL is one rendering of this contract, not an independent configuration.
 _Avoid_: Editable DDL, sink schema
@@ -153,7 +158,7 @@ _Avoid_: Waiting for box, queued, pending, stalled
 _中文_: 等待调度
 
 **Blocked by an upstream failure**:
-A table migration unit that DBX has not started, or has stopped, without any fault of its own, because another unit it was scheduled alongside failed. Its own technical result is undetermined rather than failed, and it is a candidate for re-migration.
+A table migration unit that DBX has not started, or has stopped, without any fault of its own, because its box failed without the failure being attributable to this unit — whether another member failed or a shared cause such as disk pressure or an unreachable execution platform stopped it. Its own technical result is undetermined rather than failed, and it is a candidate for re-migration.
 _Avoid_: Blocked by box failure, batch failure, collateral failure
 _中文_: 因关联失败而阻塞
 
@@ -580,6 +585,29 @@ _中文_: 不满足
 **Inconclusive**:
 The item could not establish its fact, usually because what it inspects is unreachable.
 _Avoid_: 未知, 跳过
+_中文_: 无法判定
+
+### Runtime condition value
+
+The whole condition takes its worst item's value. Only the last two stop admission, and neither can be acknowledged away.
+
+**Clear**:
+Every item is within its limits.
+_Avoid_: 正常, 就绪, 可迁移
+_中文_: 畅通
+
+**Caution**:
+An item has crossed its early-warning line; migration continues unchanged.
+_Avoid_: 警告, 需要人工处理
+_中文_: 需留意
+
+**Impeded**:
+DBX cannot admit or advance migration now, and it names the item that stops it.
+_Avoid_: 故障, 不可迁移, 异常
+_中文_: 受阻
+
+**Inconclusive**:
+DBX cannot establish an item's fact, and admits nothing it cannot see.
 _中文_: 无法判定
 
 ### Preflight inconclusive reason
