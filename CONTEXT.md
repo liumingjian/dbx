@@ -319,7 +319,7 @@ _Avoid_: SSL switch, secure checkbox
 _中文_: TLS 模式
 
 **Preflight finding**:
-One exact, coded fact a preflight established about a table, carrying one 预检发现影响 (ADR-0027). A blocking finding cannot be acknowledged away; it is resolved, or the table leaves the migration scope. A non-blocking finding is accepted by approving the table write contract it belongs to, never by acknowledging the finding itself.
+One exact, coded fact a preflight established about a table, carrying one 预检发现影响 (ADR-0029). A blocking finding cannot be acknowledged away; it is resolved, or the table leaves the migration scope. A non-blocking finding is accepted by approving the table write contract it belongs to, never by acknowledging the finding itself.
 _Avoid_: Warning, alert, issue, warning acknowledgement, 我已知晓
 _中文_: 预检发现
 

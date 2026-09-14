@@ -1,6 +1,6 @@
 # Ant Design 5 with a Carbon-derived skin, DBX-owned conclusion indicators, and a Chinese typography layer
 
-Supersedes ADR-0014. Decided in #47, following #45's adoption of `dbx-prototype` as the frontend baseline. ADR-0027 extends the conclusion set and palette below with preflight finding impact and an accepted-risk indicator.
+Supersedes ADR-0014. Decided in #47, following #45's adoption of `dbx-prototype` as the frontend baseline. ADR-0029 extends the conclusion set and palette below with preflight finding impact and an accepted-risk indicator.
 
 DBX v1 builds its operator interface on Ant Design 5, skinned with DBX's own Carbon-derived token layer. The substrate comes with the prototype. What ADR-0014 bought from Carbon — conclusions that never rest on colour alone, and a Chinese typography layer — DBX now owns itself. The rest of this ADR records how.
 
