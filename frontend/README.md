@@ -35,13 +35,12 @@ npm run verify      # all of the above
 Three of them are deliberate and recorded, with reasons:
 
 - the wizard renders **full page**, not a wide tearsheet (ADR-0014);
-- business code goes through **`DbxTable`** rather than the table substrate (ADR-0015);
+- business code goes through the thin **`DataTable`** entry point, never antd `Table` directly (ADR-0025, superseding ADR-0015);
 - there is **no OpenAPI document** in this phase (ADR-0016).
 
-One further, smaller deviation: `/design/density` renders a hand-written `<table>` rather
-than `DbxTable` (ADR-0015). It is a design reference surface whose only question is
-typography, and `DbxTable` does not exist until the next batch. No product view may follow
-its example.
+One further, smaller deviation: `/design/density` renders a hand-written `<table>`. It is a
+design reference surface whose only question is typography, and it goes away with the
+prototype port. No product view may follow its example.
 
 ## Where the Chinese typography layer lives
 
