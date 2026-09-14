@@ -93,6 +93,11 @@ A source-side proof required before a table write contract may be approved. It e
 _Avoid_: Validation, estimate, warning acknowledgement, 评估, 预检查
 _中文_: 预检
 
+**Environment check**:
+DBX's proof that the environment it and its execution platform run in can carry a migration — drivers, execution-platform readiness, configuration against the release's expected snapshot, disk. It runs at platform startup and before a migration run is admitted, and it concludes per check item. Preflight asks whether a table's data can migrate; an environment check asks whether this installation can migrate anything now.
+_Avoid_: 体检, 健康检查, 预检, 环境预检
+_中文_: 环境自检
+
 **Table write contract**:
 The immutable, single-table write intent that DBX must prove before starting a Sink, derived from approved source metadata, preflight findings, and mapping rules. DDL is one rendering of this contract, not an independent configuration.
 _Avoid_: Editable DDL, sink schema
@@ -296,10 +301,10 @@ _Avoid_: Status, final status, validation result, 成功, 失败, 已跳过
 _中文_: 技术结果
 
 **Diagnosis classification phase**:
-The phase a diagnosis is classified under (ADR-0005): `CONNECTION`, `METADATA_READ`, `PREFLIGHT`, `TARGET_PREPARATION`, `CONTRACT_CHECK`, `CONNECTOR_PROVISIONING`, `TRANSFER`, `COMPLETION_DETECTION`, `VALIDATION`, `CLEANUP`. It is a maintenance coordinate for the diagnosis catalog, cut finer than the workflow and named after execution-platform work the operator does not run.
+The phase a diagnosis is classified under (ADR-0005): `CONNECTION`, `METADATA_READ`, `PREFLIGHT`, `TARGET_PREPARATION`, `CONTRACT_CHECK`, `CONNECTOR_PROVISIONING`, `TRANSFER`, `COMPLETION_DETECTION`, `VALIDATION`, `CLEANUP`, `ENVIRONMENT_CHECK`. It is a maintenance coordinate for the diagnosis catalog, cut finer than the workflow and named after execution-platform work the operator does not run.
 _Avoid_: Table phase, migration phase
 _中文_: 诊断分类阶段
-_Operator-facing_: Never. `CONNECTOR_PROVISIONING` names connector work, which Gate 7 keeps off the interface, and the remaining values would present a second, differently-cut phase vocabulary beside 阶段 without telling the operator anything they could act on. Where DBX must say when something happened, it shows the 表迁移单元's own 阶段, which every value of this set maps into. The classification is retained in the diagnostic evidence for support use.
+_Operator-facing_: Never. `CONNECTOR_PROVISIONING` names connector work, which Gate 7 keeps off the interface, and the remaining values would present a second, differently-cut phase vocabulary beside 阶段 without telling the operator anything they could act on. Where DBX must say when something happened, it shows the 表迁移单元's own 阶段, which every value of this set maps into — except `ENVIRONMENT_CHECK`, which belongs to no unit and is shown as the 环境自检 item it concerns. The classification is retained in the diagnostic evidence for support use.
 
 ## Value vocabularies
 
@@ -364,7 +369,7 @@ _Avoid_: 正常, 健康
 _中文_: 进行中
 
 **Attention required**:
-Execution cannot advance until a person acts — review, preflight correction, or freed disk — while nonterminal units remain. It names a required action, not a fault.
+Execution cannot advance until a person acts — review, preflight correction, freed disk, or an unsatisfied environment check — while nonterminal units remain. It names a required action, not a fault.
 _Avoid_: 警告, 异常, 出错
 _中文_: 需要人工处理
 
@@ -529,6 +534,23 @@ _中文_: 零日期值将被拒绝
 **Envelope scan inconclusive**:
 DBX could not complete the exact 大记录包络 scan, so this table's conclusion is 无法判定.
 _中文_: 包络扫描无法判定
+
+### Environment check item conclusion
+
+Only satisfied lets migrations start; the other two block alike and cannot be acknowledged away.
+
+**Satisfied**:
+_中文_: 满足
+
+**Unsatisfied**:
+The item established a fact that falls short of what the release expects.
+_Avoid_: 异常, 警告
+_中文_: 不满足
+
+**Inconclusive**:
+The item could not establish its fact, usually because what it inspects is unreachable.
+_Avoid_: 未知, 跳过
+_中文_: 无法判定
 
 ### Preflight inconclusive reason
 

@@ -30,6 +30,7 @@ If two repository documents conflict, implementation stops until the documents a
 | Table write contract, platform DDL, and Sink contract | [ADR-0011](adr/0011-platform-owned-ddl-and-table-write-contract.md) |
 | Spring JDBC persistence without JPA | [ADR-0012](adr/0012-spring-jdbc-no-jpa.md) |
 | Whole-table execution without sharding | [ADR-0013](adr/0013-single-table-execution-granularity.md) |
+| Environment check: detect and explain, no host control | [ADR-0018](adr/0018-environment-check-detects-and-explains-without-host-control.md) |
 
 Detailed mapping, DDL, validation, and identifier rules below canonicalize the accepted conclusions of [“MySQL 8.0 → PostgreSQL 15 类型映射矩阵定稿”](https://github.com/liumingjian/dbx/issues/11), [“DDL 生成器与 Sink 写入契约的一致性保证方案”](https://github.com/liumingjian/dbx/issues/12), [“数据校验规格定稿”](https://github.com/liumingjian/dbx/issues/16), [“MySQL database → PG schema 落点规则与标识符策略”](https://github.com/liumingjian/dbx/issues/17), and [“DDL 的列属性与表约束规格”](https://github.com/liumingjian/dbx/issues/23). Later end-to-end evidence at commit [`9768f8a`](https://github.com/liumingjian/dbx/commit/9768f8ac6dc6eb59ec68d0817ede2803c93e6a19) supersedes earlier research assumptions where they disagree.
 
@@ -361,9 +362,9 @@ The product shell distinguishes migration work, data-source management, and syst
 
 ### 11.1 Built-in and customer-managed infrastructure
 
-The built-in Docker Compose deployment contains DBX, Kafka, Connect, and Schema Registry, plus customer-provided MySQL Connector/J mounted through the installation flow. PostgreSQL and MySQL are customer endpoints. Customer-managed Kafka/Connect/Schema Registry is supported only when active capability checks prove exact topic, producer, consumer, converter, subject, REST, shared secret-provider path, and cleanup semantics.
+The built-in Docker Compose deployment contains DBX, Kafka, Connect, and Schema Registry, plus customer-provided MySQL Connector/J mounted through the installation flow. PostgreSQL and MySQL are customer endpoints. Its fitness is proven by the environment check of ADR-0018, which detects and explains but never remediates. (Suspended in v1, which ships only the built-in deployment:) Customer-managed Kafka/Connect/Schema Registry is supported only when active capability checks prove exact topic, producer, consumer, converter, subject, REST, shared secret-provider path, and cleanup semantics.
 
-The Connect worker uses the resource and large-message configuration in ADR-0003: 4 GiB heap; deployment minimum 8 GiB memory and recommended 16 GiB/four cores; required connector client overrides; 128 MiB producer buffer; and the fixed 25 MiB settings. Large-record tables use single-record Sink polling. External installations must round-trip the near-envelope incompressible probe before DDL approval.
+The Connect worker uses the resource and large-message configuration in ADR-0003: 4 GiB heap; deployment minimum 8 GiB memory and recommended 16 GiB/four cores; required connector client overrides; 128 MiB producer buffer; and the fixed 25 MiB settings. Large-record tables use single-record Sink polling. External installations (v2; suspended in v1) must round-trip the near-envelope incompressible probe before DDL approval.
 
 ### 11.2 Kafka storage
 
