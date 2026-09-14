@@ -11,7 +11,7 @@ _中文_: 迁移任务
 
 **Migration draft**:
 An unapproved, discardable working set of wizard selections and per-table configuration that has not yet become a migration task. It produces no migration run, is never referenced as audit evidence, and may be deleted without trace.
-_Avoid_: Unsaved task, pending task, unapproved migration task
+_Avoid_: Unsaved task, pending task, unapproved migration task, 草稿 as a task status
 _中文_: 迁移草稿
 
 **Migration run**:
@@ -21,7 +21,7 @@ _中文_: 迁移运行
 
 **Table migration unit**:
 The durable, independently observable migration record for one source table and its corresponding target table within one migration run, including phase, outcome, baseline, progress, validation result, and errors. A rerun creates a new table migration unit rather than changing the old unit's result.
-_Avoid_: Table task, connector table
+_Avoid_: Table task, connector table, 表进度
 _中文_: 表迁移单元
 
 **Database connection**:
@@ -42,13 +42,13 @@ _中文_: 数据源
 Its Chinese wording names the navigation area alone. An individual endpoint is a 数据库连接 and never a 数据源, which is why `Database connection` still lists `datasource` under `_Avoid_`.
 
 **System settings**:
-The navigation area reserved for product-wide configuration. It is a placeholder in v1 and owns no entity.
+The navigation area reserved for product-wide configuration. In v1 it holds only operator preferences and product information, including the diagnostic package export; it owns no entity.
 _Avoid_: Preferences, admin console
 _中文_: 系统设置
 
 **Migration wizard**:
 The six-stage surface on which an operator builds a migration draft and starts its first migration run. Its stages are a single ordered journey, not independent screens: each is reachable by its own URL, and each is gated on the facts the preceding stages established.
-_Avoid_: Creation flow, setup steps
+_Avoid_: Creation flow, setup steps, 创建迁移任务 as the surface's name
 _中文_: 迁移向导
 
 The six stages are named terms because the operator navigates by them and cites them:
@@ -85,12 +85,12 @@ _中文_: 校验报告
 
 **Mapping rule**:
 A structured, reviewable exception to DBX's automatic table or column mapping. A rule names one source coordinate, one bounded action, its target value, and whether DBX or the user produced it; user rules override automatic rules. Rules never contain arbitrary SQL or regular expressions in v1.
-_Avoid_: Mapping script, route expression
+_Avoid_: Mapping script, route expression, 映射与规则, 模式映射
 _中文_: 映射规则
 
 **Preflight**:
 A source-side proof required before a table write contract may be approved. It evaluates exact value-domain and transport facts and concludes `SUPPORTED`, `UNSUPPORTED`, or `INCONCLUSIVE`; only `SUPPORTED` may proceed, and a new source baseline is still required after the write freeze.
-_Avoid_: Validation, estimate, warning acknowledgement
+_Avoid_: Validation, estimate, warning acknowledgement, 评估, 预检查
 _中文_: 预检
 
 **Table write contract**:
@@ -211,7 +211,7 @@ _中文_: 卡死
 
 **Cancellation**:
 A user-requested terminal stop of a migration run that preserves topics, target data, and diagnostic evidence.
-_Avoid_: Discard, delete, rollback
+_Avoid_: Discard, delete, rollback, 停止
 _中文_: 取消
 
 **Discard**:
@@ -257,12 +257,12 @@ _中文_: 诊断包
 
 **Re-migration**:
 A new migration run created for the tables an earlier run left failed or undetermined, reusing the earlier run's approved decisions as its origin. It never repairs, resumes, or rewrites the earlier run: the earlier table migration units keep their results, and the new run produces new ones.
-_Avoid_: Retry, resume, repair, rollback
+_Avoid_: Retry, resume, repair, rollback, 重跑, 重迁, 断点续跑
 _中文_: 重新迁移
 
 **Connection check**:
 A verification that a database connection's endpoint and its current credential version actually work, recorded with its own time and outcome. A migration run may not be started from a connection whose latest check did not succeed.
-_Avoid_: Connectivity test, ping, connection test
+_Avoid_: Connectivity test, ping, connection test, 测试连接
 _中文_: 连接校验
 
 **TLS mode**:
@@ -292,7 +292,7 @@ _中文_: 阶段
 
 **Table migration outcome**:
 The single result a terminal table migration unit carries. It is DBX's own technical finding and is never rewritten by a validation disposition.
-_Avoid_: Status, final status, validation result
+_Avoid_: Status, final status, validation result, 成功, 失败, 已跳过
 _中文_: 技术结果
 
 **Diagnosis classification phase**:
@@ -422,7 +422,7 @@ _中文_: 创建目标表中
 
 **Transferring**:
 DBX is reading the source table and writing the target table. Read completion and write completion are evidence recorded during this phase, not phases of their own.
-_Avoid_: 同步中, 复制中, 推送中
+_Avoid_: 同步中, 复制中, 推送中, 导入中
 _中文_: 传输中
 
 **Validating**:
