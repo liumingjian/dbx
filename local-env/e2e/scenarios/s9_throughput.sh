@@ -23,6 +23,9 @@
 #
 # Connector settings follow docs/technical-plan.md §7.4 and ADR-0003. Anything that doc
 # leaves unset stays at the connector default and is listed in FINDINGS.
+#
+# Must stay runnable on macOS's stock bash 3.2: per-table values live in kv_* variables,
+# not associative arrays.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"
 init_scenario s9 "reference throughput band"
@@ -33,9 +36,17 @@ SAMPLE_S="${SAMPLE_S:-2}"
 PHASE_TIMEOUT_S="${PHASE_TIMEOUT_S:-5400}"
 ORDINARY_POLL_RECORDS=500     # Kafka's own default; ADR-0003 keeps poll=1 for large-record tables only
 
-# EPOCHREALTIME needs bash 5; fall back to whole seconds
-now() { if [ -n "${EPOCHREALTIME:-}" ]; then echo "${EPOCHREALTIME/,/.}"; else date +%s; fi; }
+# Sub-second clock: EPOCHREALTIME on bash 5, perl (shipped with macOS) otherwise
+now() {
+  if [ -n "${EPOCHREALTIME:-}" ]; then echo "${EPOCHREALTIME/,/.}"
+  else perl -MTime::HiRes=time -e 'printf "%.3f\n", time'; fi
+}
 since() { awk -v a="$1" -v b="$(now)" 'BEGIN{printf "%.1f", b-a}'; }
+
+# Map stand-ins. Keys are table names, which are identifier-safe (b_narrow_1 …).
+# Map names carry the phase number so no value leaks from one phase into the next.
+kv_set() { printf -v "kv_$1__$2" '%s' "$3"; }
+kv_get() { local v="kv_$1__$2"; echo "${!v:-}"; }
 
 shape_of() { case "$1" in b_narrow_*) echo narrow;; b_wide_*) echo wide;; b_lob_*) echo lob;; esac; }
 
@@ -129,6 +140,7 @@ record_env() {
       sysctl -n hw.model machdep.cpu.brand_string hw.ncpu hw.memsize 2>/dev/null
       sw_vers -productVersion 2>/dev/null
     fi
+    uptime
     echo "## docker"
     docker info --format '{{.OperatingSystem}} {{.ServerVersion}}, {{.NCPU}} vCPU, {{.MemTotal}} B'
     echo "## images"
@@ -145,15 +157,13 @@ record_env() {
 
 # ADR-0002 default budgets on this machine. Each single-table box holds one Source and
 # one Sink task, and each task holds one database connection.
+budget() { local b=$(( $1 / 10 )); [ $b -lt 4 ] && b=4; [ $b -gt 20 ] && b=20; echo $(( b - 2 )); }
 record_budgets() {
-  local ncpu myc pgc
+  local ncpu myc pgc tasks src tgt lim=10
   ncpu=$(docker info --format '{{.NCPU}}')
   myc=$(mysqlq 'SELECT @@max_connections' | tr -d '\r')
   pgc=$(psqlq 'SHOW max_connections')
-  budget() { local b=$(( $1 / 10 )); [ $b -lt 4 ] && b=4; [ $b -gt 20 ] && b=20; echo $(( b - 2 )); }
-  local tasks=$(( 2 * ncpu )) src; src=$(budget "$myc"); local tgt; tgt=$(budget "$pgc")
-  local boxes=10
-  local lim=$boxes
+  tasks=$(( 2 * ncpu )); src=$(budget "$myc"); tgt=$(budget "$pgc")
   [ $(( tasks / 2 )) -lt $lim ] && lim=$(( tasks / 2 ))
   [ "$src" -lt $lim ] && lim=$src
   [ "$tgt" -lt $lim ] && lim=$tgt
@@ -161,48 +171,52 @@ record_budgets() {
   finding "ADR-0002 default budgets here: Connect tasks $tasks (2 x $ncpu vCPU), boxes 10, source connections $src (max_connections $myc), target connections $tgt (max_connections $pgc) → at most **$ADMIT** concurrent single-table boxes"
 }
 
+PH=0
 # run_phase <tag> <table...>: start every table at once, sample until all are written
 run_phase() {
   local tag="$1"; shift
-  local tables=("$@") t
+  local t m
   local tsv="$(art)/timeline-$tag.tsv" res="$(art)/results-$tag.tsv"
-  declare -A ROWS EST DLEN SRC_DONE SINK_DONE
+  PH=$((PH+1)); m="p$PH"
   cleanup_all
-  for t in "${tables[@]}"; do
-    ROWS[$t]=$(mysqlq "SELECT COUNT(*) FROM $t" | tr -d '\r')
-    read -r EST[$t] DLEN[$t] <<<"$(est_bytes "$t" "${ROWS[$t]}")"
+  for t in "$@"; do
+    kv_set "${m}_rows" "$t" "$(mysqlq "SELECT COUNT(*) FROM $t" | tr -d '\r')"
+    local e d; read -r e d <<<"$(est_bytes "$t" "$(kv_get "${m}_rows" "$t")")"
+    kv_set "${m}_est" "$t" "$e"; kv_set "${m}_dlen" "$t" "$d"
     psqlq "$(pg_ddl "$t")" >> "$(art)/run.log" 2>&1
     create_topic "dbx.tp.$tag.$t"
   done
-  log "phase $tag: ${tables[*]}"
+  log "phase $tag: $*"
 
   local T0; T0=$(now)
-  for t in "${tables[@]}"; do put_sink "$tag" "$t"; done      # Sink before Source (ADR-0009)
-  for t in "${tables[@]}"; do put_source "$tag" "$t"; done
+  for t in "$@"; do put_sink "$tag" "$t"; done      # Sink before Source (ADR-0009)
+  for t in "$@"; do put_source "$tag" "$t"; done
 
   printf 't\ttable\ttopic_end\tpg_inserted\n' > "$tsv"
-  local left=${#tables[@]} i=0 el
+  local left=$# i=0 el topic off rel ins rows end n
   while [ "$left" -gt 0 ]; do
     sleep "$SAMPLE_S"; i=$((i+1)); el=$(since "$T0")
-    declare -A END=() INS=()
-    while IFS=: read -r topic _ off; do END[${topic#dbx.tp.$tag.}]=$off; done < <(
+    while IFS=: read -r topic _ off; do kv_set "${m}_end" "${topic#dbx.tp.$tag.}" "$off"; done < <(
       dc exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 \
         --topic "dbx\\.tp\\.$tag\\..*" --time -1 2>/dev/null | tr -d '\r')
-    while IFS='|' read -r rel ins; do INS[$rel]=$ins; done < <(
+    while IFS='|' read -r rel ins; do kv_set "${m}_ins" "$rel" "$ins"; done < <(
       psqlq "SELECT relname, n_tup_ins FROM pg_stat_user_tables WHERE relname LIKE 'b\_%'")
     left=0
-    for t in "${tables[@]}"; do
-      printf '%s\t%s\t%s\t%s\n' "$el" "$t" "${END[$t]:-0}" "${INS[$t]:-0}" >> "$tsv"
-      [ -z "${SRC_DONE[$t]:-}" ] && [ "${END[$t]:-0}" -ge "${ROWS[$t]}" ] && SRC_DONE[$t]=$el
-      if [ -z "${SINK_DONE[$t]:-}" ] && [ "${INS[$t]:-0}" -ge "${ROWS[$t]}" ] \
-         && [ "$(psqlq "SELECT COUNT(*) FROM $t")" -ge "${ROWS[$t]}" ]; then
-        SINK_DONE[$t]=$(since "$T0"); log "$t written at ${SINK_DONE[$t]}s"
+    for t in "$@"; do
+      rows=$(kv_get "${m}_rows" "$t"); end=$(kv_get "${m}_end" "$t"); ins=$(kv_get "${m}_ins" "$t")
+      printf '%s\t%s\t%s\t%s\n' "$el" "$t" "${end:-0}" "${ins:-0}" >> "$tsv"
+      [ -z "$(kv_get "${m}_srcdone" "$t")" ] && [ "${end:-0}" -ge "$rows" ] && kv_set "${m}_srcdone" "$t" "$el"
+      if [ -z "$(kv_get "${m}_sinkdone" "$t")" ] && [ "${ins:-0}" -ge "$rows" ]; then
+        n=$(psqlq "SELECT COUNT(*) FROM $t")
+        if [ "$n" -ge "$rows" ]; then
+          kv_set "${m}_sinkdone" "$t" "$(since "$T0")"; log "$t written at $(kv_get "${m}_sinkdone" "$t")s"
+        fi
       fi
-      [ -z "${SINK_DONE[$t]:-}" ] && left=$((left+1))
+      [ -z "$(kv_get "${m}_sinkdone" "$t")" ] && left=$((left+1))
     done
     if [ $((i % 10)) -eq 0 ]; then
       docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
-        | sed "s/^/$el\t/" >> "$(art)/docker-stats-$tag.tsv"
+        | sed "s/^/$el	/" >> "$(art)/docker-stats-$tag.tsv"
       local f; f=$(failed_connectors)
       if [ -n "$f" ]; then
         for t in $f; do snapshot_status "$t" "$tag"; done
@@ -211,23 +225,24 @@ run_phase() {
         return 1
       fi
     fi
-    if awk -v e="$el" -v m="$PHASE_TIMEOUT_S" 'BEGIN{exit !(e>m)}'; then
+    if awk -v e="$el" -v x="$PHASE_TIMEOUT_S" 'BEGIN{exit !(e>x)}'; then
       finding "**phase $tag timed out** after ${PHASE_TIMEOUT_S}s with $left table(s) unwritten"
       capture_connect_log "$tag"; return 1
     fi
   done
 
-  local makespan; makespan=$(since "$T0")
+  PHASE_MAKESPAN=$(since "$T0")
   printf 'table\tshape\trows\tdata_length\test_bytes\ttopic_bytes\tsrc_done_s\tsink_done_s\test_MiB_s\tdata_MiB_s\trows_s\n' > "$res"
-  for t in "${tables[@]}"; do
+  for t in "$@"; do
     local tb; tb=$(dc exec -T kafka du -sk "/var/lib/kafka/data/dbx.tp.$tag.$t-0" 2>/dev/null | awk '{print $1*1024}')
-    awk -v t="$t" -v s="$(shape_of "$t")" -v r="${ROWS[$t]}" -v d="${DLEN[$t]}" -v e="${EST[$t]}" \
-        -v tb="${tb:-0}" -v sd="${SRC_DONE[$t]:-NA}" -v kd="${SINK_DONE[$t]}" 'BEGIN{
+    awk -v t="$t" -v s="$(shape_of "$t")" -v r="$(kv_get "${m}_rows" "$t")" -v d="$(kv_get "${m}_dlen" "$t")" \
+        -v e="$(kv_get "${m}_est" "$t")" -v tb="${tb:-0}" -v sd="$(kv_get "${m}_srcdone" "$t")" \
+        -v kd="$(kv_get "${m}_sinkdone" "$t")" 'BEGIN{
+      if (sd == "") sd = "NA"
       printf "%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%.2f\t%.2f\t%.0f\n", t, s, r, d, e, tb, sd, kd,
         e/kd/1048576, d/kd/1048576, r/kd }' >> "$res"
   done
   capture_connect_log "$tag" 200
-  PHASE_MAKESPAN=$makespan
   return 0
 }
 

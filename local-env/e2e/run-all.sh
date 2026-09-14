@@ -8,33 +8,26 @@
 # 每条 scenario 独立、可重复执行、自己清理自己的 connector/topic/目标表。
 # 产物落在 e2e/artifacts/<sid>/，其中 FINDINGS.md 是给人看的结论，
 # 其余（trace-*.txt / connect-log-*.txt / avro-*.json）是原始证据，一律不要手改。
+#
+# Must stay runnable on macOS's stock bash 3.2: no associative arrays.
 
 set -uo pipefail
-
-# The scenarios use associative arrays (bash ≥ 4). macOS ships bash 3.2 as /bin/bash and
-# non-interactive shells often lack Homebrew on PATH, so find a newer bash explicitly.
-if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
-  for b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
-    [ -x "$b" ] && exec "$b" "$0" "$@"
-  done
-  echo "bash ≥ 4 required (found $BASH_VERSION); on macOS: brew install bash" >&2
-  exit 2
-fi
-
 cd "$(dirname "$0")/.."
 
 ALL=(s1 s2 s3 s5 s6 s7 s8)
-declare -A SCRIPT=(
-  [s1]=s1_types.sh
-  [s2]=s2_numeric_mapping.sh
-  [s3]=s3_datetime.sh
-  [s5]=s5_large_fields.sh
-  [s6]=s6_pk_modes.sh
-  [s7]=s7_mismatch.sh
-  [s8]=s8_completion_signals.sh
-  # Opt-in only, not in ALL: needs ./e2e/bulk/seed-bulk.sh first and runs for tens of minutes (ticket #63)
-  [s9]=s9_throughput.sh
-)
+script_of() {
+  case "$1" in
+    s1) echo s1_types.sh ;;
+    s2) echo s2_numeric_mapping.sh ;;
+    s3) echo s3_datetime.sh ;;
+    s5) echo s5_large_fields.sh ;;
+    s6) echo s6_pk_modes.sh ;;
+    s7) echo s7_mismatch.sh ;;
+    s8) echo s8_completion_signals.sh ;;
+    # Opt-in only, not in ALL: needs ./e2e/bulk/seed-bulk.sh first and runs for tens of minutes (ticket #63)
+    s9) echo s9_throughput.sh ;;
+  esac
+}
 
 source ./e2e/lib.sh
 preflight
@@ -42,7 +35,7 @@ preflight
 TARGETS=("$@"); [ ${#TARGETS[@]} -eq 0 ] && TARGETS=("${ALL[@]}")
 
 for sid in "${TARGETS[@]}"; do
-  s="${SCRIPT[$sid]:-}"
+  s="$(script_of "$sid")"
   [ -z "$s" ] && { echo "未知 scenario：$sid"; exit 1; }
   echo "════════════════ $sid ════════════════"
   "$BASH" "./e2e/scenarios/$s" || echo "!! $sid 非零退出，产物仍已落盘"
