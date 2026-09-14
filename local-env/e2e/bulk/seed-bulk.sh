@@ -12,8 +12,11 @@
 # like real text). LOB bytes come from RANDOM_BYTES and don't compress (worst case).
 # REPEAT() filler would let zstd inflate the measured throughput.
 #
-# Sizes are env-tunable. The defaults (~2.2 GB of InnoDB data) fit a host with
-# 40 GB free disk: the data lives three times over (MySQL, Kafka, PostgreSQL).
+# Sizes are env-tunable. The defaults (~9 GB of InnoDB data) make each single stream
+# run about two minutes on the reference Mac mini, so per-connector startup (~3 s) stays
+# under a few percent of the measurement. Peak footprint is ~30 GB: MySQL, plus Kafka and
+# PostgreSQL copies of the running phase, plus up to 4 GB of WAL. A 2.2 GB set
+# (NARROW_ROWS=2000000 WIDE_ROWS=100000 LOB_ROWS=150) gave 15-28 s runs, too short.
 #
 #   ./e2e/bulk/seed-bulk.sh           # generate if missing, skip if counts already match
 #   FORCE=1 ./e2e/bulk/seed-bulk.sh   # drop and regenerate
@@ -25,9 +28,9 @@ set -euo pipefail
 
 ENV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-NARROW_TABLES="${NARROW_TABLES:-4}"; NARROW_ROWS="${NARROW_ROWS:-2000000}"
-WIDE_TABLES="${WIDE_TABLES:-3}";     WIDE_ROWS="${WIDE_ROWS:-100000}"
-LOB_TABLES="${LOB_TABLES:-1}";       LOB_ROWS="${LOB_ROWS:-150}"
+NARROW_TABLES="${NARROW_TABLES:-4}"; NARROW_ROWS="${NARROW_ROWS:-8000000}"
+WIDE_TABLES="${WIDE_TABLES:-3}";     WIDE_ROWS="${WIDE_ROWS:-600000}"
+LOB_TABLES="${LOB_TABLES:-1}";       LOB_ROWS="${LOB_ROWS:-1000}"
 LOB_BYTES="${LOB_BYTES:-1572864}"    # 1.5 MiB
 CHUNK=100000
 

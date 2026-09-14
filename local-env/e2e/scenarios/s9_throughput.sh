@@ -32,9 +32,16 @@ init_scenario s9 "reference throughput band"
 
 PHASES="${PHASES:-single concurrent}"
 SINGLE_TABLES="${SINGLE_TABLES:-b_narrow_1 b_wide_1 b_lob_1}"
-SAMPLE_S="${SAMPLE_S:-2}"
+SAMPLE_S="${SAMPLE_S:-1}"
 PHASE_TIMEOUT_S="${PHASE_TIMEOUT_S:-5400}"
 ORDINARY_POLL_RECORDS=500     # Kafka's own default; ADR-0003 keeps poll=1 for large-record tables only
+# Without cursor fetch, Connector/J buffers a Source query's whole result set in the Connect heap:
+# the first run of this scenario OOMed the 4 GiB worker with eight concurrent boxes. The fetch
+# size matches batch.max.rows' default (100). CURSOR_FETCH=0 reproduces the buffered behavior.
+CURSOR_FETCH="${CURSOR_FETCH:-1}"
+FETCH_SIZE="${FETCH_SIZE:-100}"
+MYSQL_URL="jdbc:mysql://mysql:3306/dbx_src?useSSL=false&allowPublicKeyRetrieval=true"
+[ "$CURSOR_FETCH" = 1 ] && MYSQL_URL="$MYSQL_URL&useCursorFetch=true&defaultFetchSize=$FETCH_SIZE"
 
 # Sub-second clock: EPOCHREALTIME on bash 5, perl (shipped with macOS) otherwise
 now() {
@@ -76,7 +83,7 @@ put_source() {
   put_connector "tp-$tag-src-$t" <<JSON
 {
   "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
-  "connection.url": "jdbc:mysql://mysql:3306/dbx_src?useSSL=false&allowPublicKeyRetrieval=true",
+  "connection.url": "$MYSQL_URL",
   "connection.user": "dbx", "connection.password": "dbx",
   "mode": "incrementing", "incrementing.column.name": "id",
   "table.whitelist": "$t",
@@ -143,8 +150,9 @@ record_env() {
     uptime
     echo "## docker"
     docker info --format '{{.OperatingSystem}} {{.ServerVersion}}, {{.NCPU}} vCPU, {{.MemTotal}} B'
-    echo "## images"
-    dc images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null || dc images
+    echo "## images (docker-compose.yml; Connect is built FROM the cp-kafka-connect tag in connect/Dockerfile)"
+    grep -E '^\s+image:' "$ENV_DIR/docker-compose.yml" | sed 's/#.*//'
+    grep -E '^FROM' "$ENV_DIR/connect/Dockerfile"
     echo "## worker overrides (docker-compose.yml)"
     grep -E 'CONNECT_(CONSUMER|PRODUCER)_|KAFKA_HEAP_OPTS' "$ENV_DIR/docker-compose.yml" | sed 's/#.*//'
     echo "## database limits"
@@ -253,7 +261,7 @@ for t in $SINGLE_TABLES; do
 done
 record_env
 record_budgets
-finding "Source (every table): \`mode=incrementing\` (ADR-0001), \`tasks.max=1\`, \`poll.interval.ms=5000\`; \`batch.max.rows\` unset → connector default 100; MySQL URL without cursor fetch; ADR-0003 producer overrides (zstd, 25 MiB request, 128 MiB buffer, in-flight 1)"
+finding "Source (every table): \`mode=incrementing\` (ADR-0001), \`tasks.max=1\`, \`poll.interval.ms=5000\`; \`batch.max.rows\` unset → connector default 100; MySQL URL \`$( [ "$CURSOR_FETCH" = 1 ] && echo "useCursorFetch=true&defaultFetchSize=$FETCH_SIZE" || echo "without cursor fetch (whole result set buffered)")\`; ADR-0003 producer overrides (zstd, 25 MiB request, 128 MiB buffer, in-flight 1)"
 finding "Sink: \`insert.mode=insert\`, \`pk.mode=none\`, \`quote.sql.identifiers=always\` (plan §7.4); \`batch.size\` unset → connector default 3000; \`consumer.override.max.poll.records\` = **$ORDINARY_POLL_RECORDS** for ordinary tables, **1** for the large-record table (ADR-0003); worker-level default is 1"
 
 if [[ " $PHASES " == *" single "* ]]; then
