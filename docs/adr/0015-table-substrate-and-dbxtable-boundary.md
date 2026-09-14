@@ -1,6 +1,6 @@
 # Table substrate and the DbxTable boundary
 
-> **状态：待作废（2026-09-08）。** 前端整体替换为 `dbx-prototype` 后，高密度表格能力由 Ant Design 5 的 `Table` 承接，`@carbon/ibm-products` 的 `Datagrid` 不再进入依赖树 —— 决策票 #44 指出的上游 deprecation 风险随之消失，`DbxTable` 边界也失去存在理由。作废工作见决策票 #45 的后继票。
+> **Status: superseded by [ADR-0025](0025-antd-table-with-a-thin-datatable-entry-point.md)** (#49). Read ADR-0025 for the current table substrate; this file is kept as history. #44's upstream-deprecation question closed with `Datagrid` leaving the dependency tree.
 
 The table is not one control among many in DBX; it is the product surface. Selecting a production schema, reviewing per-table conclusions, and watching per-table progress all happen in a table that must hold a sticky first column, horizontal phase columns, per-row status, and roughly a thousand rows. DBX therefore uses the `Datagrid` from `@carbon/ibm-products`, but no business code imports it directly: every table is rendered through a DBX-owned `DbxTable` boundary.
 
