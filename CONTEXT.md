@@ -197,6 +197,11 @@ The externally enforced, time-bounded operational commitment that source data co
 _Avoid_: Maintenance mode, pause, permanent checkbox
 _中文_: 写冻结
 
+**Task write freeze**:
+A migration task's write-freeze commitment over its whole scope, spanning every run until the task conclusion is reached, with an accountable operator and deadline reconfirmed before each run (ADR-0023). Each run's own write freeze still applies within it.
+_Avoid_: Long freeze, batch freeze, 冻结期
+_中文_: 整库冻结承诺
+
 **Read complete**:
 The boundary at which every topic in a box contains the source baseline row count, production has remained stable for two polling intervals, and the healthy Source connector can be removed.
 _Avoid_: Migration complete, connector complete
@@ -238,8 +243,8 @@ _Avoid_: Unknown, stuck, timed out
 _中文_: 无法预估
 
 **Cancellation**:
-A user-requested terminal stop of a migration run that preserves topics, target data, and diagnostic evidence.
-_Avoid_: Discard, delete, rollback, 停止
+A user-requested terminal stop of a migration run that preserves topics, target data, and diagnostic evidence. Its gentler form, 收尾取消 (finishing cancellation), admits no new box and lets tables already transferring finish first.
+_Avoid_: Discard, delete, rollback, 停止, 收尾停止
 _中文_: 取消
 
 **Discard**:
@@ -284,7 +289,7 @@ _Avoid_: Log bundle, data dump
 _中文_: 诊断包
 
 **Re-migration**:
-A new migration run created for the tables an earlier run left failed or undetermined, reusing the earlier run's approved decisions as its origin. It never repairs, resumes, or rewrites the earlier run: the earlier table migration units keep their results, and the new run produces new ones.
+A new migration run created for the task's tables that have no successful result yet — left failed or undetermined, or never run in an earlier window — reusing the earlier run's approved decisions as its origin. It never repairs, resumes, or rewrites the earlier run: the earlier table migration units keep their results, and the new run produces new ones.
 _Avoid_: Retry, resume, repair, rollback, 重跑, 重迁, 断点续跑
 _中文_: 重新迁移
 
@@ -312,6 +317,11 @@ _中文_: 校验项
 The deterministic projection of a migration run's units and boxes onto one status value (ADR-0004). It is never separately editable, so it can never disagree with the units it summarises.
 _Avoid_: Run state, progress state
 _中文_: 迁移运行状态
+
+**Task conclusion**:
+The projection of each in-scope table's latest unit result, overlaid with the closing drift check, onto one verdict for the whole migration task (ADR-0023). It is green only when every table is 迁移完成 and no drift was found, and it never rewrites a run's results.
+_Avoid_: Task status, overall success, 全部完成, 整库完成
+_中文_: 整库结论
 
 **Table migration phase**:
 Where in the execution sequence a table migration unit currently stands (ADR-0004). A phase says what is happening, never how it turned out.
