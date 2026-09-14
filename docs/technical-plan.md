@@ -434,6 +434,8 @@ These remain Wayfinder fog or future initiatives. No placeholder SPI or permissi
 
 ## 15. Acceptance and test strategy
 
+§15.1–15.3 are rungs L1–L3 of the verification ladder; budgets, who runs each rung, and golden-file rules: ADR-0021.
+
 ### 15.1 Pure and persistence tests
 
 - Golden case for every type-matrix row and important source-metadata variant.

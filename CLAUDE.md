@@ -12,6 +12,10 @@ This is a single-context repo: read root `CONTEXT.md` and root `docs/adr/` when 
 
 Before changing a backend module, read only its `README.md` and `*ContractTest`, plus the `api` of modules it depends on; one session changes one module. When an ArchUnit rule goes red, fix the code, not the rule. Boundaries and rationale: ADR-0018.
 
+### Verification
+
+Run all builds, tests, installs, and containers on the mac through the `rexec` skill. Before ending a session, get L1 (`check`) green; when the change touches `gateway`, the Connect REST client, or `workflow` repositories, also get that module's L2 (`seamTest`) green. Change a golden file only through `-Pgolden.update=<name>` plus a `Golden-Update: <name> — <reason>` commit trailer. Ladder and rationale: ADR-0021.
+
 ### Wayfinder branches
 
 Use one cumulative `wayfinder/<initiative>` branch per initiative. Create each `decision/<ticket-id>-<slug>` branch from the latest Wayfinder baseline and merge it back before starting dependent tickets. Process tickets sequentially by default; use separate worktrees only for independent tickets running concurrently. Never branch one decision ticket from another.
