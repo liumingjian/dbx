@@ -14,7 +14,7 @@ Before changing a backend module, read only its `README.md` and `*ContractTest`,
 
 ### Verification
 
-Run all builds, tests, installs, and containers on the mac through the `rexec` skill. Before ending a session, get L1 (`check`) green; when the change touches `gateway`, the Connect REST client, or `workflow` repositories, also get that module's L2 (`seamTest`) green. Change a golden file only through `-Pgolden.update=<name>` plus a `Golden-Update: <name> — <reason>` commit trailer. Ladder and rationale: ADR-0021.
+Run all builds, tests, installs, and containers on the mac through the `rexec` skill. Before ending a session, get L1 (`check`) green; when the change touches `gateway`, the Connect REST client, or `workflow` repositories, also get that module's L2 (`seamTest`) green. Change a golden file only through `-Pgolden.update=<name>` plus a `Golden-Update: <name> — <reason>` commit trailer. Ladder and rationale: ADR-0022.
 
 ### Wayfinder branches
 
