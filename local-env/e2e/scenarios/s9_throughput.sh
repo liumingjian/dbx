@@ -37,12 +37,21 @@ PHASE_TIMEOUT_S="${PHASE_TIMEOUT_S:-5400}"
 STALL_S="${STALL_S:-300}"     # abort a phase after this long with no topic or target progress
 ORDINARY_POLL_RECORDS=500     # Kafka's own default; ADR-0003 keeps poll=1 for large-record tables only
 # Without cursor fetch, Connector/J buffers a Source query's whole result set in the Connect heap:
-# the first run of this scenario OOMed the 4 GiB worker with eight concurrent boxes. The fetch
-# size matches batch.max.rows' default (100). CURSOR_FETCH=0 reproduces the buffered behavior.
+# the first run of this scenario OOMed the 4 GiB worker with eight concurrent boxes.
+# CURSOR_FETCH=0 reproduces the buffered behavior. Fetch size follows each Source's batch.max.rows.
 CURSOR_FETCH="${CURSOR_FETCH:-1}"
-FETCH_SIZE="${FETCH_SIZE:-100}"
-MYSQL_URL="jdbc:mysql://mysql:3306/dbx_src?useSSL=false&allowPublicKeyRetrieval=true"
-[ "$CURSOR_FETCH" = 1 ] && MYSQL_URL="$MYSQL_URL&useCursorFetch=true&defaultFetchSize=$FETCH_SIZE"
+# The JDBC Source also reads ahead into its own buffer (max.buffer.size; its default derives from
+# batch.max.rows, which defaults to 1000 in 10.9.6). With 1.5 MiB rows that buffer alone OOMed a
+# fresh 4 GiB worker running the large-record table by itself, so large-record Sources are
+# bounded here the way ADR-0003 bounds their Sinks. Lab settings, not a plan decision.
+ORDINARY_BATCH_MAX_ROWS=1000                          # the connector default, stated explicitly
+LOB_BATCH_MAX_ROWS="${LOB_BATCH_MAX_ROWS:-1}"
+LOB_MAX_BUFFER="${LOB_MAX_BUFFER:-4}"
+mysql_url() {  # <fetch size>
+  local u="jdbc:mysql://mysql:3306/dbx_src?useSSL=false&allowPublicKeyRetrieval=true"
+  [ "$CURSOR_FETCH" = 1 ] && u="$u&useCursorFetch=true&defaultFetchSize=$1"
+  echo "$u"
+}
 
 # Sub-second clock: EPOCHREALTIME on bash 5, perl (shipped with macOS) otherwise
 now() {
@@ -80,16 +89,18 @@ est_bytes() {
 }
 
 put_source() {
-  local tag="$1" t="$2"
+  local tag="$1" t="$2" rows="$ORDINARY_BATCH_MAX_ROWS" buf=0
+  [ "$(shape_of "$t")" = lob ] && { rows="$LOB_BATCH_MAX_ROWS"; buf="$LOB_MAX_BUFFER"; }
   put_connector "tp-$tag-src-$t" <<JSON
 {
   "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
-  "connection.url": "$MYSQL_URL",
+  "connection.url": "$(mysql_url "$rows")",
   "connection.user": "dbx", "connection.password": "dbx",
   "mode": "incrementing", "incrementing.column.name": "id",
   "table.whitelist": "$t",
   "topic.prefix": "dbx.tp.$tag.",
   "poll.interval.ms": 5000, "tasks.max": 1,
+  "batch.max.rows": $rows, "max.buffer.size": $buf,
   "producer.override.max.request.size": 26214400,
   "producer.override.buffer.memory": 134217728,
   "producer.override.compression.type": "zstd",
@@ -284,7 +295,7 @@ for t in $SINGLE_TABLES; do
 done
 record_env
 record_budgets
-finding "Source (every table): \`mode=incrementing\` (ADR-0001), \`tasks.max=1\`, \`poll.interval.ms=5000\`; \`batch.max.rows\` unset → connector default 100; MySQL URL \`$( [ "$CURSOR_FETCH" = 1 ] && echo "useCursorFetch=true&defaultFetchSize=$FETCH_SIZE" || echo "without cursor fetch (whole result set buffered)")\`; ADR-0003 producer overrides (zstd, 25 MiB request, 128 MiB buffer, in-flight 1)"
+finding "Source (every table): \`mode=incrementing\` (ADR-0001), \`tasks.max=1\`, \`poll.interval.ms=5000\`; ordinary tables \`batch.max.rows=$ORDINARY_BATCH_MAX_ROWS\` (connector default) and \`max.buffer.size=0\` (default); large-record table \`batch.max.rows=$LOB_BATCH_MAX_ROWS\`, \`max.buffer.size=$LOB_MAX_BUFFER\`; MySQL URL $( [ "$CURSOR_FETCH" = 1 ] && echo "\`useCursorFetch=true\`, \`defaultFetchSize\` = the table's batch.max.rows" || echo "without cursor fetch (whole result set buffered)"); ADR-0003 producer overrides (zstd, 25 MiB request, 128 MiB buffer, in-flight 1)"
 finding "Sink: \`insert.mode=insert\`, \`pk.mode=none\`, \`quote.sql.identifiers=always\` (plan §7.4); \`batch.size\` unset → connector default 3000; \`consumer.override.max.poll.records\` = **$ORDINARY_POLL_RECORDS** for ordinary tables, **1** for the large-record table (ADR-0003); worker-level default is 1"
 
 if [[ " $PHASES " == *" single "* ]]; then
