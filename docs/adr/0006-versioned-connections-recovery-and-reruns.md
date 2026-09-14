@@ -1,3 +1,7 @@
+---
+status: accepted (discard clause amended by ADR-0023: task-level abandonment drops DBX-owned target tables)
+---
+
 # Versioned connections, evidence-based recovery, and clean reruns
 
 DBX v1 treats database access, execution recovery, and data reruns as separate concerns. A saved connection is reusable configuration; a migration run is an immutable execution snapshot; recovery may continue that run only while its original external execution can still be proven; a rerun always starts again from a clean target generation.

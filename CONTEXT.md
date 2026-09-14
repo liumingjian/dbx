@@ -244,13 +244,28 @@ _中文_: 取消
 
 **Discard**:
 A separately confirmed destructive operation that removes only a stopped run's resources that the run can still prove it exclusively owns, while retaining its audit record and original technical outcomes. A later run's target data is never discardable by an earlier run.
-_Avoid_: Cancel, retry, cleanup, rollback
+_Avoid_: Cancel, retry, cleanup, rollback, Abandonment
 _中文_: 丢弃
 
 **Target generation**:
-The exclusive write epoch created when DBX first creates or deliberately clears a target table for a migration run. It prevents an earlier run from discarding target data after a later run has taken ownership.
+The exclusive write epoch created when DBX first creates or deliberately clears a target table for a migration run, bound to that table's database object identity. It prevents an earlier run from discarding target data after a later run has taken ownership.
 _Avoid_: Table version, run number
 _中文_: 目标代际
+
+**Abandonment**:
+A separately confirmed, task-level destructive decision that the migration will not go forward: DBX removes the target tables it still owns across all the task's runs, and the task is permanently closed while its records remain (ADR-0023).
+_Avoid_: Rollback, 回滚, discard, delete task, 删除任务
+_中文_: 废弃
+
+**Abandonment list**:
+The reviewable rendering of what an abandonment would drop and what it would refuse, with the evidence each decision rests on. Before any run exists it can only be projected from the table write contracts, and a projected list is never a confirmation.
+_Avoid_: Rollback plan, deletion preview
+_中文_: 废弃清单; projected: 预估废弃清单
+
+**Migration task status**:
+The task's own lifecycle above its latest run's projection: whether the migration is still active or has been abandoned. It never rewrites any run's status or outcomes.
+_Avoid_: Task state, run status
+_中文_: 迁移任务状态
 
 **Error occurrence**:
 An immutable fact that DBX observed at a phase and scope, retaining the evidence and correlation needed to explain what happened. It is not itself a workflow outcome.
@@ -390,6 +405,28 @@ _中文_: 未执行
 Work that is under way, so no conclusion exists yet. DBX shows the absence of a conclusion rather than an optimistic one, and a stale earlier conclusion is never shown in its place.
 _Avoid_: 待定, 未知, 等待调度
 _中文_: 执行中
+
+### Migration task status
+
+**Active**:
+The migration has not been abandoned; the task presents its latest run's status.
+_Avoid_: 正常, 运行中
+_中文_: 进行中
+
+**Abandoning**:
+An abandonment is confirmed and not every owned object is resolved yet; the task still holds its target leases.
+_Avoid_: 回滚中, 删除中
+_中文_: 废弃中
+
+**Abandoned**:
+Every owned object the abandonment covered is gone, and the task is permanently closed.
+_Avoid_: 已回滚, 已删除, 已丢弃
+_中文_: 已废弃
+
+**Partially abandoned**:
+The abandonment finished what it could, but some objects were refused and are named; it can be retried once the blocker is removed.
+_Avoid_: 废弃失败, 部分回滚
+_中文_: 部分废弃
 
 ### Migration run status
 

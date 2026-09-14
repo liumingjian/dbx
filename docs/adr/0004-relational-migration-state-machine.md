@@ -1,3 +1,7 @@
+---
+status: accepted (task-state clause amended by ADR-0023: a migration task gains an abandonment lifecycle above its run projection)
+---
+
 # Relational migration state with orthogonal phase and outcome
 
 DBX v1 stores ordinary relational current state as the recovery authority and an append-only timeline as audit evidence. It does not use event sourcing. A state transition and its timeline event commit in the same database transaction; the event explains a transition but is never replayed to reconstruct current state. High-frequency progress observations are the only asynchronous writes and may be coalesced.
