@@ -34,6 +34,7 @@ PHASES="${PHASES:-single concurrent}"
 SINGLE_TABLES="${SINGLE_TABLES:-b_narrow_1 b_wide_1 b_lob_1}"
 SAMPLE_S="${SAMPLE_S:-1}"
 PHASE_TIMEOUT_S="${PHASE_TIMEOUT_S:-5400}"
+STALL_S="${STALL_S:-300}"     # abort a phase after this long with no topic or target progress
 ORDINARY_POLL_RECORDS=500     # Kafka's own default; ADR-0003 keeps poll=1 for large-record tables only
 # Without cursor fetch, Connector/J buffers a Source query's whole result set in the Connect heap:
 # the first run of this scenario OOMed the 4 GiB worker with eight concurrent boxes. The fetch
@@ -140,6 +141,21 @@ failed_connectors() {
     | .key'
 }
 
+# Every phase starts on a freshly restarted worker. A worker that once hit OutOfMemoryError keeps
+# answering REST, but its offsets-topic reader thread can be dead: every new Source then blocks
+# forever in start() reading offsets (observed: 90 min per phase with zero records).
+# A restart also gives each phase the same empty heap.
+fresh_worker() {
+  log "restarting Connect for a fresh worker"
+  dc restart connect >> "$(art)/run.log" 2>&1
+  local i
+  for i in $(seq 1 120); do
+    curl -sf "$CONNECT/connectors" >/dev/null && { sleep 10; return 0; }   # 10 s for group join
+    sleep 2
+  done
+  log "Connect did not come back after restart"; exit 1
+}
+
 record_env() {
   {
     echo "## host"
@@ -187,6 +203,7 @@ run_phase() {
   local tsv="$(art)/timeline-$tag.tsv" res="$(art)/results-$tag.tsv"
   PH=$((PH+1)); m="p$PH"
   cleanup_all
+  fresh_worker
   for t in "$@"; do
     kv_set "${m}_rows" "$t" "$(mysqlq "SELECT COUNT(*) FROM $t" | tr -d '\r')"
     local e d; read -r e d <<<"$(est_bytes "$t" "$(kv_get "${m}_rows" "$t")")"
@@ -201,7 +218,7 @@ run_phase() {
   for t in "$@"; do put_source "$tag" "$t"; done
 
   printf 't\ttable\ttopic_end\tpg_inserted\n' > "$tsv"
-  local left=$# i=0 el topic off rel ins rows end n
+  local left=$# i=0 el topic off rel ins rows end n tot last_tot=-1 last_prog=0
   while [ "$left" -gt 0 ]; do
     sleep "$SAMPLE_S"; i=$((i+1)); el=$(since "$T0")
     while IFS=: read -r topic _ off; do kv_set "${m}_end" "${topic#dbx.tp.$tag.}" "$off"; done < <(
@@ -209,10 +226,11 @@ run_phase() {
         --topic "dbx\\.tp\\.$tag\\..*" --time -1 2>/dev/null | tr -d '\r')
     while IFS='|' read -r rel ins; do kv_set "${m}_ins" "$rel" "$ins"; done < <(
       psqlq "SELECT relname, n_tup_ins FROM pg_stat_user_tables WHERE relname LIKE 'b\_%'")
-    left=0
+    left=0; tot=0
     for t in "$@"; do
       rows=$(kv_get "${m}_rows" "$t"); end=$(kv_get "${m}_end" "$t"); ins=$(kv_get "${m}_ins" "$t")
       printf '%s\t%s\t%s\t%s\n' "$el" "$t" "${end:-0}" "${ins:-0}" >> "$tsv"
+      tot=$(( tot + ${end:-0} + ${ins:-0} ))
       [ -z "$(kv_get "${m}_srcdone" "$t")" ] && [ "${end:-0}" -ge "$rows" ] && kv_set "${m}_srcdone" "$t" "$el"
       if [ -z "$(kv_get "${m}_sinkdone" "$t")" ] && [ "${ins:-0}" -ge "$rows" ]; then
         n=$(psqlq "SELECT COUNT(*) FROM $t")
@@ -232,6 +250,11 @@ run_phase() {
         finding "**phase $tag aborted**: connector(s) FAILED: $(echo $f)"
         return 1
       fi
+    fi
+    if [ "$tot" != "$last_tot" ]; then last_tot=$tot; last_prog=$el; fi
+    if [ "$left" -gt 0 ] && awk -v e="$el" -v p="$last_prog" -v s="$STALL_S" 'BEGIN{exit !(e-p>s)}'; then
+      finding "**phase $tag stalled**: no topic or target progress for ${STALL_S}s (at ${el}s)"
+      capture_connect_log "$tag"; return 1
     fi
     if awk -v e="$el" -v x="$PHASE_TIMEOUT_S" 'BEGIN{exit !(e>x)}'; then
       finding "**phase $tag timed out** after ${PHASE_TIMEOUT_S}s with $left table(s) unwritten"
