@@ -10,6 +10,17 @@
 # 其余（trace-*.txt / connect-log-*.txt / avro-*.json）是原始证据，一律不要手改。
 
 set -uo pipefail
+
+# The scenarios use associative arrays (bash ≥ 4). macOS ships bash 3.2 as /bin/bash and
+# non-interactive shells often lack Homebrew on PATH, so find a newer bash explicitly.
+if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+  for b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    [ -x "$b" ] && exec "$b" "$0" "$@"
+  done
+  echo "bash ≥ 4 required (found $BASH_VERSION); on macOS: brew install bash" >&2
+  exit 2
+fi
+
 cd "$(dirname "$0")/.."
 
 ALL=(s1 s2 s3 s5 s6 s7 s8)
@@ -34,7 +45,7 @@ for sid in "${TARGETS[@]}"; do
   s="${SCRIPT[$sid]:-}"
   [ -z "$s" ] && { echo "未知 scenario：$sid"; exit 1; }
   echo "════════════════ $sid ════════════════"
-  bash "./e2e/scenarios/$s" || echo "!! $sid 非零退出，产物仍已落盘"
+  "$BASH" "./e2e/scenarios/$s" || echo "!! $sid 非零退出，产物仍已落盘"
 done
 
 echo "════════════════ 汇总 ════════════════"
