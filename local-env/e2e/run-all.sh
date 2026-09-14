@@ -21,6 +21,8 @@ declare -A SCRIPT=(
   [s6]=s6_pk_modes.sh
   [s7]=s7_mismatch.sh
   [s8]=s8_completion_signals.sh
+  # Opt-in only, not in ALL: needs ./e2e/bulk/seed-bulk.sh first and runs for tens of minutes (ticket #63)
+  [s9]=s9_throughput.sh
 )
 
 source ./e2e/lib.sh

@@ -39,6 +39,14 @@ docker compose ps                 # 等 5/5 healthy（冷启动约 40 秒，见 
 | `s6` | 6 | 无主键表 `insert`（含 bulk 的 offset 与重复投递）；复合主键表 `upsert` | `offsets-bulk.json`、`cpk-rows.txt` |
 | `s7` | 7 | 缺列 / 类型错 / 类型错+默认 batch.size 三个变体的失败形态与**时机** | `trace-*.txt` |
 | `s8` | 8 | 从创建到读完的五路信号同时采样，1 秒一采 | `signals.tsv` |
+| `s9` | — (ticket [#63](https://github.com/liumingjian/dbx/issues/63)) | Reference throughput band (参考吞吐带) for ADR-0019: single-stream and concurrent end-to-end throughput, in ADR-0002 estimator bytes | `results-*.tsv`, `timeline-*.tsv`, `env.txt` |
+
+`s9` is opt-in: it is not in the default `run-all.sh` list, and it needs the bulk dataset first. Reproduce with:
+
+```bash
+bash local-env/e2e/bulk/lab-up.sh      # compose up + seed-bulk.sh (~2.2 GB; sizes via env, see the script header)
+bash local-env/e2e/run-all.sh s9       # PHASES=single|concurrent to run one phase
+```
 
 没有 `s4`：问题 4（utf8mb4）与问题 1 是同一条链路上的两个断言，拆开跑等于白跑一遍主链路，已并入 `s1`。
 
