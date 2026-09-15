@@ -1,0 +1,3 @@
+Created_tmp_disk_tables	129
+Created_tmp_files	5
+Created_tmp_tables	749

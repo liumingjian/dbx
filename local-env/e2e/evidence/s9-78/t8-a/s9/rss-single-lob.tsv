@@ -1,0 +1,6 @@
+t	component	rss_MiB
+1.4	connect	1402
+1.4	kafka	1189
+1.4	schema-registry	266
+1.4	mysql	299
+1.4	postgres	193
