@@ -1,5 +1,7 @@
 # Ant Design 5 with a Carbon-derived skin, DBX-owned conclusion indicators, and a Chinese typography layer
 
+> Per [#89](https://github.com/liumingjian/dbx/issues/89): v1 ships zh-CN only and hides the language switch; the two-locale rules below take effect in v2.
+
 Supersedes ADR-0014. Decided in #47, following #45's adoption of `dbx-prototype` as the frontend baseline. ADR-0029 extends the conclusion set and palette below with preflight finding impact and an accepted-risk indicator.
 
 DBX v1 builds its operator interface on Ant Design 5, skinned with DBX's own Carbon-derived token layer. The substrate comes with the prototype. What ADR-0014 bought from Carbon — conclusions that never rest on colour alone, and a Chinese typography layer — DBX now owns itself. The rest of this ADR records how.
@@ -14,7 +16,7 @@ Reason: `DESIGN.md` restated the values by hand with nothing keeping them in ste
 
 Almost every colour on screen carries a conclusion (`SUPPORTED`, `UNSUPPORTED`, `INCONCLUSIVE`, `PASS`, `FAIL`, …). Ant Design has no status-indicator vocabulary, so DBX supplies one.
 
-- **One mapping site.** `conclusions/conclusion.ts` is the only module that knows which indicator carries which conclusion. It is ported from the current frontend with its compile-time coverage types and its two-kind notice rule (`error` = 无法迁移, `info` = 无法确认是否可迁移). Every view that colours something by conclusion goes through it: progress-bar fills, the verdict banner, and notification or dashboard severity included. A second conditional anywhere else is how `INCONCLUSIVE` comes to render as a caution in one screen and a failure in another.
+- **One mapping site.** `conclusions/conclusion.ts` is the only module that knows which indicator carries which conclusion. It is ported from the current frontend with its compile-time coverage types and its notice rule, extended by ADR-0029 from two kinds (`error` = 无法迁移, `info` = 无法确认是否可迁移) to the three finding impacts and the accepted-risk indicator. Every view that colours something by conclusion goes through it: progress-bar fills, the verdict banner, and notification or dashboard severity included. A second conditional anywhere else is how `INCONCLUSIVE` comes to render as a caution in one screen and a failure in another.
 - **Three channels, always.** `ConclusionIndicator` renders every conclusion as a distinct icon shape, a colour, and a text label. The label is derived from the conclusion inside the component, so callers cannot drop or override it. Icons come from `@carbon/icons-react`, whose semantic icons map one-to-one onto the kinds `conclusion.ts` already declares (`unknown`, `undefined`, `caution-major`, …).
 - **`INCONCLUSIVE` (无法判定) is neutral.** It takes an information or neutral colour with a question-mark shape, distinct from `NOT_APPLICABLE`'s hollow or dash shape. The yellow and orange palette belongs to caution conclusions only, because 「无法判定」 must never read as 「有点风险但可以过」.
 - **Enforcement.** A lint rule restricts views from expressing a conclusion through antd `Tag color` or `Badge status`. `Tag` stays for categorising dimensions such as database kind. A unit test asserts icon, colour, and label for every member of `DbxConclusion`.

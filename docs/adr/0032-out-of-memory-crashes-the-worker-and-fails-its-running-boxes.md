@@ -1,5 +1,5 @@
 ---
-status: accepted (amends the execution-platform clause of ADR-0021 and the stuck clause of ADR-0001; makes ADR-0027's Compose self-healing concrete; the admission pause and its resume are made concrete by ADR-0037)
+status: accepted (amends the execution-platform clause of ADR-0021 and the stuck clause of ADR-0001; makes ADR-0027's Compose self-healing concrete; the admission pause and its resume are made concrete by ADR-0039)
 ---
 
 # Out of memory crashes the worker; a Connect restart fails its running boxes

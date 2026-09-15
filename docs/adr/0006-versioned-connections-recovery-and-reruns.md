@@ -1,8 +1,10 @@
 ---
-status: accepted (discard clause amended by ADR-0023: task-level abandonment drops DBX-owned target tables; run-scoped write-freeze clause amended by ADR-0024: a task write freeze spans cross-window runs; target generation clause amended by #86: a failed structural proof drops the never-written table its run just created)
+status: accepted (discard clause amended by ADR-0023: task-level abandonment drops DBX-owned target tables; run-scoped write-freeze clause amended by ADR-0024: a task write freeze spans cross-window runs; target generation clause amended by #86: a failed structural proof drops the never-written table its run just created; recovery clause amended by ADR-0032: a Connect restart fails the running boxes and is never continued; budget clause amended by ADR-0039: one ten-minute budget, Schema Registry joins ADR-0021's platform clause, database unreachability stays run-scoped under this ADR's budget)
 ---
 
 # Versioned connections, evidence-based recovery, and clean reruns
+
+> **v1 suspension:** v1 ships only the built-in deployment, so the customer-owned Connect paragraphs (identically mounted secret path on DBX and every worker) have no subject in v1 and return with external clusters in v2, as for ADR-0003 and ADR-0009.
 
 > Specified by [ADR-0035](0035-offline-release-package-one-release-version-and-gated-in-place-upgrade.md) for the built-in deployment: the master key is a mounted file in the install's `secrets/` directory, beside the tombstone ledger. H2 holds only the key's fingerprint, and upgrade and rollback never write `secrets/`.
 

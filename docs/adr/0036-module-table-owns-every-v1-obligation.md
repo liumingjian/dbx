@@ -36,7 +36,7 @@ Release and upgrade (ADR-0035) are a non-Java `release` sub-spec: the script, Co
 
 - The v1 spec has one sub-spec per Java package (fourteen), plus `release` and `frontend`.
 - `orchestration` now schedules background jobs (the cleanup retries), and its README grows accordingly.
-- Admission paused (准入已暂停) is a stop reason for admission, not a run status; while it is open the run projects `ATTENTION_REQUIRED` (amended by ADR-0037).
+- Admission paused (准入已暂停) is a stop reason for admission, not a run status; while it is open the run projects `ATTENTION_REQUIRED` (amended by [ADR-0039](0039-admission-paused-is-a-run-fact-that-requires-attention.md)).
 
 ## Considered options
 

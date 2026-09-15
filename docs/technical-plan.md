@@ -23,16 +23,36 @@ If two repository documents conflict, implementation stops until the documents a
 | Relational state, table-unit state machine, H2, and Flyway | [ADR-0004](adr/0004-relational-migration-state-machine.md) |
 | Error translation and diagnostic evidence | [ADR-0005](adr/0005-error-translation-and-diagnostic-evidence.md) |
 | Connections, credentials, recovery, cancellation, discard, and reruns | [ADR-0006](adr/0006-versioned-connections-recovery-and-reruns.md) |
-| Six-stage migration wizard | [ADR-0007](adr/0007-migration-wizard-journey-and-information-architecture.md) |
 | Source/target dialect and directed database-pair seam | [ADR-0008](adr/0008-database-dialect-and-pair-extension-seam.md) |
 | Kafka and Kafka Connect as the sole data plane | [ADR-0009](adr/0009-kafka-connect-v1-data-plane.md) |
 | Avro and Schema Registry lifecycle | [ADR-0010](adr/0010-avro-schema-registry-lifecycle.md) |
 | Table write contract, platform DDL, and Sink contract | [ADR-0011](adr/0011-platform-owned-ddl-and-table-write-contract.md) |
 | Spring JDBC persistence without JPA | [ADR-0012](adr/0012-spring-jdbc-no-jpa.md) |
 | Whole-table execution without sharding | [ADR-0013](adr/0013-single-table-execution-granularity.md) |
-| Duration estimate, remaining-time estimate, and reference throughput band | [ADR-0019](adr/0019-migration-duration-estimate-before-the-run.md) |
+| Frontend table substrate and `DataTable` entry point | [ADR-0015](adr/0015-table-substrate-and-dbxtable-boundary.md), [ADR-0025](adr/0025-antd-table-with-a-thin-datatable-entry-point.md) |
+| Frontend contract, mock boundary, and progress transport | [ADR-0016](adr/0016-frontend-contract-mock-boundary-and-progress-transport.md) |
+| Design system, conclusion indicators, and Chinese typography | [ADR-0017](adr/0017-ant-design-substrate-conclusion-indicators-and-chinese-typography.md) |
+| Backend module rules and agent working surface | [ADR-0018](adr/0018-backend-module-boundaries-and-agent-working-surface.md) |
+| Backend module table | [ADR-0036](adr/0036-module-table-owns-every-v1-obligation.md) |
+| Five-stage wizard and run-organised task console | [ADR-0020](adr/0020-five-stage-wizard-and-task-console.md) |
+| Runtime condition | [ADR-0021](adr/0021-runtime-condition-observes-and-never-adjudicates.md) |
+| Verification ladder and golden files | [ADR-0022](adr/0022-verification-ladder-and-explicit-golden-updates.md) |
+| Task abandonment | [ADR-0023](adr/0023-task-abandonment-drops-owned-target-tables.md) |
+| Cross-window runs, task write freeze, and task conclusion | [ADR-0024](adr/0024-cross-window-batches-as-runs-under-a-task-write-freeze.md) |
+| Read-only contract rendering and supplemental SQL | [ADR-0026](adr/0026-read-only-contract-rendering-and-task-level-supplemental-sql.md) |
 | Environment check: detect and explain, no host control | [ADR-0027](adr/0027-environment-check-detects-and-explains-without-host-control.md) |
 | Diagnostic package: scopes, manifest, and no data values | [ADR-0028](adr/0028-diagnostic-package-scopes-manifest-and-no-values.md) |
+| Preflight finding impact and conclusion palette | [ADR-0029](adr/0029-preflight-finding-impact-approval-as-acceptance-and-conclusion-palette.md) |
+| Operator-facing vocabulary | [ADR-0030](adr/0030-operator-facing-vocabulary-is-domain-language.md) |
+| Platform memory budget and bounded in-flight records | [ADR-0031](adr/0031-platform-memory-budget-admission-and-bounded-in-flight-records.md) |
+| Out of memory and Connect restarts | [ADR-0032](adr/0032-out-of-memory-crashes-the-worker-and-fails-its-running-boxes.md) |
+| Bounded Source reads and keyset chunks | [ADR-0033](adr/0033-bounded-source-reads-cursor-fetch-and-keyset-chunks.md) |
+| Bulk Source reads: keyset column and 64 MiB cap | [ADR-0037](adr/0037-bulk-source-reads-keyset-column-and-64-mib-cap.md) |
+| Duration estimate and remaining-time estimate | [ADR-0019](adr/0019-migration-duration-estimate-before-the-run.md), [ADR-0034](adr/0034-duration-estimate-replays-the-scheduling-plan-on-shape-rates.md), [ADR-0038](adr/0038-duration-estimate-waits-for-preflight-and-history-is-per-source.md) |
+| Offline release package, release version, and upgrade | [ADR-0035](adr/0035-offline-release-package-one-release-version-and-gated-in-place-upgrade.md) |
+| Admission paused | [ADR-0039](adr/0039-admission-paused-is-a-run-fact-that-requires-attention.md) |
+
+ADR-0007 and ADR-0014 are superseded (by ADR-0020 and ADR-0017).
 
 Detailed mapping, DDL, validation, and identifier rules below canonicalize the accepted conclusions of [“MySQL 8.0 → PostgreSQL 15 类型映射矩阵定稿”](https://github.com/liumingjian/dbx/issues/11), [“DDL 生成器与 Sink 写入契约的一致性保证方案”](https://github.com/liumingjian/dbx/issues/12), [“数据校验规格定稿”](https://github.com/liumingjian/dbx/issues/16), [“MySQL database → PG schema 落点规则与标识符策略”](https://github.com/liumingjian/dbx/issues/17), and [“DDL 的列属性与表约束规格”](https://github.com/liumingjian/dbx/issues/23). Later end-to-end evidence at commit [`9768f8a`](https://github.com/liumingjian/dbx/commit/9768f8ac6dc6eb59ec68d0817ede2803c93e6a19) supersedes earlier research assumptions where they disagree.
 
@@ -47,7 +67,7 @@ The non-negotiable invariants are:
 - One table remains whole. V1 does not shard it across range queries, topics, or connectors.
 - A run freezes connections, credentials, metadata decisions, contracts, baseline, routing, configuration fingerprints, and scheduling plan.
 - DBX proves a table write contract and creates the target before Sink starts. Sink never creates or evolves target structure.
-- Source writes are externally frozen from exact baseline capture until every selected table reaches a validation terminal state or execution stops.
+- Source writes are externally frozen from exact baseline capture until every selected table reaches a validation terminal state or execution stops. A run's write freeze nests inside the task write freeze (整库冻结承诺), which covers the task's whole scope, including already-migrated tables, across every run (ADR-0024). At run-freeze expiry without extension, DBX fails the unfinished units (ADR-0006).
 - Connect status and Source offsets do not mean complete. DBX observes read complete and write complete externally.
 - A technical validation result is immutable. Accepting risk is a separate audited disposition and never turns red or inconclusive evidence green.
 - Recovery may continue only the same provably continuous execution. A data rerun is a new migration run and a full copy of each selected table into a newly owned target generation.
@@ -82,23 +102,7 @@ DBX and Connect are separate processes. Connect may continue moving records whil
 
 ### 3.2 Component responsibilities
 
-| Component | Owns | Must not own |
-|---|---|---|
-| API/application layer | Commands, idempotency keys, DTOs, authorization boundary when later defined | Hidden state transitions or direct external mutations |
-| Migration core | Safety sequence, state transitions, contract assembly, scheduling/lifecycle gates | Database-specific SQL semantics |
-| Source dialect | MySQL identity, metadata, value/identifier semantics, typed source SQL plans | Workflow advancement or JDBC connections |
-| Target dialect | PostgreSQL type/identifier/structure interpretation, DDL and introspection plans | Workflow advancement or JDBC connections |
-| Directed database pair | Pure type mapping and cross-endpoint compatibility | Scheduling, recovery, or connector lifecycle |
-| Database gateway | Frozen connection binding, transactions, timeouts, cancellation, typed plan execution | Mapping policy or hidden queries |
-| Contract assembler | Complete deterministic table write contract and fingerprint | DDL side effects or approval |
-| DDL renderer / structural prover | PostgreSQL rendering and exact catalog comparison | Source value preflight or probe records |
-| Preflight executor | Exact source-side value-domain/capability evidence | Source baseline or validation disposition |
-| Box scheduler | Immutable signatures, LPT packing, rolling admission, resource accounting | Table result ownership or runtime repacking |
-| Lifecycle reconciler | Fact-reconciled connector/topic state and completion boundaries | Guessing from names or recreating lost continuity |
-| Validation engine | Versioned plan/executions/items and reports | Rewriting technical results after disposition |
-| Diagnosis engine | Immutable occurrences, versioned interpretations, redacted packages | Driving automatic reruns from text matches |
-| Cleanup coordinator | Ownership-proven connector/topic/subject/secret/probe cleanup | Changing migration outcomes or deleting ambiguous resources |
-| Metadata persistence | Explicit relational rows, revisions, transactions, Flyway migrations | ORM lifecycle, event replay, or external calls inside transactions |
+Module ownership is [ADR-0036](adr/0036-module-table-owns-every-v1-obligation.md)'s table of fourteen Java packages, under ADR-0018's enforcement rules. Every obligation in this plan has exactly one owner there; this document does not keep a second component table.
 
 Capabilities and plans are closed, strongly typed, fingerprintable values. Core semantics must not be carried in `Map<String, Object>`, arbitrary JSON, configured implementation class names, or customer-supplied connector properties.
 
@@ -106,37 +110,42 @@ Capabilities and plans are closed, strongly typed, fingerprintable values. Core 
 
 A new migration run follows this order:
 
-1. Select saved source and target connections, one MySQL database, one PostgreSQL database and target schema.
-2. Run fresh source, target, Kafka, Connect, Schema Registry, secret-provider, and version capability checks for the selected scope.
+1. Select saved source and target connections with a successful latest connection check, one MySQL database, one PostgreSQL database and target schema.
+2. The environment check (环境自检, ADR-0027) proves the built-in installation at startup and again before a run is admitted; its conclusions freeze into the run snapshot. It is not a per-run capability probe of the data plane: v1 has no customer-managed infrastructure.
 3. Read normalized source metadata, including original type, identifiers, keys, indexes, defaults, auto-increment facts, comments, charset, and collation.
-4. Apply automatic mapping plus bounded mapping rules and produce pure mapping decisions.
-5. Execute every required exact preflight. Preflight may run before the write freeze because it proves support, not a data baseline.
-6. Assemble and display a table write contract draft, notices, blocking findings, DDL rendering, and supplemental-SQL preview where available.
-7. Approve supported contracts and exclusions. Any mapping change regenerates the affected contract and preflight.
-8. Confirm the accountable, time-bounded external write freeze; capture exact per-table `COUNT(*)` and usable terminal monotonic-key facts; freeze the run snapshot and immutable scheduling plan.
+4. Apply automatic mapping and execute every required exact preflight. Preflight may run before the write freeze because it proves support, not a data baseline. The duration estimate first appears once preflight completes (ADR-0038).
+5. Apply bounded mapping rules. A rule makes the preflight of the tables it touches stale; they must preflight again before execution (ADR-0020).
+6. Assemble and display each table write contract, preflight findings, and read-only DDL rendering; supplemental SQL is generated from this stage (ADR-0026).
+7. Approve supported contracts and exclusions; approval accepts the non-blocking findings (ADR-0029).
+8. Confirm the accountable, time-bounded external write freeze inside the task write freeze; capture exact per-table `COUNT(*)` and keyset-column terminal values (ADR-0037); freeze the run snapshot and immutable scheduling plan.
 9. Acquire target leases, create the schema when authorized, render and execute target DDL, then prove zero structural difference from each contract.
 10. Create topics, start Sink and prove healthy, start Source and prove healthy.
 11. Observe transfer. On exact, stable read completion, remove Source. On exact, stable write completion, remove Sink.
 12. Validate each write-complete table immediately while the write freeze remains valid.
 13. Project the run result from table outcomes. Request successful topic deletion; after absence is confirmed, request the associated Schema Registry subject deletion.
-14. Preserve all evidence that is not eligible for success cleanup. Cancellation stops execution but does not discard it; discard is separate and ownership-proven.
+14. Preserve all evidence that is not eligible for success cleanup. Cancellation stops execution but does not discard it; 收尾取消 (finishing cancellation) admits no new box and lets transferring tables finish inside a valid freeze (ADR-0024). Discard is separate, run-scoped, and ownership-proven. Abandonment (废弃) is the task-level decision that drops the target tables DBX still owns (ADR-0023).
 
 No gate can be converted to success by a dialect, connector setting, warning acknowledgement, or validation disposition.
 
 ## 5. Persistent model and recovery
 
-The persistent aggregates and ownership are specified by ADR-0004 and ADR-0006:
+The persistent aggregates and ownership are specified by ADR-0004 and ADR-0006, extended in ADR-0036's `workflow` row:
 
 - **Database connection / credential version**: reusable endpoint semantics and immutable secret material versions.
-- **Migration task**: selected source database, target schema, current user mapping rules, task-level conversion switches, and approved intent.
-- **Migration run**: immutable connections, capabilities, write freeze, baseline, contracts, routing, connector policy, and scheduling plan for one attempt.
+- **Migration draft**: the server-side, discardable wizard working set with its stage gating (ADR-0020); it produces no run.
+- **Migration task**: selected source database, target schema, current user mapping rules, task-level conversion switches, and approved intent; its abandonment lifecycle (ADR-0023); its task write freeze, task conclusion, and split snapshot (ADR-0024); and the write-once schema-created fact (creating run, time, and the schema's `pg_namespace` OID).
+- **Migration run**: immutable connections, environment check conclusions, write freeze, baseline, contracts, accepted findings, routing, connector policy, and scheduling plan for one attempt; an open admission pause (准入已暂停) is a durable run fact (ADR-0039).
+- **Installation record**: the single row holding the release version, master-key fingerprint, and rollback-window state (ADR-0035).
+- **Runtime condition change record** (ADR-0021).
 - **Table migration unit**: one table's metadata, preflight, baseline, contract, progress, validation executions, outcome, errors, and table-owned cleanup.
 - **Box**: immutable run-local membership, ordering, execution signature, connectors, observed lifecycle, resource occupancy, and box diagnosis.
 - **Routing snapshot**: the only authority mapping connector/topic coordinates to source and target objects and fields.
 - **Validation execution/item**: retained attempts and five-state technical evidence.
 - **Error occurrence / diagnosis**: immutable fact and versioned interpretation.
 - **Timeline event / stage attempt**: durable transition evidence and stage timing, not raw poll samples.
-- **Cleanup request / target generation / lease**: independently retried resource ownership and destructive-action protection.
+- **Cleanup request / target generation / lease**: independently retried resource ownership and destructive-action protection; a target generation records the table's OID (ADR-0023).
+
+V1 has no evidence retention: evidence is immutable and tasks are never deleted, so H2 grows with use, which is a sizing note in the operating guide. Hourly H2 backups keep the last 48.
 
 Table-unit phases and outcomes, box checkpoints, and run projections are defined only in ADR-0004. Implementations should reference those enums directly rather than create a second workflow in controllers or UI code.
 
@@ -215,6 +224,18 @@ Source Connector/J semantics are fingerprinted:
 - `connectionTimeZone=UTC`, `forceConnectionTimeZoneToSession=true`, and `preserveInstants=true`.
 - Unicode/UTF-8 is forced; blob-to-string compatibility switches remain off.
 - `yearIsDateType=true`.
+- `useCursorFetch=true` on every Source connection (ADR-0033).
+
+Source reads are bounded in bytes by M, the table's exact largest row byte length from preflight:
+
+| Setting | Keyset read (ADR-0033) | Bulk read (ADR-0037) |
+|---|---|---|
+| `batch.max.rows` (also the fetch size) | `clamp(4 MiB ÷ M, 1, 1024)`, power of two; 1 for a large record table | same |
+| `max.buffer.size` | equal to `batch.max.rows`; 4 for a large record table | same |
+| `query.suffix` | `LIMIT N`, N = `clamp(64 MiB ÷ M, 1, 131072)`, power of two | empty |
+| `poll.interval.ms` | 100 | `2147483647` |
+
+A table with a keyset column (键集列) is read in keyset chunks; the rest are read in bulk. All of these settings are part of the execution signature.
 
 JDBC Source fixes `numeric.mapping=none`, `db.timezone=UTC`, `timestamp.granularity=connect_logical`, and `quote.sql.identifiers=always`. JDBC Sink fixes UTC session semantics plus the write settings in ADR-0011. Connect and DBX JVMs run in UTC. The capability check reads effective server/session settings instead of trusting configuration text.
 
@@ -229,8 +250,9 @@ The mapper emits preflight obligations and the source dialect combines all oblig
 5. Every selected `ENUM` value belongs to its declared set and is not an illegal sentinel.
 6. Date/time columns contain no zero date unless the explicit conversion-to-NULL option is approved.
 7. Primary-key target width and auto-increment sequence bounds satisfy the DDL rules in section 7.
+8. A table without a keyset column fits one bulk read: baseline row count × M is at most 64 MiB; otherwise it is a 阻塞 finding (ADR-0037).
 
-ADR-0003's byte formula and one-table aggregate requirements supersede the older shorthand `MAX(LENGTH(column))`. Failure to finish an exact scan is `INCONCLUSIVE`, not a warning. A preflight result is not the source baseline and may become stale before the write freeze; a runtime value that changes beyond a proven boundary still fails loudly and requires a new run.
+Each result is a 预检发现 with one impact, 阻塞, 数据有损, or 仅行为差异 (ADR-0029). ADR-0003's byte formula and one-table aggregate requirements supersede the older shorthand `MAX(LENGTH(column))`. Failure to finish an exact scan is `INCONCLUSIVE`, not a warning. A preflight result is not the source baseline and may become stale before the write freeze; a runtime value that changes beyond a proven boundary still fails loudly and requires a new run.
 
 ## 7. Table contract, identifiers, routing, and target DDL
 
@@ -240,7 +262,7 @@ One migration task maps one MySQL database to one PostgreSQL schema. The wizard 
 
 Schema, table, and column names are preserved character-for-character and always double-quoted. PostgreSQL reserved words need no special path because quoting is mandatory. Reports include correctly quoted sample SQL for operators.
 
-PostgreSQL identifiers are limited to 63 bytes. An overlong column name is unsupported because Sink must address the exact Connect field; pruning that column is the only v1 escape. Overlong schema/table names are deterministically renamed as `<utf8-prefix>_<hash12>`, where `hash12` is the first 12 lowercase hexadecimal characters of SHA-256 over the length-prefixed UTF-8 source database/schema/table coordinate and the prefix is truncated only at a UTF-8 code-point boundary so the complete target name is at most 63 bytes. DBX checks the actual target namespace character-for-character for collisions; any collision is blocking rather than resolved by another implicit rename. The mapping rule, full source/target coordinate, algorithm version, and resulting name are frozen in the contract and routing snapshot and shown as an orange source-to-target row in review and the final report. A first-run target name collision is blocking; only ADR-0006's rerun path may reuse and clear a DBX-owned table.
+PostgreSQL identifiers are limited to 63 bytes. An overlong column name is unsupported because Sink must address the exact Connect field; pruning that column is the only v1 escape. Overlong schema/table names are deterministically renamed as `<utf8-prefix>_<hash12>`, where `hash12` is the first 12 lowercase hexadecimal characters of SHA-256 over the length-prefixed UTF-8 source database/schema/table coordinate and the prefix is truncated only at a UTF-8 code-point boundary so the complete target name is at most 63 bytes. DBX checks the actual target namespace character-for-character for collisions; any collision is blocking rather than resolved by another implicit rename. The mapping rule, full source/target coordinate, algorithm version, and resulting name are frozen in the contract and routing snapshot and shown as a source-to-target row in review and the final report. A first-run target name collision is blocking; only ADR-0006's rerun path may reuse and clear a DBX-owned table.
 
 A single structured mapping-rule model covers table rename, column prune, column rename, and target-type override, with `AUTO` or `USER` origin. User intent overrides an automatic rule. V1 does not support regular expressions. Column prune and rename are Source query expressions (`SELECT ... AS ...`) in an isolated box, never DDL-only renames.
 
@@ -264,17 +286,17 @@ Before transfer DBX creates:
 
 Post-transfer DBX aligns identity/sequence state with `setval`, including the empty-table `is_called=false` case. If the source's next unsigned auto-increment value exceeds signed `bigint`, preflight blocks rather than creating a sequence that cannot continue correctly.
 
-If there is no source primary key, the candidate is declined, or there is not exactly one safe candidate, DBX creates no key and emits a yellow warning that the table cannot reject duplicate delivery, selected-table reruns must clear the target, key checks are not applicable, and any green result has weaker coverage than a keyed table. A candidate whose estimated PostgreSQL B-tree entry can exceed 2704 bytes is not created and receives an orange capability-loss notice.
+If there is no source primary key, the candidate is declined, or there is not exactly one safe candidate, DBX creates no key and records a 仅行为差异 finding: the table cannot reject duplicate delivery, selected-table reruns must clear the target, key checks are not applicable, and any green result has weaker coverage than a keyed table. A candidate whose estimated PostgreSQL B-tree entry can exceed 2704 bytes is not created and records a 数据有损 finding.
 
 Supported defaults are literal constants and `CURRENT_TIMESTAMP(n)` rendered as `LOCALTIMESTAMP(n)` for the mapped timestamp precision. Unknown/generated expressions, `ON UPDATE CURRENT_TIMESTAMP`, and zero-date defaults are omitted and reported; DBX never generates maintenance triggers.
 
-DBX does not create unique constraints other than the selected primary key, ordinary indexes, foreign keys, comments, or collation as part of migration. It captures them and delivers an executable supplemental SQL script to the DBA with the migration result; the script is never executed by the v1 migration workflow. Exact script coverage, generation time, and the UI/download/report delivery surface must be finalized as implementation detail without weakening that mandatory generation-and-delivery outcome.
+DBX does not create unique constraints other than the selected primary key, ordinary indexes, foreign keys, comments, or collation as part of migration. It captures them and delivers an executable supplemental SQL script to the DBA with the migration result; the script is never executed by the v1 migration workflow. Its content, timing (generated from stage 4, frozen per run), and its single task-level download are decided by ADR-0026.
 
-Notices use one shared meaning: red blocks migration; orange identifies lost data capability such as relaxed nullability or an uncreatable primary key; yellow identifies post-migration behavior differences such as omitted defaults, narrowed sequence continuation, absent secondary structures, or the weaker guarantees of a no-primary-key table.
+Finding impacts share one meaning (ADR-0029): 阻塞 stops the table; 数据有损 means the target holds or can do less, such as relaxed nullability or an uncreatable primary key; 仅行为差异 means values are intact and only later writes behave differently, such as omitted defaults, narrowed sequence continuation, absent secondary structures, or a no-primary-key table.
 
 ### 7.4 Structural proof and Sink
 
-After DDL, the target dialect reads PostgreSQL catalogs and compares object kind, exact identifiers and columns, normalized exact types/parameters, nullability, supported defaults, primary-key order, identity/sequence/default/ownership, routing evaluation, and Connect/JDBC binder compatibility. Any difference blocks Sink. A fabricated production insert is forbidden.
+After DDL, the target dialect reads PostgreSQL catalogs and compares object kind, exact identifiers and columns, normalized exact types/parameters, nullability, supported defaults, primary-key order, identity/sequence/default/ownership, routing evaluation, and Connect/JDBC binder compatibility. Any difference blocks Sink: the unit ends 迁移失败 with the difference as evidence, never as a preflight finding (ADR-0026). The unit then drops the table its own run just created, under the advisory lock, only while the generation is still this run's, the table has zero rows, and no Sink was created (ADR-0006). A fabricated production insert is forbidden.
 
 Sink uses `auto.create=false`, `auto.evolve=false`, `insert.mode=insert`, `pk.mode=none`, `delete.enabled=false`, and `quote.sql.identifiers=always`. Configuration, contract, and routing fingerprints are persisted together.
 
@@ -282,15 +304,15 @@ Sink uses `auto.create=false`, `auto.evolve=false`, `insert.mode=insert`, `pk.mo
 
 Tables are first grouped by identical execution signature. Query-mode, naming-exception, and large-record tables are isolated. Remaining tables are sorted by conservative estimated bytes and packed by LPT with at most 50 tables per box. Exactly empty tables create no topic or connector but still receive DDL and validation.
 
-The run plan is immutable. Rolling admission starts the next eligible box whenever the strictest of Connect-task, active-box, source-connection, target-connection, and Kafka-disk budgets permits. Defaults and formulas remain those in ADR-0002: twice logical CPUs for Connect tasks, at most 10 connector-active boxes, independent database budgets based on 10% of `max_connections` clamped to 4–20 with two reserved connections, and real disk rechecks before admission.
+The run plan is immutable. Rolling admission starts the next eligible box whenever the strictest of six budgets permits: Connect tasks, active boxes, source connections, target connections, Kafka disk, and the cumulative platform memory budget (平台内存预算), where each box reserves Connect heap computed from its settings and its tables' row sizes (ADR-0031). Defaults and formulas remain those in ADR-0002: twice logical CPUs for Connect tasks, at most 10 connector-active boxes, independent database budgets based on 10% of `max_connections` clamped to 4–20 with two reserved connections, and real disk rechecks before admission. The box target size divides the Kafka disk budget by the computed maximum concurrency `min(10, Connect tasks ÷ tasks per box, source connection budget, target connection budget, ⌊(effective heap − B) ÷ R_narrow⌋)`, with `R_narrow` ADR-0031's narrow ordinary box reservation at the effective heap the environment check read.
 
 Planned transfer bytes use `1.5 * max(MySQL DATA_LENGTH, frozen row count * average row length)` with bounded sampling when statistics are unusable. This is capacity planning, not correctness evidence.
 
-Kafka disk uses 60% of available capacity for new admission. At 80% filesystem usage, DBX pauses new admission. At 90% usage or under 10 GB free, DBX stops producing Sources, allows healthy Sinks to drain, and fails affected execution rather than deleting unvalidated data. Retention is not backpressure or cleanup.
+Kafka disk uses 60% of available capacity for new admission. At 80% filesystem usage the runtime condition turns 需留意, with no banner and no interruption (ADR-0021). At 90% usage or under 10 GB free, DBX stops producing Sources, allows healthy Sinks to drain, and fails affected execution rather than deleting unvalidated data. Retention is not backpressure or cleanup.
 
-Progress samples topic and Sink offsets every 10 seconds. Expensive target counts occur at completion, validation, recheck, or manual diagnosis boundaries. Time estimates follow ADR-0019: a duration estimate before any run (from this deployment's history, else the shipped reference throughput band, always with the minimum window of the largest table's single stream), then a remaining-time estimate that replays the unfinished scheduling plan at observed per-stream throughput, falling back to "estimate unavailable" with its reason when no longer credible. One backend estimator feeds every surface. Estimates never drive correctness or `STUCK` decisions.
+Progress samples topic and Sink offsets every 10 seconds. Expensive target counts occur at completion, validation, recheck, or manual diagnosis boundaries. Time estimates follow ADR-0019 as amended by ADR-0034 and ADR-0038. The duration estimate appears only once the draft's preflight completes and always shows the minimum window. It replays the scheduling plan on per-shape stream rates under one shared ceiling: from this source data source's history where it has enough samples, else the reference table the release ships (three shape bands, two anchor row lengths, the ceiling), which makes it 低置信. The remaining-time estimate replays the unfinished plan at observed rates, falling back to 无法预估 with its reason when no longer credible. One backend estimator feeds every surface. Estimates never drive correctness or `STUCK` decisions.
 
-Read/write completion, connector ordering, stable-poll rules, two-minute warning, ten-minute `STUCK`, idempotent REST reconciliation, emulated one-pass bulk behavior, and cleanup retries are exclusively defined by ADR-0001. Loss of required connector/topic/offset/target continuity invokes ADR-0006: the old run fails safely and a selected-table rerun starts from a clean target generation.
+Read/write completion, connector ordering, stable-poll rules, ten-minute `STUCK`, idempotent REST reconciliation, one-pass bulk behavior, and cleanup retries are defined by ADR-0001; its two-minute no-progress warning shows only on the unit (ADR-0021). Kafka, Connect, or Schema Registry unreachable for ten continuous minutes fails the affected boxes (ADR-0021, ADR-0039); database unreachability is run-scoped under ADR-0006's ten-minute budget. A Connect restart fails its running boxes at once, detected by the restart marker on the 5 s status poll (ADR-0032). A second Connect restart, or two consecutive zero-output stuck boxes, opens an admission pause: the run shows 需要人工处理 until the DBA chooses 继续迁移 (ADR-0039). Loss of required connector/topic/offset/target continuity invokes ADR-0006: the old run fails safely and a selected-table rerun starts from a clean target generation.
 
 ## 9. Validation and diagnosis
 
@@ -341,44 +363,45 @@ The green wording is: **all enabled v1 validations passed**. Reports state cover
 
 ### 9.5 Diagnosis
 
-ADR-0005 separates error occurrence, diagnosis, and workflow outcome. Structured DBX evidence outranks protocol/database/HTTP codes, deep causes, and constrained text patterns. The first release ships 20 versioned external-translation rule families with positive, negative, overlap, and redaction fixtures. Routing snapshots provide coordinates; shared failures remain box-scoped when table attribution is unproven.
+ADR-0005 separates error occurrence, diagnosis, and workflow outcome. Structured DBX evidence outranks protocol/database/HTTP codes, deep causes, and constrained text patterns. The first release ships 21 versioned external-translation rule families (the 21st is MySQL 1114, 源库临时空间耗尽, from ADR-0033's bounded reads) with positive, negative, overlap, and redaction fixtures. Routing snapshots provide coordinates; shared failures remain box-scoped when table attribution is unproven.
 
 The operator sees what happened, where, affected scope, and one action, with technical evidence expandable. Diagnostic packages are local, bounded, and redacted; credentials and record/parameter values never enter them. Their scopes, trigger, manifest, and bound are in [ADR-0028](adr/0028-diagnostic-package-scopes-manifest-and-no-values.md).
 
 ## 10. Operator journey
 
-The primary experience is ADR-0007's six-stage linear wizard:
+The migration wizard (ADR-0020) builds a server-side migration draft in five gated stages and ends at execution:
 
-1. **Connections and database** — select saved verified connections, one source database, and one target schema.
-2. **Migration scope** — searchable, deterministic table selection and explicit exclusions; no regular expressions.
-3. **Per-table configuration and preflight** — automatic defaults, structured exceptions, exact evidence, warnings, contract and read-only DDL.
-4. **Execution confirmation** — summarize scope, exclusions, contracts, unresolved findings, the duration estimate with its minimum window, and collect the accountable expiring write-freeze confirmation; an estimate upper bound beyond the freeze's time limit warns but never blocks. The duration estimate first appears once scope is settled and is kept on the migration draft.
-5. **Run monitoring** — table migration units, phases, progress, remaining-time estimate, outcomes, updates, and timelines; boxes/connectors/topics remain internal.
-6. **Validation report** — technical pass/fail/inconclusive, exclusions, coverage, disposition, diagnostics, and new-run remigration actions.
+1. **连接与数据库** — select saved verified connections, one source database, and one target schema.
+2. **迁移范围** — searchable, deterministic table selection and explicit exclusions (ADR-0025); no regular expressions. No duration estimate yet.
+3. **预检** — exact preflight findings with their impact; the duration estimate first appears here.
+4. **映射规则** — zero exceptions by default; table and column exceptions in a per-table drawer with read-only DDL. A rule makes the touched tables' preflight stale.
+5. **执行确认** — scope, exclusions, contracts, open findings, the duration estimate with its minimum window, and the accountable expiring write-freeze confirmation inside the task write freeze; an estimate upper bound beyond the freeze's limit warns but never blocks.
 
 The stage sequence is a safety gate, not decorative navigation. Unsupported or inconclusive preflight cannot be acknowledged away; DDL cannot be edited; Sink cannot start before structural proof; accepted risk cannot change a technical result; remigration creates a new run.
 
-The product shell distinguishes migration work, data-source management, and system settings, but v1 does not yet decide the exact non-wizard task/detail/settings IA, authentication/multi-user permissions, or polling versus SSE/WebSocket. Implementation must not infer those choices from the static prototype. Prototype Variant A on [`prototype/migration-wizard-journey`](https://github.com/liumingjian/dbx/tree/prototype/migration-wizard-journey) is interaction evidence, not production code.
+A run is observed on the task detail page, not in the wizard. A task header above the run switcher holds everything task-scoped: task status, the task conclusion (整库结论) with a per-table drawer, the 下载补建 SQL button, and 废弃 in a danger menu. The five tabs below it are purely run-scoped, led by 运行监控 and 校验报告; boxes, connectors, and topics stay internal.
+
+The shell is a flat sidebar (迁移任务, 数据源, 系统设置) and a top bar carrying the runtime condition indicator (ADR-0021). V1 has no authentication and ships zh-CN only, with the language switch hidden. The run progress source and the installation-scoped status channel both poll every 10 s, plus a refetch after each user command (ADR-0016).
 
 ## 11. Deployment and operations
 
-### 11.1 Built-in and customer-managed infrastructure
+### 11.1 Built-in infrastructure
 
-The built-in Docker Compose deployment contains DBX, Kafka, Connect, and Schema Registry, plus customer-provided MySQL Connector/J mounted through the installation flow. PostgreSQL and MySQL are customer endpoints. Its fitness is proven by the environment check of ADR-0018, which detects and explains but never remediates. (Suspended in v1, which ships only the built-in deployment:) Customer-managed Kafka/Connect/Schema Registry is supported only when active capability checks prove exact topic, producer, consumer, converter, subject, REST, shared secret-provider path, and cleanup semantics.
+The built-in Docker Compose deployment contains DBX, Kafka, Connect, and Schema Registry, plus customer-provided MySQL Connector/J mounted through the installation flow. PostgreSQL and MySQL are customer endpoints. V1 ships only this deployment; customer-managed Kafka, Connect, and Schema Registry are v2. Its fitness is proven by the environment check of ADR-0027 (E0–E8), which detects and explains but never remediates.
 
-The Connect worker uses the resource and large-message configuration in ADR-0003, with heaps set by ADR-0031's memory tier, which ADR-0035's install script chooses from container-visible memory; required connector client overrides; 128 MiB producer buffer; and the fixed 25 MiB settings. Large-record tables use single-record Sink polling. External installations (v2; suspended in v1) must round-trip the near-envelope incompressible probe before DDL approval.
+The Connect worker's heap is set by ADR-0031's memory tier, which ADR-0035's install script chooses from container-visible memory. Ordinary boxes use ADR-0031's bounded producer and consumer settings. Only large record tables keep ADR-0003's 128 MiB producer buffer, the 25/50 MiB fetch limits, and single-record Sink polling. Brokers keep the fixed 25 MiB message limits.
 
 ### 11.2 Kafka storage
 
-Capacity planning must account for the conservative table estimate, concurrent admitted boxes, currently retained failed/unvalidated topics, actual replication factor, Avro/protocol overhead, and observed compression. The historical research recommendation is at least twice the largest table and no less than 50 GB for a small managed installation, but admission uses current measured free space and ADR-0002's 60/80/90 percent gates rather than treating that recommendation as a guarantee.
+Capacity planning must account for the conservative table estimate, concurrent admitted boxes, currently retained failed/unvalidated topics, actual replication factor, Avro/protocol overhead, and observed compression. Environment check item E6 requires at least 50 GB free at startup and at least twice the run's largest table before admission (ADR-0027); admission also applies ADR-0002's 60/90 percent gates to current measured free space.
 
 A successful table releases estimated disk only after topic absence is externally confirmed. Failed validation, cancellation, accepted risk, cleanup delay, and diagnostic retention continue counting against capacity. Operators must provision for retained evidence; retention must not silently solve pressure.
 
 ### 11.3 Metadata, secrets, and backups
 
-One DBX instance owns the file-backed H2 database. Flyway finishes before workers/reconciliation. Required backups precede schema upgrades and destructive actions and occur hourly by default during operation. H2 corruption or missing control truth fails closed.
+One DBX instance owns the file-backed H2 database. Flyway finishes before workers/reconciliation. Required backups precede schema upgrades and destructive actions and occur hourly by default during operation, keeping the last 48. H2 corruption or missing control truth fails closed.
 
-Credential versions use AES-256-GCM with an independently supplied master key. Connect receives only ConfigProvider references to run-local secret projections. Customer-managed Connect must mount one secured identical path on DBX and every eligible worker. The credential destruction ledger and per-backup key erasure prevent old backups from reviving destroyed secrets.
+Credential versions use AES-256-GCM with a master key mounted as a file in the install's `secrets/` directory; H2 holds only its fingerprint, and environment check item E8 proves the key is present and matches, at startup and before admission (ADR-0035). Connect receives only ConfigProvider references to run-local secret projections. The credential destruction ledger and per-backup key erasure prevent old backups from reviving destroyed secrets.
 
 ### 11.4 Distribution and licensing constraints
 
@@ -392,7 +415,9 @@ A release includes third-party notices and an SBOM, fixes the tested component/i
 - **Consistency**: source stability depends on an accountable external write freeze. DBX cannot prove that same-count updates did not occur.
 - **Mode**: offline one-time full copy only; no CDC or incremental synchronization.
 - **Rerun**: a rerun creates a new migration run and fully recopies each selected table after controlled target clearing. No data checkpoint resume after lost continuity.
-- **Single-table throughput**: no single-table sharding. One table is limited by one extraction stream and its Source/Kafka/Sink/target path; large records additionally use single-record polling. No throughput SLA is promised: the published reference throughput band and its machine spec (ADR-0019) let an operator estimate a window; they do not guarantee its length.
+- **Single-table throughput**: no single-table sharding. One table is limited by one extraction stream and its Source/Kafka/Sink/target path; large records additionally use single-record polling. No throughput SLA is promised: the release's reference table and its machine spec (ADR-0034, ADR-0035) let an operator estimate a window; they do not guarantee its length.
+- **Bulk reads**: a table without a keyset column migrates only while baseline rows × its largest row byte length fit 64 MiB (ADR-0037).
+- **Metadata growth**: no evidence retention; H2 grows with every run and must be sized for it.
 - **Record size**: every selected source value and pre-serialization row payload must be at most 20 MiB (20,971,520 bytes). Kafka uses a separate 25 MiB (26,214,400-byte) envelope.
 - **Time precision**: temporal values are supported to milliseconds; microseconds are not preserved.
 - **Unsigned range**: target `numeric(20,0)` preserves the declared `BIGINT UNSIGNED` target domain, but current Source reading supports only actual values through `2^63-1`.
@@ -400,7 +425,8 @@ A release includes third-party notices and an SBOM, fixes the tested component/i
 - **Validation claim**: green means all enabled v1 checks passed, not full row-by-row identity. Unkeyed tables have weaker duplicate and row-identity evidence.
 - **Target structure**: migration creates a minimal writable table. Unique constraints beyond the selected primary key, ordinary indexes, foreign keys, comments, and collation are supplemental SQL, not automatically executed.
 - **Data shaping**: no row filters, arbitrary value transforms, masking, user SQL, or large-record bypass.
-- **Operations**: no broad worker/broker log ingestion and no DLQ-success path. Customer-managed infrastructure must meet the same active proofs as the built-in deployment.
+- **Operations**: no broad worker/broker log ingestion and no DLQ-success path. Only the built-in Kafka, Connect, and Schema Registry are supported.
+- **Language**: the interface ships zh-CN only.
 - **Extensibility**: static certified dialect/pair catalog only; no dynamic plugins, arbitrary connector settings, or automatic endpoint composition.
 
 ## 13. V2 candidates and unresolved decisions
@@ -413,9 +439,10 @@ The following are intentionally not designed by v1:
 - an instance-level group spanning multiple source databases;
 - cross-task reusable mapping templates and a whole-instance selector;
 - direct execution of indexes, unique constraints, foreign keys, comments, or collation after load; v1 still generates and delivers their executable supplemental SQL;
-- exact supplemental-SQL coverage, generation timing, and UI/download/report delivery surface;
-- non-wizard product-shell IA, authentication, multi-user permissions, and progress transport;
-- a throughput SLA (v1 publishes only ADR-0019's reference band) and a trial run that measures throughput without writing the target;
+- the commercial shell: authentication, license, members and roles, audit log;
+- customer-managed Kafka, Connect, and Schema Registry;
+- the en-US interface (message keys already exist);
+- a throughput SLA (v1 publishes only the reference table) and a trial run that measures throughput without writing the target;
 - Linux x86_64 server deployment (v1 ships `linux/arm64` for macOS with Docker Desktop, ADR-0035);
 - procurement policy and a continuously certified Aiven/Apicurio fallback.
 
@@ -430,12 +457,12 @@ These remain Wayfinder fog or future initiatives. No placeholder SPI or permissi
 5. Implement Kafka/Schema Registry/topic ownership, connector configuration, routing snapshots, lifecycle reconciliation, external completion, cleanup, and recovery.
 6. Implement immutable scheduling and rolling resource admission.
 7. Implement validation plans/executions, diagnosis catalog, timeline/report projections, and diagnostic export.
-8. Implement the six-stage wizard and table-centered monitoring against the real application APIs.
+8. Implement the five-stage wizard and the run-organised task console against the real application APIs.
 9. Run the complete certification suite and produce an installation/operation release only from a passing fixed version set.
 
 ## 15. Acceptance and test strategy
 
-§15.1–15.3 are rungs L1–L3 of the verification ladder; budgets, who runs each rung, and golden-file rules: ADR-0022.
+§15.1–15.3 are rungs L1–L3 of the verification ladder, and the L4 `packageTest` closes §15.3; budgets, who runs each rung, and golden-file rules: ADR-0022.
 
 ### 15.1 Pure and persistence tests
 
@@ -462,9 +489,11 @@ Pin and run MySQL 8.0, PostgreSQL 15, Kafka, Schema Registry, Connect, JDBC Sour
 - empty tables, keyed/unkeyed tables, composite keys, repeated delivery, constraint failure, and target mismatch;
 - exactly 20 MiB payload, above 20 MiB, and near-25 MiB transport capability;
 - Sink-first/Source-first lifecycle, empty/delayed Source offsets, bulk emulation, stable completion, stuck/failure, restart reconciliation, orphans, and lost continuity;
+- bounded reads: a bulk table at the 64 MiB cap, and a keyset table with a non-monotonic key and a zero minimum (ADR-0037);
+- the Connect restart marker protocol on the pinned Connect image (ADR-0032);
 - box failure isolation, disk gates, cancellation, discard, target generations, selected-table full rerun, topic/subject/secret cleanup;
 - validation pass/fail/inconclusive/not-applicable/not-run and accepted-risk separation;
-- all 20 diagnosis families with overlap and redaction;
+- all 21 diagnosis families with overlap and redaction;
 - contract codec and upgrade regression.
 
 Any change to a connector, converter, driver, Kafka/Registry, or database version reruns the affected pure, PostgreSQL, and full-stack gates.

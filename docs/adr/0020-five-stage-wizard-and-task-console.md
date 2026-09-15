@@ -1,5 +1,7 @@
 # A five-stage wizard that ends at execution, and a task console organised around migration runs
 
+> Amended by [ADR-0021](0021-runtime-condition-observes-and-never-adjudicates.md): the top bar also holds the runtime-condition indicator. Per [#89](https://github.com/liumingjian/dbx/issues/89): v1 hides the language switch (zh-CN only), and a task header above the run switcher holds everything task-scoped (task status, 整库结论 summary, 下载补建 SQL, 废弃); the five tabs stay run-scoped.
+
 Supersedes ADR-0007. Decided in [#48](https://github.com/liumingjian/dbx/issues/48), following #45's adoption of `dbx-prototype` as the frontend baseline and #46's scope-cut checklist.
 
 ADR-0007 made run monitoring and the validation report the last two stages of one six-stage wizard. The prototype observes a run on the task detail page instead. DBX v1 follows the prototype, with the boundary drawn at the migration run: the **migration wizard** (迁移向导) edits a migration draft, and everything after 执行 (execute) happens on the task detail page, looking at an immutable migration run. ADR-0007's three safety floors survive unchanged: write freeze is confirmed before execution, monitoring and validation centre on the table migration unit, and `PASS` / `FAIL` / `INCONCLUSIVE` stay distinct.

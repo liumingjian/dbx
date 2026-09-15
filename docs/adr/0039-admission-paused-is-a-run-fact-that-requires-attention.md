@@ -2,6 +2,8 @@
 status: accepted (amends the run-status projection of ADR-0004, the paused-admission consequence of ADR-0036, and the execution-platform clause of ADR-0021; makes ADR-0032's pause concrete)
 ---
 
+> First merged as a second ADR-0037 and renumbered to ADR-0039 in [#91](https://github.com/liumingjian/dbx/issues/91); ADR-0037 is the keyset-column and bulk-read decision.
+
 # Admission paused is a run fact, and the run requires attention
 
 ADR-0032 pauses admission after a run's second Connect restart, or after two consecutive boxes reach 卡死 (stuck) without producing a record, until the DBA chooses to continue. It left open where the pause lives, what the DBA presses, and what happens next ([#88](https://github.com/liumingjian/dbx/issues/88)).
