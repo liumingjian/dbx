@@ -279,6 +279,11 @@ The largest table's single-stream time; no schedule beats it.
 _Avoid_: Lower bound, fastest time, 最短所需时间
 _中文_: 窗口下限
 
+**Reference throughput band**:
+The release's lab-measured stream rates per table shape and shared ceiling, the source of a 低置信 estimate (ADR-0034).
+_Avoid_: Benchmark, promised speed, SLA
+_中文_: 参考吞吐带
+
 **Estimate unavailable**:
 DBX withholding a no-longer-credible estimate, with its reason.
 _Avoid_: Unknown, stuck, timed out
