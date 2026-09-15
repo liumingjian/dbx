@@ -1,0 +1,41 @@
+# s9 —— reference throughput band
+
+实测时间：2026-09-15T16:30:53+08:00
+
+- ADR-0002 default budgets here: Connect tasks 24 (2 x 12 vCPU), boxes 10, source connections 13 (max_connections 151), target connections 8 (max_connections 100) → at most **8** concurrent single-table boxes
+- ADR-0031 platform memory budget: Connect heap 6144 MiB − B 512 MiB = **5632 MiB** of box reservations (E=100, E_lob=3, X=3); tier 16
+- Source (every table, ADR-0033): `mode=incrementing` (ADR-0001), `tasks.max=1`, `poll.interval.ms=100`, MySQL URL `useCursorFetch=true` without `defaultFetchSize`; ordinary producer (ADR-0031) `buffer.memory=4 MiB`, `batch.size=256 KiB`, `linger.ms=10`, idempotence on, `acks=all`, in-flight 5, zstd; large-record producer (ADR-0003) 128 MiB buffer, 16 KiB batch, 25 MiB request, in-flight 1, zstd
+- Sink: `insert.mode=insert`, `pk.mode=none`, `quote.sql.identifiers=always` (plan §7.4); `batch.size` unset → connector default 3000; fetch limits 8/2 MiB ordinary, 50/25 MiB large-record; `max.poll.interval.ms=900000`
+- `b_narrow_1`: M=55 B; `batch.max.rows=1024`, `max.buffer.size=1024`, `query.suffix=LIMIT 131072`, Sink `max.poll.records=500`; R = 416.4 MiB
+- heap (single-narrow): idle worker **103 MiB** post-GC (ADR-0031 B=512); peak post-GC excess over idle **28 MiB**; worst (post-GC − idle) / ΣR = **0.067** at 27.0s (post-GC 131 MiB, ΣR 416.4 MiB); **0 of 141** post-GC figures above idle + ΣR; forced full GC every 5s
+- heap live (single-narrow, full GCs only): worst (live − idle) / ΣR **0.043** at 28.5 s, post-GC 121 MiB, ΣR 416.4 MiB; **0 of 6** above idle + ΣR
+- peak RSS (single-narrow, MiB): kafka=2037 postgres=454 schema-registry=178 mysql=366 connect=1248 
+- source temp tables (single-narrow): TempTable RAM high-water **17.0 MiB** (all connections), mmap high-water 0.0 MiB; largest session temp tablespace **18.0 MiB**; Created_tmp_disk_tables +61 Created_tmp_files +0 Created_tmp_tables +562 
+- single stream `b_narrow_1`: 8000000 rows in 77.5s (source read done at 29.9s) → **11.96 MiB/s estimator bytes**, 7.82 MiB/s DATA_LENGTH, 103226 rows/s
+- calibration `b_narrow_1`: peak excess 28 MiB of R 416.4 MiB → implied E = 2.9 (used 100)
+- `b_wide_1`: M=2330 B; `batch.max.rows=1024`, `max.buffer.size=1024`, `query.suffix=LIMIT 16384`, Sink `max.poll.records=500`; R = 433.0 MiB
+- heap (single-wide): idle worker **103 MiB** post-GC (ADR-0031 B=512); peak post-GC excess over idle **33 MiB**; worst (post-GC − idle) / ΣR = **0.076** at 13.3s (post-GC 136 MiB, ΣR 433.0 MiB); **0 of 43** post-GC figures above idle + ΣR; forced full GC every 5s
+- heap live (single-wide, full GCs only): worst (live − idle) / ΣR **0.051** at 15.2 s, post-GC 125 MiB, ΣR 433.0 MiB; **0 of 1** above idle + ΣR
+- peak RSS (single-wide, MiB): kafka=2019 postgres=434 schema-registry=182 mysql=336 connect=1424 
+- source temp tables (single-wide): TempTable RAM high-water **17.0 MiB** (all connections), mmap high-water 0.0 MiB; largest session temp tablespace **52.0 MiB**; Created_tmp_disk_tables +37 Created_tmp_files +0 Created_tmp_tables +139 
+- single stream `b_wide_1`: 600000 rows in 22.6s (source read done at 16.3s) → **124.68 MiB/s estimator bytes**, 69.29 MiB/s DATA_LENGTH, 26549 rows/s
+- calibration `b_wide_1`: peak excess 33 MiB of R 433.0 MiB → implied E = 0.0 (used 100)
+- `b_lob_1`: M=1572879 B (large-record); `batch.max.rows=1`, `max.buffer.size=4`, `query.suffix=LIMIT 32`, Sink `max.poll.records=1`; R = 511.0 MiB
+- heap (single-lob): idle worker **103 MiB** post-GC (ADR-0031 B=512); peak post-GC excess over idle **1193 MiB**; worst (post-GC − idle) / ΣR = **2.335** at 5.5s (post-GC 1296 MiB, ΣR 511.0 MiB); **31 of 56** post-GC figures above idle + ΣR; forced full GC every 5s
+- heap live (single-lob, full GCs only): no full GC in the phase
+- peak RSS (single-lob, MiB): kafka=2034 postgres=286 schema-registry=192 mysql=358 connect=1583 
+- source temp tables (single-lob): TempTable RAM high-water **17.5 MiB** (all connections), mmap high-water 0.0 MiB; largest session temp tablespace **52.0 MiB**; Created_tmp_disk_tables +31 Created_tmp_files +0 Created_tmp_tables +134 
+- single stream `b_lob_1`: 1000 rows in 11.6s (source read done at 5.8s) → **199.04 MiB/s estimator bytes**, 132.03 MiB/s DATA_LENGTH, 86 rows/s
+- calibration `b_lob_1`: peak excess 1193 MiB of R 511.0 MiB → implied E = 8.3 (used 3)
+- `b_narrow_2`: M=55 B; `batch.max.rows=1024`, `max.buffer.size=1024`, `query.suffix=LIMIT 131072`, Sink `max.poll.records=500`; R = 416.4 MiB
+- `b_narrow_3`: M=55 B; `batch.max.rows=1024`, `max.buffer.size=1024`, `query.suffix=LIMIT 131072`, Sink `max.poll.records=500`; R = 416.4 MiB
+- `b_narrow_4`: M=55 B; `batch.max.rows=1024`, `max.buffer.size=1024`, `query.suffix=LIMIT 131072`, Sink `max.poll.records=500`; R = 416.4 MiB
+- `b_wide_2`: M=2330 B; `batch.max.rows=1024`, `max.buffer.size=1024`, `query.suffix=LIMIT 16384`, Sink `max.poll.records=500`; R = 433.0 MiB
+- `b_wide_3`: M=2330 B; `batch.max.rows=1024`, `max.buffer.size=1024`, `query.suffix=LIMIT 16384`, Sink `max.poll.records=500`; R = 433.0 MiB
+- heap (concurrent): idle worker **103 MiB** post-GC (ADR-0031 B=512); peak post-GC excess over idle **4341 MiB**; worst (post-GC − idle) / ΣR = **1.249** at 11.4s (post-GC 4444 MiB, ΣR 3475.6 MiB); **37 of 484** post-GC figures above idle + ΣR; forced full GC every 5s
+- heap live (concurrent, full GCs only): worst (live − idle) / ΣR **0.038** at 173.1 s, post-GC 119 MiB, ΣR 416.4 MiB; **0 of 12** above idle + ΣR
+- peak RSS (concurrent, MiB): kafka=2162 postgres=1463 schema-registry=177 mysql=462 connect=6552 
+- source temp tables (concurrent): TempTable RAM high-water **129.5 MiB** (all connections), mmap high-water 0.0 MiB; largest session temp tablespace **52.0 MiB**; Created_tmp_disk_tables +386 Created_tmp_files +0 Created_tmp_tables +6310 
+- concurrent (8 boxes, 8 admitted at once, peak 8 running): whole run **81.60 MiB/s estimator bytes (48.86 MiB/s DATA_LENGTH) over 14452 MiB in 177.1s**
+- all-streams-active window (first 54.9s): **135.39 MiB/s** estimator bytes
+- per-table admit→done (s): b_lob_1=0.8→54.9 b_narrow_1=1.2→163.1 b_narrow_2=1.3→170.5 b_narrow_3=1.1→149.6 b_narrow_4=0.9→155.4 b_wide_1=0.7→81.6 b_wide_2=0.6→90.2 b_wide_3=0.0→95.7 

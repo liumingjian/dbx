@@ -1,0 +1,5 @@
+t	table	topic_end	pg_inserted
+1.4	b_lob_1	288	0
+5.8	b_lob_1	1000	353
+8.1	b_lob_1	1000	677
+10.4	b_lob_1	1000	953

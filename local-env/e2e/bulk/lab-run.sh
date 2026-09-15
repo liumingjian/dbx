@@ -17,5 +17,5 @@ export TIER="$1" ART_ROOT="$HOME/dbx-lab/78/$2" PHASES="${3:-both}"
 [ "$PHASES" = both ] && PHASES="single concurrent"   # one word survives remote argument passing
 [ -n "${4:-}" ] && [ "$4" != all ] && export SINGLE_TABLES="$4"
 # 5th argument: force a full GC this often, so S9's heap check sees live heap (costs throughput)
-[ -n "${5:-}" ] && export LIVE_GC_S="$5"
+[ -n "${5:-}" ] && export LIVE_GC_S="$5" PROBE_S="$5"   # the forced GC runs inside the probe
 bash e2e/bulk/run-bg.sh "bash e2e/run-all.sh s9"
