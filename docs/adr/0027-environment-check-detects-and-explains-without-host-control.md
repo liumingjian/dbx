@@ -1,3 +1,7 @@
+---
+status: accepted (self-healing clause made concrete by ADR-0032: every shipped JVM exits on OutOfMemoryError so Compose restarts it)
+---
+
 # Environment check detects and explains; DBX holds no host control
 
 V1 ships a platform-owned single-node Kafka, Connect, and Schema Registry beside DBX in Docker Compose, so it is tempting to let DBX repair its own runtime: restart sibling containers, rewrite drifted Compose parameters, restore memory limits. We decided DBX does not do that. The **environment check** (环境自检) detects and explains; it does not remediate. DBX never mounts `docker.sock` or runs a host agent, and ADR-0005's rule that DBX never changes configuration automatically stays whole. The only self-healing is Docker's own: `restart: unless-stopped` and healthchecks declared in the shipped Compose file.
