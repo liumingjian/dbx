@@ -47,6 +47,11 @@ CURSOR_FETCH="${CURSOR_FETCH:-1}"
 ORDINARY_BATCH_MAX_ROWS=1000                          # the connector default, stated explicitly
 LOB_BATCH_MAX_ROWS="${LOB_BATCH_MAX_ROWS:-1}"
 LOB_MAX_BUFFER="${LOB_MAX_BUFFER:-4}"
+# ADR-0003's size overrides (128 MiB producer buffer, 25 MiB request and partition fetch) on every
+# connector left eight concurrent boxes OOMing the 4 GiB Connect heap. ORDINARY_OVERRIDES=0 keeps
+# them on the large-record table only and gives ordinary connectors the client defaults. That is
+# a lab variant for a provisional band, not a plan decision.
+ORDINARY_OVERRIDES="${ORDINARY_OVERRIDES:-1}"
 mysql_url() {  # <fetch size>
   local u="jdbc:mysql://mysql:3306/dbx_src?useSSL=false&allowPublicKeyRetrieval=true"
   [ "$CURSOR_FETCH" = 1 ] && u="$u&useCursorFetch=true&defaultFetchSize=$1"
@@ -91,6 +96,8 @@ est_bytes() {
 put_source() {
   local tag="$1" t="$2" rows="$ORDINARY_BATCH_MAX_ROWS" buf=0
   [ "$(shape_of "$t")" = lob ] && { rows="$LOB_BATCH_MAX_ROWS"; buf="$LOB_MAX_BUFFER"; }
+  local src_env='"producer.override.max.request.size": 26214400, "producer.override.buffer.memory": 134217728,'
+  [ "$ORDINARY_OVERRIDES" = 0 ] && [ "$(shape_of "$t")" != lob ] && src_env=''
   put_connector "tp-$tag-src-$t" <<JSON
 {
   "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
@@ -101,8 +108,7 @@ put_source() {
   "topic.prefix": "dbx.tp.$tag.",
   "poll.interval.ms": 5000, "tasks.max": 1,
   "batch.max.rows": $rows, "max.buffer.size": $buf,
-  "producer.override.max.request.size": 26214400,
-  "producer.override.buffer.memory": 134217728,
+  $src_env
   "producer.override.compression.type": "zstd",
   "producer.override.max.in.flight.requests.per.connection": 1
 }
@@ -112,6 +118,8 @@ JSON
 put_sink() {
   local tag="$1" t="$2" poll="$ORDINARY_POLL_RECORDS"
   [ "$(shape_of "$t")" = lob ] && poll=1
+  local sink_env='"consumer.override.max.partition.fetch.bytes": 26214400, "consumer.override.fetch.max.bytes": 52428800, "consumer.override.max.poll.interval.ms": 900000,'
+  [ "$ORDINARY_OVERRIDES" = 0 ] && [ "$(shape_of "$t")" != lob ] && sink_env=''
   put_connector "tp-$tag-sink-$t" <<JSON
 {
   "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
@@ -122,10 +130,8 @@ put_sink() {
   "insert.mode": "insert", "pk.mode": "none", "delete.enabled": "false",
   "quote.sql.identifiers": "always",
   "errors.tolerance": "none", "tasks.max": 1,
-  "consumer.override.max.poll.records": $poll,
-  "consumer.override.max.partition.fetch.bytes": 26214400,
-  "consumer.override.fetch.max.bytes": 52428800,
-  "consumer.override.max.poll.interval.ms": 900000
+  $sink_env
+  "consumer.override.max.poll.records": $poll
 }
 JSON
 }
@@ -252,11 +258,15 @@ run_phase() {
       [ -z "$(kv_get "${m}_sinkdone" "$t")" ] && left=$((left+1))
     done
     if [ $((i % 10)) -eq 0 ]; then
+      # Connect heap over time: the evidence for how much each concurrent box costs
+      dc exec -T connect jcmd 1 GC.heap_info 2>/dev/null | awk -v t="$el" '/heap/ {print t "\t" $0; exit}' \
+        >> "$(art)/heap-$tag.tsv"
       docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
         | sed "s/^/$el	/" >> "$(art)/docker-stats-$tag.tsv"
       local f; f=$(failed_connectors)
       if [ -n "$f" ]; then
         for t in $f; do snapshot_status "$t" "$tag"; done
+        dc exec -T connect jcmd 1 GC.class_histogram 2>/dev/null | head -25 > "$(art)/histogram-$tag.txt"
         capture_connect_log "$tag"
         finding "**phase $tag aborted**: connector(s) FAILED: $(echo $f)"
         return 1
@@ -297,6 +307,8 @@ record_env
 record_budgets
 finding "Source (every table): \`mode=incrementing\` (ADR-0001), \`tasks.max=1\`, \`poll.interval.ms=5000\`; ordinary tables \`batch.max.rows=$ORDINARY_BATCH_MAX_ROWS\` (connector default) and \`max.buffer.size=0\` (default); large-record table \`batch.max.rows=$LOB_BATCH_MAX_ROWS\`, \`max.buffer.size=$LOB_MAX_BUFFER\`; MySQL URL $( [ "$CURSOR_FETCH" = 1 ] && echo "\`useCursorFetch=true\`, \`defaultFetchSize\` = the table's batch.max.rows" || echo "without cursor fetch (whole result set buffered)"); ADR-0003 producer overrides (zstd, 25 MiB request, 128 MiB buffer, in-flight 1)"
 finding "Sink: \`insert.mode=insert\`, \`pk.mode=none\`, \`quote.sql.identifiers=always\` (plan §7.4); \`batch.size\` unset → connector default 3000; \`consumer.override.max.poll.records\` = **$ORDINARY_POLL_RECORDS** for ordinary tables, **1** for the large-record table (ADR-0003); worker-level default is 1"
+
+[ "$ORDINARY_OVERRIDES" = 0 ] && finding "**Variant ORDINARY_OVERRIDES=0**: ordinary connectors run without ADR-0003's size overrides (producer max.request.size / buffer.memory, consumer max.partition.fetch.bytes / fetch.max.bytes / max.poll.interval.ms → client defaults); the large-record table keeps them"
 
 if [[ " $PHASES " == *" single "* ]]; then
   for t in $SINGLE_TABLES; do
