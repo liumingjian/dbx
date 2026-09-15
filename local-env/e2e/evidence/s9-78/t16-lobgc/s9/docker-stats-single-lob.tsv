@@ -1,0 +1,15 @@
+1.4	local-env-connect-1	117.20%	2.473GiB / 15.6GiB
+1.4	local-env-schema-registry-1	0.42%	163.7MiB / 15.6GiB
+1.4	local-env-kafka-1	47.61%	2.368GiB / 15.6GiB
+1.4	local-env-mysql-1	21.41%	573.2MiB / 15.6GiB
+1.4	local-env-postgres-1	27.25%	164MiB / 15.6GiB
+6.3	local-env-connect-1	41.45%	2.703GiB / 15.6GiB
+6.3	local-env-schema-registry-1	0.30%	148.2MiB / 15.6GiB
+6.3	local-env-kafka-1	6.95%	2.831GiB / 15.6GiB
+6.3	local-env-mysql-1	1.14%	594MiB / 15.6GiB
+6.3	local-env-postgres-1	47.34%	285.9MiB / 15.6GiB
+10.5	local-env-connect-1	2.34%	1.391GiB / 15.6GiB
+10.5	local-env-schema-registry-1	0.59%	146.9MiB / 15.6GiB
+10.5	local-env-kafka-1	10.32%	2.943GiB / 15.6GiB
+10.5	local-env-mysql-1	1.28%	594MiB / 15.6GiB
+10.5	local-env-postgres-1	0.26%	303.2MiB / 15.6GiB
