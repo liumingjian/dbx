@@ -223,7 +223,7 @@ _Avoid_: Batch execution, strict waves
 _中文_: 滚动准入
 
 **Admission paused**:
-Rolling admission stopped after a second Connect restart or two stuck boxes until the DBA continues it; the run stays running (ADR-0032).
+One run's rolling admission stopped after a second Connect restart or two zero-output stuck boxes, until the DBA continues it; the run shows attention required (ADR-0037).
 _Avoid_: 暂停, 运行已暂停
 _中文_: 准入已暂停
 
