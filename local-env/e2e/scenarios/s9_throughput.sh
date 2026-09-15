@@ -15,7 +15,7 @@
 # DATA_LENGTH vs payload gap. DATA_LENGTH/s and rows/s are recorded alongside.
 #
 # The clock starts before the first connector PUT and stops when the target table holds every
-# source row (pg_stat n_tup_ins, confirmed with COUNT(*)). That is end-to-end time, the way
+# source row (exact COUNT(*) once the Source has read everything). That is end-to-end time, the way
 # a DBA experiences it, not source read speed.
 #
 #   ./e2e/bulk/seed-bulk.sh && ./e2e/run-all.sh s9     # both phases
@@ -249,7 +249,10 @@ run_phase() {
       printf '%s\t%s\t%s\t%s\n' "$el" "$t" "${end:-0}" "${ins:-0}" >> "$tsv"
       tot=$(( tot + ${end:-0} + ${ins:-0} ))
       [ -z "$(kv_get "${m}_srcdone" "$t")" ] && [ "${end:-0}" -ge "$rows" ] && kv_set "${m}_srcdone" "$t" "$el"
-      if [ -z "$(kv_get "${m}_sinkdone" "$t")" ] && [ "${ins:-0}" -ge "$rows" ]; then
+      # pg_stat n_tup_ins from an idle backend lags up to 10 s (PG 15's idle stats flush), which
+      # showed up as a flat ~10 s tail on every table. Once the Source is done, count exactly.
+      if [ -z "$(kv_get "${m}_sinkdone" "$t")" ] \
+         && { [ "${ins:-0}" -ge "$rows" ] || [ -n "$(kv_get "${m}_srcdone" "$t")" ]; }; then
         n=$(psqlq "SELECT COUNT(*) FROM $t")
         if [ "$n" -ge "$rows" ]; then
           kv_set "${m}_sinkdone" "$t" "$(since "$T0")"; log "$t written at $(kv_get "${m}_sinkdone" "$t")s"
