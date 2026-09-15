@@ -1,0 +1,15 @@
+{
+  "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+  "connection.url": "jdbc:mysql://mysql:3306/dbx_src?useSSL=false&allowPublicKeyRetrieval=true&useCursorFetch=true",
+  "connection.user": "dbx", "connection.password": "dbx",
+  "mode": "incrementing", "incrementing.column.name": "id",
+  "table.whitelist": "b_narrow_4",
+  "topic.prefix": "dbx.tp.concurrent.",
+  "poll.interval.ms": "100", "tasks.max": "1",
+  "batch.max.rows": "1024", "max.buffer.size": "1024",
+  "query.suffix": "LIMIT 131072",
+  "producer.override.buffer.memory": "4194304", "producer.override.batch.size": "262144",
+  "producer.override.linger.ms": "10", "producer.override.enable.idempotence": "true",
+  "producer.override.acks": "all", "producer.override.max.in.flight.requests.per.connection": "5",
+  "producer.override.compression.type": "zstd"
+}

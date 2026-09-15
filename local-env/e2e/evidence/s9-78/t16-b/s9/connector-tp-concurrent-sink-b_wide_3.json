@@ -1,0 +1,13 @@
+{
+  "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+  "connection.url": "jdbc:postgresql://postgres:5432/dbx_target",
+  "connection.user": "dbx", "connection.password": "dbx",
+  "topics": "dbx.tp.concurrent.b_wide_3", "table.name.format": "b_wide_3",
+  "auto.create": "false", "auto.evolve": "false",
+  "insert.mode": "insert", "pk.mode": "none", "delete.enabled": "false",
+  "quote.sql.identifiers": "always",
+  "errors.tolerance": "none", "tasks.max": "1",
+  "consumer.override.max.partition.fetch.bytes": "2097152", "consumer.override.fetch.max.bytes": "8388608",
+  "consumer.override.max.poll.interval.ms": "900000",
+  "consumer.override.max.poll.records": "500"
+}

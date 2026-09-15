@@ -13,7 +13,8 @@ cd "$(dirname "$0")/../.."
 [ $# -ge 2 ] || { echo "usage: $0 <8|16> <run-name> [phases] [single tables]"; exit 2; }
 
 bash e2e/bulk/set-tier.sh "$1" || exit $?
-export TIER="$1" ART_ROOT="$HOME/dbx-lab/78/$2" PHASES="${3:-single concurrent}"
+export TIER="$1" ART_ROOT="$HOME/dbx-lab/78/$2" PHASES="${3:-both}"
+[ "$PHASES" = both ] && PHASES="single concurrent"   # one word survives remote argument passing
 [ -n "${4:-}" ] && [ "$4" != all ] && export SINGLE_TABLES="$4"
 # 5th argument: force a full GC this often, so S9's heap check sees live heap (costs throughput)
 [ -n "${5:-}" ] && export LIVE_GC_S="$5"

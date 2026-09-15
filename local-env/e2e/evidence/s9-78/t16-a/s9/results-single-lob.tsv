@@ -1,0 +1,2 @@
+table	shape	rows	data_length	est_bytes	topic_bytes	admit_s	src_done_s	sink_done_s	est_MiB_s	data_MiB_s	rows_s
+b_lob_1	lob	1000	1605910528	2420970000	1573105664	0.0	6.4	12.2	189.25	125.53	82

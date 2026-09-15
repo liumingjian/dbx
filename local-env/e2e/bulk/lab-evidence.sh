@@ -12,6 +12,6 @@ set -uo pipefail
 cd "$HOME/dbx-lab/78" || exit 1
 [ -d "$1/s9" ] || { echo "no run $1" >&2; exit 1; }
 
-tar -cz -C . \
+tar -cz --no-mac-metadata -C . \
   --exclude 'gc-*.log' --exclude 'connect-log-*' --exclude 'put-*.json' --exclude 'run.log' \
   "$1/s9" | base64
