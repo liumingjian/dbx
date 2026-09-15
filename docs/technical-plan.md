@@ -366,7 +366,7 @@ The product shell distinguishes migration work, data-source management, and syst
 
 The built-in Docker Compose deployment contains DBX, Kafka, Connect, and Schema Registry, plus customer-provided MySQL Connector/J mounted through the installation flow. PostgreSQL and MySQL are customer endpoints. Its fitness is proven by the environment check of ADR-0018, which detects and explains but never remediates. (Suspended in v1, which ships only the built-in deployment:) Customer-managed Kafka/Connect/Schema Registry is supported only when active capability checks prove exact topic, producer, consumer, converter, subject, REST, shared secret-provider path, and cleanup semantics.
 
-The Connect worker uses the resource and large-message configuration in ADR-0003: 4 GiB heap; deployment minimum 8 GiB memory and recommended 16 GiB/four cores; required connector client overrides; 128 MiB producer buffer; and the fixed 25 MiB settings. Large-record tables use single-record Sink polling. External installations (v2; suspended in v1) must round-trip the near-envelope incompressible probe before DDL approval.
+The Connect worker uses the resource and large-message configuration in ADR-0003, with heaps set by ADR-0031's memory tier, which ADR-0035's install script chooses from container-visible memory; required connector client overrides; 128 MiB producer buffer; and the fixed 25 MiB settings. Large-record tables use single-record Sink polling. External installations (v2; suspended in v1) must round-trip the near-envelope incompressible probe before DDL approval.
 
 ### 11.2 Kafka storage
 
@@ -384,7 +384,7 @@ Credential versions use AES-256-GCM with an independently supplied master key. C
 
 The adopted Confluent components may be distributed for customer private deployment under the researched CCL constraints, but CCL is not OSI-approved and procurement must review it. DBX must not bundle MySQL Connector/J in a proprietary distribution; installation requires the customer to provide the JAR with version and checksum verification. The JDBC connector package must be curated to remove unused bundled database drivers rather than inherit unrelated Oracle, SQL Server, SQLite, or other license obligations.
 
-A release includes third-party notices and an SBOM, fixes the tested component/image versions, and reruns certification after any driver, connector, converter, Kafka, Schema Registry, MySQL, or PostgreSQL change. The detailed offline package, upgrade/version policy, and whether to certify an Aiven JDBC + Apicurio escape route are unresolved decisions, not v1 assumptions. Licensing provenance is retained on [`research/ccl-licensing`](https://github.com/liumingjian/dbx/tree/research/ccl-licensing).
+A release includes third-party notices and an SBOM, fixes the tested component/image versions, and reruns certification after any driver, connector, converter, Kafka, Schema Registry, MySQL, or PostgreSQL change. The offline package, the one release version and its bill of materials, in-place upgrade, rollback and the master key's placement are decided by ADR-0035. Whether to certify an Aiven JDBC + Apicurio escape route remains an unresolved decision, not a v1 assumption. Licensing provenance is retained on [`research/ccl-licensing`](https://github.com/liumingjian/dbx/tree/research/ccl-licensing).
 
 ## 12. Known limits
 
@@ -416,7 +416,7 @@ The following are intentionally not designed by v1:
 - exact supplemental-SQL coverage, generation timing, and UI/download/report delivery surface;
 - non-wizard product-shell IA, authentication, multi-user permissions, and progress transport;
 - a throughput SLA (v1 publishes only ADR-0019's reference band) and a trial run that measures throughput without writing the target;
-- final offline packaging, release/version compatibility, and upgrade UX;
+- Linux x86_64 server deployment (v1 ships `linux/arm64` for macOS with Docker Desktop, ADR-0035);
 - procurement policy and a continuously certified Aiven/Apicurio fallback.
 
 These remain Wayfinder fog or future initiatives. No placeholder SPI or permissive configuration should commit the codebase to an answer prematurely.
@@ -468,6 +468,8 @@ Pin and run MySQL 8.0, PostgreSQL 15, Kafka, Schema Registry, Connect, JDBC Sour
 - contract codec and upgrade regression.
 
 Any change to a connector, converter, driver, Kafka/Registry, or database version reruns the affected pure, PostgreSQL, and full-stack gates.
+
+Before a release tag, L4 `packageTest` (ADR-0035) proves the package installs offline, upgrades from the previous release, and rolls back.
 
 ### 15.4 Journey acceptance
 
