@@ -1,0 +1,4 @@
+phase	t	gc_heap_info
+single-narrow	19.7	 garbage-first heap   total 2097152K, used 650409K [0x0000000700000000, 0x0000000800000000)
+single-narrow	43.4	 garbage-first heap   total 2097152K, used 481250K [0x0000000700000000, 0x0000000800000000)
+single-wide	20.4	 garbage-first heap   total 2097152K, used 574553K [0x0000000700000000, 0x0000000800000000)
