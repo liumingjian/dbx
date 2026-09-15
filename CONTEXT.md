@@ -248,7 +248,7 @@ _Avoid_: Maintenance mode, pause, permanent checkbox
 _中文_: 写冻结
 
 **Task write freeze**:
-A write freeze over a task's whole scope, spanning every run, reconfirmed per run (ADR-0024).
+A write freeze over a task's whole scope, spanning every run, reconfirmed per run; each run's write freeze nests inside it (ADR-0024).
 _Avoid_: Long freeze, batch freeze, 冻结期
 _中文_: 整库冻结承诺
 
