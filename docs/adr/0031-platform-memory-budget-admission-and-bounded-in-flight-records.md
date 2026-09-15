@@ -15,14 +15,14 @@ The settings below are part of the execution signature.
 - **Ordinary boxes, Source producer.** `buffer.memory=4194304` (4 MiB), `batch.size=262144`, `linger.ms=10`, `enable.idempotence=true`, `max.in.flight.requests.per.connection=5`, `acks=all`, `compression.type=zstd`. Idempotence keeps per-partition order at five in-flight requests, so the small buffer does not cost the ordering that `max.in.flight=1` bought. Ordinary rows are at most 1 MiB (ADR-0003), so 4 MiB still fits the largest record.
 - **Ordinary boxes, Sink consumer.** `fetch.max.bytes=8388608`, `max.partition.fetch.bytes=2097152`. `max.poll.records` is `clamp(64 MiB ÷ M, 1, 500)` rounded down to a power of two, where M is the largest exact row byte length across the box's tables from ADR-0003's preflight. Narrow tables keep 500. The power-of-two rounding limits how finely this splits execution signatures.
 - **Large record tables.** ADR-0003's settings stand: 128 MiB `buffer.memory`, 16 KiB `batch.size`, `max.in.flight.requests.per.connection=1`, Sink `max.poll.records=1` with 25/50 MiB fetch limits. Their record count is already bounded by row size.
-- **Source read-ahead** (`batch.max.rows`, cursor fetch, `max.buffer.size`) is decided by [#76](https://github.com/liumingjian/dbx/issues/76). It must also be bounded in bytes by M, not only in rows.
+- **Source read-ahead** (`batch.max.rows`, cursor fetch, `max.buffer.size`) is decided by [ADR-0033](0033-bounded-source-reads-cursor-fetch-and-keyset-chunks.md), which bounds it in bytes by M: `read-ahead = (batch.max.rows + max.buffer.size) × M × X`.
 
 ## Platform memory budget: the sixth admission gate
 
 Each box's reservation is computed when the scheduling plan is made, from the box's settings and M:
 
 ```text
-R = buffer.memory × E  +  read-ahead(#76)  +  2 × fetch.max.bytes  +  max.poll.records × M × X
+R = buffer.memory × E  +  read-ahead (ADR-0033)  +  2 × fetch.max.bytes  +  max.poll.records × M × X
 ```
 
 A box is admitted only while the sum of R over running boxes stays at or below `Connect heap − B`. The gate is cumulative, like the Kafka disk budget, so large-box starvation protection applies unchanged. It combines with ADR-0002's other gates by taking the tightest limit. It is static: the heap in the formula is the effective heap read at the pre-admission environment check, never a live usage figure.
