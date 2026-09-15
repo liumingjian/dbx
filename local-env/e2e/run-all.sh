@@ -43,6 +43,6 @@ done
 
 echo "════════════════ 汇总 ════════════════"
 for sid in "${TARGETS[@]}"; do
-  f="./e2e/artifacts/$sid/FINDINGS.md"
+  f="$ART_ROOT/$sid/FINDINGS.md"
   [ -f "$f" ] && { echo; cat "$f"; }
 done

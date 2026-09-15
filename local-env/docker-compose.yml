@@ -8,6 +8,7 @@
 services:
   mysql:
     image: mysql:8.0.40
+    restart: unless-stopped                  # ADR-0032: a crashed service comes back on its own
     command:
       - --max-allowed-packet=268435456      # 256MiB：种子数据要在服务端拼 25MiB 的 BLOB
       - --character-set-server=utf8mb4
@@ -33,6 +34,7 @@ services:
 
   postgres:
     image: postgres:15.10
+    restart: unless-stopped
     environment:
       POSTGRES_DB: dbx_target
       POSTGRES_USER: dbx
@@ -53,6 +55,7 @@ services:
 
   kafka:
     image: apache/kafka:3.9.0                # ≥3.6.0（#3 的版本下限结论：KIP-875 的 offset 端点）
+    restart: unless-stopped
     environment:
       # --- KRaft 单节点：broker 与 controller 合并进程 ---
       KAFKA_PROCESS_ROLES: broker,controller
@@ -80,7 +83,8 @@ services:
       KAFKA_LOG_SEGMENT_BYTES: 268435456       # 256MiB，让 retention 能真正回收（活跃 segment 永不删）
       KAFKA_LOG_DIRS: /var/lib/kafka/data      # apache/kafka 默认写 /tmp；必须对齐下方命名卷
       # --- 堆：Kafka 数据走 page cache，堆几乎不随数据量增长 ---
-      KAFKA_HEAP_OPTS: "-Xms2g -Xmx2g"
+      # Heap by ADR-0031 tier (e2e/bulk/set-tier.sh); ADR-0032: exit on OOM so Docker restarts it
+      KAFKA_HEAP_OPTS: "-Xms${DBX_KAFKA_HEAP:-2g} -Xmx${DBX_KAFKA_HEAP:-2g} -XX:+ExitOnOutOfMemoryError"
     ports:
       - "29092:29092"
     volumes:
@@ -94,6 +98,7 @@ services:
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.9.0
+    restart: unless-stopped
     depends_on:
       kafka:
         condition: service_healthy
@@ -102,7 +107,7 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
       SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
-      SCHEMA_REGISTRY_HEAP_OPTS: "-Xms256m -Xmx512m"
+      SCHEMA_REGISTRY_HEAP_OPTS: "-Xms256m -Xmx512m -XX:+ExitOnOutOfMemoryError"
     ports:
       - "8081:8081"
     healthcheck:
@@ -114,6 +119,7 @@ services:
 
   connect:
     build: ./connect                         # 见 connect/Dockerfile；先跑 ./fetch-plugins.sh
+    restart: unless-stopped
     depends_on:
       kafka:
         condition: service_healthy
@@ -150,8 +156,11 @@ services:
       # 想测小表吞吐时在 connector 配置里写 consumer.override.max.poll.records=500 覆盖。
       CONNECT_CONSUMER_MAX_POLL_RECORDS: 1
       CONNECT_CONSUMER_MAX_POLL_INTERVAL_MS: 900000
-      # --- 全套里最吃堆的组件（官方区间 0.5–4GB 取上限）---
-      KAFKA_HEAP_OPTS: "-Xms2g -Xmx4g"
+      # --- 全套里最吃堆的组件 ---
+      # Heap by ADR-0031 tier (e2e/bulk/set-tier.sh: 3g at 8 GiB, 6g at >=16 GiB), non-heap capped
+      # by MaxDirectMemorySize. ADR-0032: exit on OOM so Docker restarts it. The GC log, stamped with
+      # JVM uptime, is S9's heap evidence (post-GC size against the boxes' reservations).
+      KAFKA_HEAP_OPTS: "-Xms1g -Xmx${DBX_CONNECT_HEAP:-6g} -XX:MaxDirectMemorySize=512m -XX:+ExitOnOutOfMemoryError -Xlog:gc:file=/tmp/gc.log:uptimemillis"
     ports:
       - "8083:8083"
     logging:                                 # 防日志写爆磁盘（#6 §6.2）

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# S9: reference throughput band (ticket #63, map #1; feeds ADR-0019).
+# S9: reference throughput band (tickets #63 and #78, map #1; feeds ADR-0019).
 #
 # Two measurements on the bulk dataset from e2e/bulk/seed-bulk.sh:
 #   single      one table per shape, run alone: one Source task, one Sink task, nothing else
 #               on the worker. Yields single-stream throughput, which feeds 窗口下限
 #               (minimum window).
-#   concurrent  every b_* table at once, one box per table. All of them fit ADR-0002's default
-#               admission budgets (see FINDINGS), so rolling admission would start them all
-#               immediately. Yields aggregate throughput, which feeds 预估耗时 (duration estimate).
+#   concurrent  every b_* table, one single-table box each, admitted the way the scheduler admits
+#               them: largest planned bytes first, rolling, under ADR-0002's box and connection cap
+#               and ADR-0031's platform memory budget. Yields aggregate throughput, which feeds
+#               预估耗时 (duration estimate).
 #
 # Throughput is reported in the estimator's own unit: ADR-0002 "planned transfer bytes"
 # = 1.5 * max(DATA_LENGTH, exact rows * AVG_ROW_LENGTH). The estimator divides those bytes
@@ -18,11 +19,15 @@
 # source row (exact COUNT(*) once the Source has read everything). That is end-to-end time, the way
 # a DBA experiences it, not source read speed.
 #
-#   ./e2e/bulk/seed-bulk.sh && ./e2e/run-all.sh s9     # both phases
-#   PHASES=single ./e2e/run-all.sh s9                   # one phase only
+# Connector settings follow ADR-0031 (per-box heap bounds) and ADR-0033 (bounded Source reads),
+# derived from each table's exact maximum row byte length M. Every phase also checks ADR-0031's
+# bound: each post-GC heap figure in Connect's GC log must stay at or below the idle worker's heap
+# plus the reservations R of the boxes running at that moment. A post-GC figure can still hold
+# old-generation garbage, so it is an upper bound on live heap: a pass is sound, and a failure is
+# only conclusive with LIVE_GC_S set, which forces full GCs so the log shows live heap.
 #
-# Connector settings follow docs/technical-plan.md §7.4 and ADR-0003. Anything that doc
-# leaves unset stays at the connector default and is listed in FINDINGS.
+#   ./e2e/bulk/set-tier.sh 16 && ./e2e/run-all.sh s9    # both phases at the >=16 GiB tier
+#   PHASES=single ./e2e/run-all.sh s9                   # one phase only
 #
 # Must stay runnable on macOS's stock bash 3.2: per-table values live in kv_* variables,
 # not associative arrays.
@@ -33,30 +38,16 @@ init_scenario s9 "reference throughput band"
 PHASES="${PHASES:-single concurrent}"
 SINGLE_TABLES="${SINGLE_TABLES:-b_narrow_1 b_wide_1 b_lob_1}"
 SAMPLE_S="${SAMPLE_S:-1}"
+PROBE_S="${PROBE_S:-10}"      # RSS, source temp-table and failure probes
 PHASE_TIMEOUT_S="${PHASE_TIMEOUT_S:-5400}"
 STALL_S="${STALL_S:-300}"     # abort a phase after this long with no topic or target progress
-ORDINARY_POLL_RECORDS=500     # Kafka's own default; ADR-0003 keeps poll=1 for large-record tables only
-# Without cursor fetch, Connector/J buffers a Source query's whole result set in the Connect heap:
-# the first run of this scenario OOMed the 4 GiB worker with eight concurrent boxes.
-# CURSOR_FETCH=0 reproduces the buffered behavior. Fetch size follows each Source's batch.max.rows.
-CURSOR_FETCH="${CURSOR_FETCH:-1}"
-# The JDBC Source also reads ahead into its own buffer (max.buffer.size; its default derives from
-# batch.max.rows, which defaults to 1000 in 10.9.6). With 1.5 MiB rows that buffer alone OOMed a
-# fresh 4 GiB worker running the large-record table by itself, so large-record Sources are
-# bounded here the way ADR-0003 bounds their Sinks. Lab settings, not a plan decision.
-ORDINARY_BATCH_MAX_ROWS=1000                          # the connector default, stated explicitly
-LOB_BATCH_MAX_ROWS="${LOB_BATCH_MAX_ROWS:-1}"
-LOB_MAX_BUFFER="${LOB_MAX_BUFFER:-4}"
-# ADR-0003's size overrides (128 MiB producer buffer, 25 MiB request and partition fetch) on every
-# connector left eight concurrent boxes OOMing the 4 GiB Connect heap. ORDINARY_OVERRIDES=0 keeps
-# them on the large-record table only and gives ordinary connectors the client defaults. That is
-# a lab variant for a provisional band, not a plan decision.
-ORDINARY_OVERRIDES="${ORDINARY_OVERRIDES:-1}"
-mysql_url() {  # <fetch size>
-  local u="jdbc:mysql://mysql:3306/dbx_src?useSSL=false&allowPublicKeyRetrieval=true"
-  [ "$CURSOR_FETCH" = 1 ] && u="$u&useCursorFetch=true&defaultFetchSize=$1"
-  echo "$u"
-}
+LIVE_GC_S="${LIVE_GC_S:-0}"   # >0: force a full GC this often, so the GC log shows live heap
+GRACE_S=5                     # a finished box's objects may survive until the next GC
+# ADR-0031's provisional constants; this scenario is what calibrates them
+E="${E:-100}"; E_LOB="${E_LOB:-3}"; X="${X:-3}"; B_MIB="${B_MIB:-512}"
+MIB=1048576
+LOB_ROW=$MIB                  # ADR-0003: a row above 1 MiB makes a large-record table
+MYSQL_URL="jdbc:mysql://mysql:3306/dbx_src?useSSL=false&allowPublicKeyRetrieval=true&useCursorFetch=true"
 
 # Sub-second clock: EPOCHREALTIME on bash 5, perl (shipped with macOS) otherwise
 now() {
@@ -64,6 +55,7 @@ now() {
   else perl -MTime::HiRes=time -e 'printf "%.3f\n", time'; fi
 }
 since() { awk -v a="$1" -v b="$(now)" 'BEGIN{printf "%.1f", b-a}'; }
+elapsed_ge() { awk -v a="$1" -v b="$2" -v s="$3" 'BEGIN{exit !(a-b>=s)}'; }   # <now> <then> <seconds>
 
 # Map stand-ins. Keys are table names, which are identifier-safe (b_narrow_1 …).
 # Map names carry the phase number so no value leaks from one phase into the next.
@@ -71,6 +63,8 @@ kv_set() { printf -v "kv_$1__$2" '%s' "$3"; }
 kv_get() { local v="kv_$1__$2"; echo "${!v:-}"; }
 
 shape_of() { case "$1" in b_narrow_*) echo narrow;; b_wide_*) echo wide;; b_lob_*) echo lob;; esac; }
+
+mysqlroot() { dc exec -T mysql mysql -N -B -uroot -pdbx -e "$1" 2>/dev/null | tr -d '\r'; }
 
 pg_ddl() {
   local t="$1"
@@ -93,33 +87,81 @@ est_bytes() {
           FROM information_schema.tables WHERE table_schema='dbx_src' AND table_name='$1'" | tr -d '\r'
 }
 
+# ADR-0003 preflight's exact maximum row byte length, as an SQL expression over one row.
+# Strings and binaries count their stored bytes; fixed-width columns count their storage size.
+row_bytes_sql() {
+  mysqlq "SELECT GROUP_CONCAT(CASE
+      WHEN data_type IN ('char','varchar','binary','varbinary','tinytext','text','mediumtext','longtext',
+                         'tinyblob','blob','mediumblob','longblob','json')
+        THEN CONCAT('COALESCE(LENGTH(\`', column_name, '\`),0)')
+      WHEN data_type = 'tinyint' THEN '1'
+      WHEN data_type = 'smallint' THEN '2'
+      WHEN data_type IN ('mediumint','date','time') THEN '3'
+      WHEN data_type IN ('int','float') THEN '4'
+      WHEN data_type = 'decimal' THEN CAST(CEIL(numeric_precision / 2) + 1 AS CHAR)
+      ELSE '8' END SEPARATOR '+')
+    FROM information_schema.columns WHERE table_schema='dbx_src' AND table_name='$1'" | tr -d '\r'
+}
+
+pow2() { local p=1; while [ $(( p * 2 )) -le "$1" ]; do p=$(( p * 2 )); done; echo "$p"; }   # round down
+clamp() { local v="$1"; [ "$v" -lt "$2" ] && v="$2"; [ "$v" -gt "$3" ] && v="$3"; echo "$v"; }
+
+# derive <table>: M, then every connector setting ADR-0031 and ADR-0033 derive from it, and the
+# box's heap reservation R = buffer.memory×E + read-ahead + 2×fetch.max.bytes + max.poll.records×M×X
+derive() {
+  local t="$1" m bmr buf n poll bm fetch e r
+  m=$(mysqlq "SELECT MAX($(row_bytes_sql "$t")) FROM $t" | tr -d '\r')
+  n=$(pow2 "$(clamp $(( 64 * MIB / m )) 1 131072)")
+  if [ "$m" -gt "$LOB_ROW" ]; then
+    kv_set lob "$t" 1; bmr=1; buf=4; poll=1; bm=134217728; fetch=52428800; e=$E_LOB
+  else
+    kv_set lob "$t" ""
+    bmr=$(pow2 "$(clamp $(( 4 * MIB / m )) 1 1024)"); buf=$bmr
+    # pow2 before the 500 cap: ADR-0031 says narrow tables keep 500
+    poll=$(pow2 $(( 64 * MIB / m ))); [ "$poll" -gt 500 ] && poll=500
+    bm=4194304; fetch=8388608; e=$E
+  fi
+  r=$(( bm * e + (bmr + buf) * m * X + 2 * fetch + poll * m * X ))
+  kv_set m "$t" "$m"; kv_set bmr "$t" "$bmr"; kv_set buf "$t" "$buf"; kv_set n "$t" "$n"
+  kv_set poll "$t" "$poll"; kv_set bm "$t" "$bm"; kv_set e "$t" "$e"; kv_set r "$t" "$r"
+  finding "\`$t\`: M=$m B$( [ -n "$(kv_get lob "$t")" ] && echo ' (large-record)'); \`batch.max.rows=$bmr\`, \`max.buffer.size=$buf\`, \`query.suffix=LIMIT $n\`, Sink \`max.poll.records=$poll\`; R = $(awk -v r="$r" -v m=$MIB 'BEGIN{printf "%.1f", r/m}') MiB"
+}
+
 put_source() {
-  local tag="$1" t="$2" rows="$ORDINARY_BATCH_MAX_ROWS" buf=0
-  [ "$(shape_of "$t")" = lob ] && { rows="$LOB_BATCH_MAX_ROWS"; buf="$LOB_MAX_BUFFER"; }
-  local src_env='"producer.override.max.request.size": 26214400, "producer.override.buffer.memory": 134217728,'
-  [ "$ORDINARY_OVERRIDES" = 0 ] && [ "$(shape_of "$t")" != lob ] && src_env=''
+  local tag="$1" t="$2" prod
+  if [ -n "$(kv_get lob "$t")" ]; then   # ADR-0003's large-record producer
+    prod='"producer.override.buffer.memory": "134217728", "producer.override.batch.size": "16384",
+  "producer.override.max.request.size": "26214400",
+  "producer.override.max.in.flight.requests.per.connection": "1",'
+  else                                   # ADR-0031's ordinary producer
+    prod='"producer.override.buffer.memory": "4194304", "producer.override.batch.size": "262144",
+  "producer.override.linger.ms": "10", "producer.override.enable.idempotence": "true",
+  "producer.override.acks": "all", "producer.override.max.in.flight.requests.per.connection": "5",'
+  fi
   put_connector "tp-$tag-src-$t" <<JSON
 {
   "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
-  "connection.url": "$(mysql_url "$rows")",
+  "connection.url": "$MYSQL_URL",
   "connection.user": "dbx", "connection.password": "dbx",
   "mode": "incrementing", "incrementing.column.name": "id",
   "table.whitelist": "$t",
   "topic.prefix": "dbx.tp.$tag.",
-  "poll.interval.ms": 5000, "tasks.max": 1,
-  "batch.max.rows": $rows, "max.buffer.size": $buf,
-  $src_env
-  "producer.override.compression.type": "zstd",
-  "producer.override.max.in.flight.requests.per.connection": 1
+  "poll.interval.ms": "100", "tasks.max": "1",
+  "batch.max.rows": "$(kv_get bmr "$t")", "max.buffer.size": "$(kv_get buf "$t")",
+  "query.suffix": "LIMIT $(kv_get n "$t")",
+  $prod
+  "producer.override.compression.type": "zstd"
 }
 JSON
 }
 
 put_sink() {
-  local tag="$1" t="$2" poll="$ORDINARY_POLL_RECORDS"
-  [ "$(shape_of "$t")" = lob ] && poll=1
-  local sink_env='"consumer.override.max.partition.fetch.bytes": 26214400, "consumer.override.fetch.max.bytes": 52428800, "consumer.override.max.poll.interval.ms": 900000,'
-  [ "$ORDINARY_OVERRIDES" = 0 ] && [ "$(shape_of "$t")" != lob ] && sink_env=''
+  local tag="$1" t="$2" cons
+  if [ -n "$(kv_get lob "$t")" ]; then
+    cons='"consumer.override.max.partition.fetch.bytes": "26214400", "consumer.override.fetch.max.bytes": "52428800",'
+  else
+    cons='"consumer.override.max.partition.fetch.bytes": "2097152", "consumer.override.fetch.max.bytes": "8388608",'
+  fi
   put_connector "tp-$tag-sink-$t" <<JSON
 {
   "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
@@ -129,9 +171,10 @@ put_sink() {
   "auto.create": "false", "auto.evolve": "false",
   "insert.mode": "insert", "pk.mode": "none", "delete.enabled": "false",
   "quote.sql.identifiers": "always",
-  "errors.tolerance": "none", "tasks.max": 1,
-  $sink_env
-  "consumer.override.max.poll.records": $poll
+  "errors.tolerance": "none", "tasks.max": "1",
+  $cons
+  "consumer.override.max.poll.interval.ms": "900000",
+  "consumer.override.max.poll.records": "$(kv_get poll "$t")"
 }
 JSON
 }
@@ -158,16 +201,29 @@ failed_connectors() {
     | .key'
 }
 
+# Connect's GC log (-Xlog:gc in docker-compose.yml), rewritten on every JVM start
+gc_log() { dc exec -T connect cat /tmp/gc.log 2>/dev/null | tr -d '\r'; }
+last_post_gc_mib() {
+  gc_log | awk 'match($0, /[0-9]+M->[0-9]+M\(/) { s = substr($0, RSTART, RLENGTH); sub(/^[0-9]+M->/, "", s); sub(/M\($/, "", s); v = s } END { print v + 0 }'
+}
+jvm_uptime() { dc exec -T connect jcmd 1 VM.uptime 2>/dev/null | tr -d '\r' | awk 'NF==2 && $2=="s" {print $1}'; }
+connect_started() { docker inspect -f '{{.State.StartedAt}}' "$(dc ps -q connect)"; }
+
 # Every phase starts on a freshly restarted worker. A worker that once hit OutOfMemoryError keeps
 # answering REST, but its offsets-topic reader thread can be dead: every new Source then blocks
 # forever in start() reading offsets (observed: 90 min per phase with zero records).
-# A restart also gives each phase the same empty heap.
+# A restart also gives each phase the same empty heap, whose post-GC size is the phase's base.
 fresh_worker() {
   log "restarting Connect for a fresh worker"
   dc restart connect >> "$(art)/run.log" 2>&1
   local i
   for i in $(seq 1 120); do
-    curl -sf "$CONNECT/connectors" >/dev/null && { sleep 10; return 0; }   # 10 s for group join
+    if curl -sf "$CONNECT/connectors" >/dev/null; then
+      sleep 10                                                     # group join
+      dc exec -T connect jcmd 1 GC.run >/dev/null 2>&1; sleep 2
+      BASE_MIB=$(last_post_gc_mib); STARTED=$(connect_started)
+      return 0
+    fi
     sleep 2
   done
   log "Connect did not come back after restart"; exit 1
@@ -183,14 +239,20 @@ record_env() {
     uptime
     echo "## docker"
     docker info --format '{{.OperatingSystem}} {{.ServerVersion}}, {{.NCPU}} vCPU, {{.MemTotal}} B'
+    echo "## tier ${TIER:-unset} (e2e/bulk/set-tier.sh); effective heaps"
+    echo "connect MaxHeapSize=$(( HEAP_MIB )) MiB"
+    docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(dc ps -q connect)" "$(dc ps -q kafka)" \
+      | grep -E '^(KAFKA|SCHEMA_REGISTRY)_HEAP_OPTS'
     echo "## images (docker-compose.yml; Connect is built FROM the cp-kafka-connect tag in connect/Dockerfile)"
     grep -E '^\s+image:' "$ENV_DIR/docker-compose.yml" | sed 's/#.*//'
     grep -E '^FROM' "$ENV_DIR/connect/Dockerfile"
     echo "## worker overrides (docker-compose.yml)"
-    grep -E 'CONNECT_(CONSUMER|PRODUCER)_|KAFKA_HEAP_OPTS' "$ENV_DIR/docker-compose.yml" | sed 's/#.*//'
+    grep -E 'CONNECT_(CONSUMER|PRODUCER)_' "$ENV_DIR/docker-compose.yml" | sed 's/#.*//'
     echo "## database limits"
     echo "mysql max_connections=$(mysqlq 'SELECT @@max_connections' | tr -d '\r')" \
-         "innodb_buffer_pool_size=$(mysqlq 'SELECT @@innodb_buffer_pool_size' | tr -d '\r')"
+         "innodb_buffer_pool_size=$(mysqlq 'SELECT @@innodb_buffer_pool_size' | tr -d '\r')" \
+         "tmp_table_size=$(mysqlq 'SELECT @@tmp_table_size' | tr -d '\r')" \
+         "temptable_max_ram=$(mysqlq 'SELECT @@temptable_max_ram' | tr -d '\r')"
     echo "postgres max_connections=$(psqlq 'SHOW max_connections')" \
          "shared_buffers=$(psqlq 'SHOW shared_buffers')" "max_wal_size=$(psqlq 'SHOW max_wal_size')"
   } > "$(art)/env.txt" 2>&1
@@ -209,16 +271,74 @@ record_budgets() {
   [ "$src" -lt $lim ] && lim=$src
   [ "$tgt" -lt $lim ] && lim=$tgt
   ADMIT=$lim
+  HEAP_MIB=$(( $(dc exec -T connect jcmd 1 VM.flags 2>/dev/null | tr ' ' '\n' | grep -o 'MaxHeapSize=[0-9]*' | cut -d= -f2) / MIB ))
+  BUDGET=$(( (HEAP_MIB - B_MIB) * MIB ))
   finding "ADR-0002 default budgets here: Connect tasks $tasks (2 x $ncpu vCPU), boxes 10, source connections $src (max_connections $myc), target connections $tgt (max_connections $pgc) → at most **$ADMIT** concurrent single-table boxes"
+  finding "ADR-0031 platform memory budget: Connect heap $HEAP_MIB MiB − B $B_MIB MiB = **$(( HEAP_MIB - B_MIB )) MiB** of box reservations (E=$E, E_lob=$E_LOB, X=$X); tier ${TIER:-unset}"
+}
+
+# probe <tag> <elapsed>: component RSS, source temp tables, optional forced GC
+probe() {
+  local tag="$1" el="$2" c
+  # Summed VmRSS of every process in the container. Postgres backends share shared_buffers,
+  # so its sum overstates; the JVM containers run one process.
+  for c in $(docker ps --format '{{.Names}}' | grep '^local-env-'); do
+    printf '%s\t%s\t%s\n' "$el" "$(echo "$c" | sed 's/^local-env-//; s/-1$//')" \
+      "$(docker exec "$c" sh -c 'cat /proc/[0-9]*/status 2>/dev/null' | awk '/^VmRSS:/{s+=$2} END{printf "%.0f", s/1024}')"
+  done >> "$(art)/rss-$tag.tsv"
+  docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
+    | sed "s/^/$el	/" >> "$(art)/docker-stats-$tag.tsv"
+  # TempTable memory is a global instrument (high-water mark reset at phase start); a chunk over
+  # tmp_table_size converts to an InnoDB temp table in the session's own temp tablespace.
+  mysqlroot "SELECT '$el', event_name, current_number_of_bytes_used, high_number_of_bytes_used
+               FROM performance_schema.memory_summary_global_by_event_name WHERE event_name LIKE 'memory/temptable/%'
+             UNION ALL
+             SELECT '$el', CONCAT('session_temp_tablespace:', id), size, size
+               FROM information_schema.innodb_session_temp_tablespaces WHERE state = 'ACTIVE'" \
+    >> "$(art)/tmp-$tag.tsv"
+  [ "$LIVE_GC_S" -gt 0 ] && elapsed_ge "$el" "${last_gc:-0}" "$LIVE_GC_S" \
+    && { dc exec -T connect jcmd 1 GC.run >/dev/null 2>&1; last_gc=$el; }
+  return 0
+}
+
+# heap_check <tag> <jvm uptime at T0>: every post-GC heap figure against base + ΣR of the boxes
+# running at that moment
+heap_check() {
+  local tag="$1" up0="$2"
+  gc_log > "$(art)/gc-$tag.log"
+  awk -F'\t' -v up0="$up0" -v base="$BASE_MIB" -v grace="$GRACE_S" -v OFS='\t' '
+    BEGIN { print "t", "post_gc_MiB", "sum_R_MiB", "excess_over_R" }
+    FNR == NR { if (FNR > 1) { n++; adm[n] = $2; dn[n] = ($3 == "" ? 1e9 : $3); r[n] = $4 } next }
+    match($0, /^\[[0-9]+ms\]/) {
+      u = substr($0, 2, RLENGTH - 4) / 1000 - up0
+      if (u < 0 || !match($0, /[0-9]+M->[0-9]+M\(/)) next
+      s = substr($0, RSTART, RLENGTH); sub(/^[0-9]+M->/, "", s); sub(/M\($/, "", s)
+      sum = 0; for (i = 1; i <= n; i++) if (adm[i] <= u && u <= dn[i] + grace) sum += r[i]
+      if (sum > 0) printf "%.1f\t%d\t%.1f\t%.3f\n", u, s, sum, (s - base) / sum
+    }' "$(art)/boxes-$tag.tsv" "$(art)/gc-$tag.log" > "$(art)/heap-check-$tag.tsv"
+  local f="$(art)/heap-check-$tag.tsv" worst over total
+  total=$(( $(wc -l < "$f") - 1 ))
+  over=$(awk -F'\t' 'NR > 1 && $4 > 1' "$f" | wc -l | tr -d ' ')
+  worst=$(awk -F'\t' 'NR > 1 && (w == "" || $4 > w) { w = $4; l = $0 } END { print l }' "$f")
+  HEAP_PEAK_EXCESS=$(awk -F'\t' -v b="$BASE_MIB" 'NR > 1 && $2 - b > p { p = $2 - b } END { print p + 0 }' "$f")
+  finding "heap ($tag): idle worker **${BASE_MIB} MiB** post-GC (ADR-0031 B=${B_MIB}); peak post-GC excess over idle **${HEAP_PEAK_EXCESS} MiB**; worst (post-GC − idle) / ΣR = $(echo "$worst" | awk -F'\t' '{printf "**%s** at %ss (post-GC %s MiB, ΣR %s MiB)", $4, $1, $2, $3}'); **$over of $total** post-GC figures above idle + ΣR$( [ "$LIVE_GC_S" -gt 0 ] && echo "; forced full GC every ${LIVE_GC_S}s")"
+}
+
+# Peaks of the probes, as findings
+probe_findings() {
+  local tag="$1"
+  finding "peak RSS ($tag, MiB): $(awk -F'\t' '$3 > p[$2] { p[$2] = $3 } END { for (c in p) printf "%s=%s ", c, p[c] }' "$(art)/rss-$tag.tsv")"
+  finding "source temp tables ($tag): TempTable RAM high-water **$(awk -F'\t' '$2 == "memory/temptable/physical_ram" && $4 > p { p = $4 } END { printf "%.1f", p / 1048576 }' "$(art)/tmp-$tag.tsv") MiB** (all connections), mmap high-water $(awk -F'\t' '$2 == "memory/temptable/physical_disk" && $4 > p { p = $4 } END { printf "%.1f", p / 1048576 }' "$(art)/tmp-$tag.tsv") MiB; largest session temp tablespace **$(awk -F'\t' '$2 ~ /^session_temp/ && $4 > p { p = $4 } END { printf "%.1f", p / 1048576 }' "$(art)/tmp-$tag.tsv") MiB**; $(paste "$(art)/tmp-status-$tag-before.txt" "$(art)/tmp-status-$tag-after.txt" | awk '{printf "%s +%d ", $1, $4 - $2}')"
 }
 
 PH=0
-# run_phase <tag> <table...>: start every table at once, sample until all are written
+# run_phase <tag> <table...>: admit boxes largest first under both caps, sample until all are written
 run_phase() {
   local tag="$1"; shift
   local t m
-  local tsv="$(art)/timeline-$tag.tsv" res="$(art)/results-$tag.tsv"
+  local tsv="$(art)/timeline-$tag.tsv" res="$(art)/results-$tag.tsv" boxes="$(art)/boxes-$tag.tsv"
   PH=$((PH+1)); m="p$PH"
+  for t in "$@"; do [ -n "$(kv_get m "$t")" ] || derive "$t"; done
   cleanup_all
   fresh_worker
   for t in "$@"; do
@@ -228,16 +348,24 @@ run_phase() {
     psqlq "$(pg_ddl "$t")" >> "$(art)/run.log" 2>&1
     create_topic "dbx.tp.$tag.$t"
   done
-  log "phase $tag: $*"
+  mysqlroot "TRUNCATE TABLE performance_schema.memory_summary_global_by_event_name"
+  mysqlroot "SHOW GLOBAL STATUS LIKE 'Created_tmp%'" > "$(art)/tmp-status-$tag-before.txt"
+  printf 't\tevent\tcurrent_bytes\thigh_bytes\n' > "$(art)/tmp-$tag.tsv"
+  printf 't\tcomponent\trss_MiB\n' > "$(art)/rss-$tag.tsv"
 
-  local T0; T0=$(now)
-  for t in "$@"; do put_sink "$tag" "$t"; done      # Sink before Source (ADR-0009)
-  for t in "$@"; do put_source "$tag" "$t"; done
+  # ADR-0002 LPT order: largest planned transfer bytes first
+  local queue; queue=( $(for t in "$@"; do echo "$(kv_get "${m}_est" "$t") $t"; done | sort -rn | awk '{print $2}') )
+  local qi=0 running=0 resv=0 peak_running=0
+  log "phase $tag: ${queue[*]} (idle heap ${BASE_MIB} MiB)"
+
+  local T0 UP0; UP0=$(jvm_uptime); T0=$(now)
+  admit_ready    # reads and updates this function's queue/qi/running/resv (bash dynamic scope)
+  initial_admit=$running
 
   printf 't\ttable\ttopic_end\tpg_inserted\n' > "$tsv"
-  local left=$# i=0 el topic off rel ins rows end n tot last_tot=-1 last_prog=0
+  local left=$# el topic off rel ins rows end n tot last_tot=-1 last_prog=0 last_probe=-999 last_gc=0
   while [ "$left" -gt 0 ]; do
-    sleep "$SAMPLE_S"; i=$((i+1)); el=$(since "$T0")
+    sleep "$SAMPLE_S"; el=$(since "$T0")
     while IFS=: read -r topic _ off; do kv_set "${m}_end" "${topic#dbx.tp.$tag.}" "$off"; done < <(
       dc exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 \
         --topic "dbx\\.tp\\.$tag\\..*" --time -1 2>/dev/null | tr -d '\r')
@@ -251,21 +379,28 @@ run_phase() {
       [ -z "$(kv_get "${m}_srcdone" "$t")" ] && [ "${end:-0}" -ge "$rows" ] && kv_set "${m}_srcdone" "$t" "$el"
       # pg_stat n_tup_ins from an idle backend lags up to 10 s (PG 15's idle stats flush), which
       # showed up as a flat ~10 s tail on every table. Once the Source is done, count exactly.
-      if [ -z "$(kv_get "${m}_sinkdone" "$t")" ] \
+      if [ -n "$(kv_get "${m}_adm" "$t")" ] && [ -z "$(kv_get "${m}_sinkdone" "$t")" ] \
          && { [ "${ins:-0}" -ge "$rows" ] || [ -n "$(kv_get "${m}_srcdone" "$t")" ]; }; then
         n=$(psqlq "SELECT COUNT(*) FROM $t")
         if [ "$n" -ge "$rows" ]; then
           kv_set "${m}_sinkdone" "$t" "$(since "$T0")"; log "$t written at $(kv_get "${m}_sinkdone" "$t")s"
+          # The box is done: DBX deletes its connectors (ADR-0001) and frees its reservation
+          [ "$tag" = concurrent ] && probe "$tag" "$(kv_get "${m}_sinkdone" "$t")"
+          delete_connector "tp-$tag-src-$t"; delete_connector "tp-$tag-sink-$t"
+          running=$((running-1)); resv=$(( resv - $(kv_get r "$t") ))
         fi
       fi
       [ -z "$(kv_get "${m}_sinkdone" "$t")" ] && left=$((left+1))
     done
-    if [ $((i % 10)) -eq 0 ]; then
-      # Connect heap over time: the evidence for how much each concurrent box costs
-      dc exec -T connect jcmd 1 GC.heap_info 2>/dev/null | awk -v t="$el" '/heap/ {print t "\t" $0; exit}' \
-        >> "$(art)/heap-$tag.tsv"
-      docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
-        | sed "s/^/$el	/" >> "$(art)/docker-stats-$tag.tsv"
+    admit_ready
+    if elapsed_ge "$el" "$last_probe" "$PROBE_S"; then
+      last_probe=$el
+      probe "$tag" "$el"
+      if [ "$(connect_started)" != "$STARTED" ]; then
+        capture_connect_log "$tag"
+        finding "**phase $tag aborted**: Connect restarted at ~${el}s (OOMKilled=$(docker inspect -f '{{.State.OOMKilled}}' "$(dc ps -q connect)"), exit $(docker inspect -f '{{.State.ExitCode}}' "$(dc ps -q connect)"))"
+        return 1
+      fi
       local f; f=$(failed_connectors)
       if [ -n "$f" ]; then
         for t in $f; do snapshot_status "$t" "$tag"; done
@@ -276,29 +411,57 @@ run_phase() {
       fi
     fi
     if [ "$tot" != "$last_tot" ]; then last_tot=$tot; last_prog=$el; fi
-    if [ "$left" -gt 0 ] && awk -v e="$el" -v p="$last_prog" -v s="$STALL_S" 'BEGIN{exit !(e-p>s)}'; then
+    if [ "$left" -gt 0 ] && elapsed_ge "$el" "$last_prog" "$STALL_S"; then
       finding "**phase $tag stalled**: no topic or target progress for ${STALL_S}s (at ${el}s)"
       capture_connect_log "$tag"; return 1
     fi
-    if awk -v e="$el" -v x="$PHASE_TIMEOUT_S" 'BEGIN{exit !(e>x)}'; then
+    if elapsed_ge "$el" 0 "$PHASE_TIMEOUT_S"; then
       finding "**phase $tag timed out** after ${PHASE_TIMEOUT_S}s with $left table(s) unwritten"
       capture_connect_log "$tag"; return 1
     fi
   done
 
   PHASE_MAKESPAN=$(since "$T0")
-  printf 'table\tshape\trows\tdata_length\test_bytes\ttopic_bytes\tsrc_done_s\tsink_done_s\test_MiB_s\tdata_MiB_s\trows_s\n' > "$res"
+  mysqlroot "SHOW GLOBAL STATUS LIKE 'Created_tmp%'" > "$(art)/tmp-status-$tag-after.txt"
+  printf 'table\tadmit_s\tdone_s\tR_MiB\n' > "$boxes"
+  for t in "$@"; do
+    printf '%s\t%s\t%s\t%s\n' "$t" "$(kv_get "${m}_adm" "$t")" "$(kv_get "${m}_sinkdone" "$t")" \
+      "$(awk -v r="$(kv_get r "$t")" -v m=$MIB 'BEGIN{printf "%.1f", r/m}')" >> "$boxes"
+  done
+  heap_check "$tag" "$UP0"
+  probe_findings "$tag"
+  printf 'table\tshape\trows\tdata_length\test_bytes\ttopic_bytes\tadmit_s\tsrc_done_s\tsink_done_s\test_MiB_s\tdata_MiB_s\trows_s\n' > "$res"
   for t in "$@"; do
     local tb; tb=$(dc exec -T kafka du -sk "/var/lib/kafka/data/dbx.tp.$tag.$t-0" 2>/dev/null | awk '{print $1*1024}')
+    # Per-table rates run from the box's admission, not from T0
     awk -v t="$t" -v s="$(shape_of "$t")" -v r="$(kv_get "${m}_rows" "$t")" -v d="$(kv_get "${m}_dlen" "$t")" \
-        -v e="$(kv_get "${m}_est" "$t")" -v tb="${tb:-0}" -v sd="$(kv_get "${m}_srcdone" "$t")" \
-        -v kd="$(kv_get "${m}_sinkdone" "$t")" 'BEGIN{
+        -v e="$(kv_get "${m}_est" "$t")" -v tb="${tb:-0}" -v a="$(kv_get "${m}_adm" "$t")" \
+        -v sd="$(kv_get "${m}_srcdone" "$t")" -v kd="$(kv_get "${m}_sinkdone" "$t")" 'BEGIN{
       if (sd == "") sd = "NA"
-      printf "%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%.2f\t%.2f\t%.0f\n", t, s, r, d, e, tb, sd, kd,
-        e/kd/1048576, d/kd/1048576, r/kd }' >> "$res"
+      w = kd - a
+      printf "%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%.2f\t%.2f\t%.0f\n", t, s, r, d, e, tb, a, sd, kd,
+        e/w/1048576, d/w/1048576, r/w }' >> "$res"
   done
   capture_connect_log "$tag" 200
   return 0
+}
+
+# admit_ready: start queued boxes while ADR-0002's box cap and ADR-0031's cumulative memory gate
+# both allow. Called from run_phase; works on its locals queue, qi, running, resv, m, tag, T0.
+admit_ready() {
+  local t r
+  while [ "$qi" -lt "${#queue[@]}" ] && [ "$running" -lt "$ADMIT" ]; do
+    t=${queue[$qi]}; r=$(kv_get r "$t")
+    if [ $(( resv + r )) -gt "$BUDGET" ]; then
+      [ "$running" -gt 0 ] && break
+      finding "**$t alone reserves more than the memory budget**; started on the idle worker anyway (lab choice)"
+    fi
+    kv_set "${m}_adm" "$t" "$(since "$T0")"
+    put_sink "$tag" "$t"; put_source "$tag" "$t"      # Sink before Source (ADR-0009)
+    running=$((running+1)); resv=$((resv+r)); qi=$((qi+1))
+    [ "$running" -gt "$peak_running" ] && peak_running=$running
+    log "admitted $t at $(kv_get "${m}_adm" "$t")s (running $running, reserved $(( resv / MIB )) of $(( BUDGET / MIB )) MiB)"
+  done
 }
 
 preflight
@@ -306,18 +469,19 @@ for t in $SINGLE_TABLES; do
   [ "$(mysqlq "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='dbx_src' AND table_name='$t'" | tr -d '\r')" = 1 ] \
     || { log "missing $t: run ./e2e/bulk/seed-bulk.sh first"; exit 1; }
 done
-record_env
 record_budgets
-finding "Source (every table): \`mode=incrementing\` (ADR-0001), \`tasks.max=1\`, \`poll.interval.ms=5000\`; ordinary tables \`batch.max.rows=$ORDINARY_BATCH_MAX_ROWS\` (connector default) and \`max.buffer.size=0\` (default); large-record table \`batch.max.rows=$LOB_BATCH_MAX_ROWS\`, \`max.buffer.size=$LOB_MAX_BUFFER\`; MySQL URL $( [ "$CURSOR_FETCH" = 1 ] && echo "\`useCursorFetch=true\`, \`defaultFetchSize\` = the table's batch.max.rows" || echo "without cursor fetch (whole result set buffered)"); ADR-0003 producer overrides (zstd, 25 MiB request, 128 MiB buffer, in-flight 1)"
-finding "Sink: \`insert.mode=insert\`, \`pk.mode=none\`, \`quote.sql.identifiers=always\` (plan §7.4); \`batch.size\` unset → connector default 3000; \`consumer.override.max.poll.records\` = **$ORDINARY_POLL_RECORDS** for ordinary tables, **1** for the large-record table (ADR-0003); worker-level default is 1"
-
-[ "$ORDINARY_OVERRIDES" = 0 ] && finding "**Variant ORDINARY_OVERRIDES=0**: ordinary connectors run without ADR-0003's size overrides (producer max.request.size / buffer.memory, consumer max.partition.fetch.bytes / fetch.max.bytes / max.poll.interval.ms → client defaults); the large-record table keeps them"
+record_env
+finding "Source (every table, ADR-0033): \`mode=incrementing\` (ADR-0001), \`tasks.max=1\`, \`poll.interval.ms=100\`, MySQL URL \`useCursorFetch=true\` without \`defaultFetchSize\`; ordinary producer (ADR-0031) \`buffer.memory=4 MiB\`, \`batch.size=256 KiB\`, \`linger.ms=10\`, idempotence on, \`acks=all\`, in-flight 5, zstd; large-record producer (ADR-0003) 128 MiB buffer, 16 KiB batch, 25 MiB request, in-flight 1, zstd"
+finding "Sink: \`insert.mode=insert\`, \`pk.mode=none\`, \`quote.sql.identifiers=always\` (plan §7.4); \`batch.size\` unset → connector default 3000; fetch limits 8/2 MiB ordinary, 50/25 MiB large-record; \`max.poll.interval.ms=900000\`"
 
 if [[ " $PHASES " == *" single "* ]]; then
   for t in $SINGLE_TABLES; do
     if run_phase "single-$(shape_of "$t")" "$t"; then
       finding "single stream \`$t\`: $(tail -1 "$(art)/results-single-$(shape_of "$t").tsv" \
-        | awk -F'\t' '{printf "%s rows in %ss (source read done at %ss) → **%s MiB/s estimator bytes**, %s MiB/s DATA_LENGTH, %s rows/s", $3, $8, $7, $9, $10, $11}')"
+        | awk -F'\t' '{printf "%s rows in %ss (source read done at %ss) → **%s MiB/s estimator bytes**, %s MiB/s DATA_LENGTH, %s rows/s", $3, $9, $8, $10, $11, $12}')"
+      # Calibration: the E that would make R equal this box's peak excess, other terms unchanged
+      bm_mib=$(( $(kv_get bm "$t") / MIB ))
+      finding "calibration \`$t\`: peak excess $HEAP_PEAK_EXCESS MiB of R $(awk -v r="$(kv_get r "$t")" -v m=$MIB 'BEGIN{printf "%.1f", r/m}') MiB → implied E = $(awk -v p="$HEAP_PEAK_EXCESS" -v r="$(kv_get r "$t")" -v m=$MIB -v bm="$bm_mib" -v e="$(kv_get e "$t")" 'BEGIN{printf "%.1f", (p - (r/m - bm*e)) / bm}') (used $(kv_get e "$t"))"
     fi
   done
 fi
@@ -325,20 +489,22 @@ fi
 if [[ " $PHASES " == *" concurrent "* ]]; then
   CONC=( $(mysqlq "SELECT table_name FROM information_schema.tables WHERE table_schema='dbx_src'
                    AND table_name LIKE 'b\\_%' ORDER BY table_name" | tr -d '\r') )
-  [ "${#CONC[@]}" -gt "$ADMIT" ] && log "WARNING: ${#CONC[@]} tables exceed the $ADMIT-box admission limit; the phase starts them all anyway"
   if run_phase concurrent "${CONC[@]}"; then
     res="$(art)/results-concurrent.tsv"
-    # Aggregate rate over the whole run, and over the window where every stream was still
-    # running (before the first table finished): the tail after that is the minimum window's job.
-    first=$(awk -F'\t' 'NR>1{print $8}' "$res" | sort -n | head -1)
-    all_active=$(awk -F'\t' -v f="$first" '
-      FNR==NR { if (FNR>1) { rows[$1]=$3; est[$1]=$5 } next }
-      FNR>1 && $1<=f { ins[$2]=$4; last=$1 }
-      END { for (t in ins) b += (ins[t] > rows[t] ? rows[t] : ins[t]) / rows[t] * est[t]; printf "%.2f", b/last/1048576 }' \
-      "$res" "$(art)/timeline-concurrent.tsv")
     total=$(awk -F'\t' -v m="$PHASE_MAKESPAN" 'NR>1{e+=$5; d+=$4} END{printf "%.2f MiB/s estimator bytes (%.2f MiB/s DATA_LENGTH) over %.0f MiB in %ss", e/m/1048576, d/m/1048576, e/1048576, m}' "$res")
-    finding "concurrent (${#CONC[@]} boxes): whole run **$total**; all-streams-active window (first ${first}s) **${all_active} MiB/s** estimator bytes"
-    finding "per-table finish times (s): $(awk -F'\t' 'NR>1{printf "%s=%s ", $1, $8}' "$res")"
+    finding "concurrent (${#CONC[@]} boxes, $initial_admit admitted at once, peak $peak_running running): whole run **$total**"
+    if [ "$initial_admit" = "${#CONC[@]}" ]; then
+      # Aggregate rate over the window where every stream was still running (before the first
+      # table finished): the tail after that is the minimum window's job.
+      first=$(awk -F'\t' 'NR>1{print $9}' "$res" | sort -n | head -1)
+      all_active=$(awk -F'\t' -v f="$first" '
+        FNR==NR { if (FNR>1) { rows[$1]=$3; est[$1]=$5 } next }
+        FNR>1 && $1<=f { ins[$2]=$4; last=$1 }
+        END { for (t in ins) b += (ins[t] > rows[t] ? rows[t] : ins[t]) / rows[t] * est[t]; printf "%.2f", b/last/1048576 }' \
+        "$res" "$(art)/timeline-concurrent.tsv")
+      finding "all-streams-active window (first ${first}s): **${all_active} MiB/s** estimator bytes"
+    fi
+    finding "per-table admit→done (s): $(awk -F'\t' 'NR>1{printf "%s=%s→%s ", $1, $7, $9}' "$res")"
   fi
 fi
 

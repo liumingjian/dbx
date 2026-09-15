@@ -9,7 +9,8 @@ set -uo pipefail
 
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_DIR="$(dirname "$E2E_DIR")"
-ART_ROOT="$E2E_DIR/artifacts"
+# Remote dispatch rsyncs the workspace with --delete; point ART_ROOT outside it to keep a run's files
+ART_ROOT="${ART_ROOT:-$E2E_DIR/artifacts}"
 
 CONNECT=http://localhost:8083
 SR=http://localhost:8081
