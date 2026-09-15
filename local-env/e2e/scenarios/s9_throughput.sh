@@ -271,7 +271,7 @@ record_budgets() {
   [ "$src" -lt $lim ] && lim=$src
   [ "$tgt" -lt $lim ] && lim=$tgt
   ADMIT=$lim
-  HEAP_MIB=$(( $(dc exec -T connect jcmd 1 VM.flags 2>/dev/null | tr ' ' '\n' | grep -o 'MaxHeapSize=[0-9]*' | cut -d= -f2) / MIB ))
+  HEAP_MIB=$(( $(dc exec -T connect jcmd 1 VM.flags 2>/dev/null | tr ' ' '\n' | grep -o 'MaxHeapSize=[0-9]*' | head -1 | cut -d= -f2) / MIB ))
   BUDGET=$(( (HEAP_MIB - B_MIB) * MIB ))
   finding "ADR-0002 default budgets here: Connect tasks $tasks (2 x $ncpu vCPU), boxes 10, source connections $src (max_connections $myc), target connections $tgt (max_connections $pgc) → at most **$ADMIT** concurrent single-table boxes"
   finding "ADR-0031 platform memory budget: Connect heap $HEAP_MIB MiB − B $B_MIB MiB = **$(( HEAP_MIB - B_MIB )) MiB** of box reservations (E=$E, E_lob=$E_LOB, X=$X); tier ${TIER:-unset}"
