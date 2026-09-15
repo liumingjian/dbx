@@ -285,7 +285,7 @@ _中文_: 卡死
 ### Estimates
 
 **Duration estimate**:
-The pre-run range of how long a scope takes, with confidence, source, and minimum window (ADR-0019).
+The pre-run range of how long a preflighted scope takes, with confidence, source, and minimum window (ADR-0019, ADR-0038).
 _Avoid_: ETA, SLA, promised duration, 预计完成时间
 _中文_: 预估耗时
 
@@ -410,7 +410,7 @@ The Chinese for each value a term carries. A value reaching the interface uses t
 
 **Low confidence**: rests on the shipped reference band or too little observation. _中文_: 低置信
 
-**Reliable**: rests on this deployment's past runs or stable observation of this run. _中文_: 可信
+**Reliable**: rests on this source data source's past runs or stable observation of this run. _中文_: 可信
 
 ### Preflight conclusion
 
