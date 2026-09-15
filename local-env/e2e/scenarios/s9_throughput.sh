@@ -355,7 +355,8 @@ run_phase() {
 
   # ADR-0002 LPT order: largest planned transfer bytes first
   local queue; queue=( $(for t in "$@"; do echo "$(kv_get "${m}_est" "$t") $t"; done | sort -rn | awk '{print $2}') )
-  local qi=0 running=0 resv=0 peak_running=0
+  local qi=0 running=0 resv=0
+  peak_running=0    # global: the concurrent summary reads it after run_phase returns
   log "phase $tag: ${queue[*]} (idle heap ${BASE_MIB} MiB)"
 
   local T0 UP0; UP0=$(jvm_uptime); T0=$(now)
