@@ -79,7 +79,48 @@ Every Source finished reading by 57 s, so the Sink and PostgreSQL path is again 
 
 ## 8 GiB tier
 
-Pending.
+### Single stream
+
+| Shape | `t8-a` | `t8-b` |
+|---|---|---|
+| Narrow keyed | 14.44 | 14.33 |
+| Wide text | 120.94 | 137.45 |
+| Large-record | 192.40 | 192.40 |
+
+These fall inside the ≥16 GiB spread, so the tier makes no difference to a single stream. Across all four plain runs, the single-stream band is **14.3–14.5 / 121–137 / 189–192** MiB/s.
+
+### Concurrent band
+
+The 2,560 MiB memory budget admitted 5 boxes at once: the three wide tables, `b_lob_1` and `b_narrow_4`. At most 6 ran at a time. This matches ADR-0031's "about five narrow ordinary boxes" for this tier.
+
+| Run | Whole run: estimator MiB/s to last table written | S9's figure, incl. teardown | Later narrow admits |
+|---|---|---|---|
+| `t8-a` | 97.3 (14,452 MiB ÷ 148.5 s) | 92.94 over 155.5 s | 39.0–68.6 s |
+| `t8-b` | 71.7 (14,452 MiB ÷ 201.5 s) | 70.26 over 205.7 s | 49.0–67.3 s |
+| **Band** | **72–97** | | |
+
+The spread comes from the narrow boxes, which wait for memory and then run one after another. In `t8-b` they started later and each ran slower.
+
+### Heap against R
+
+- **No OOM, no restart.** Every post-GC figure stayed at or below idle + ΣR: 0 of 582 (`t8-a`) and 0 of 669 (`t8-b`) in the concurrent phases, whose worst ratios were 0.70 and 0.74. The large-record box reached 0.58–0.64 × R. A post-GC figure is an upper bound on live heap, so the bound is proven at this tier.
+- **Idle worker:** 100–101 MiB after its GC.
+
+### Component RSS, peak
+
+| Component | Single stream (MiB) | Concurrent (MiB) | ADR-0031 8 GiB row |
+|---|---|---|---|
+| Connect | 1,219–1,513 | 2,804–2,869 | 3 GiB heap + 1 GiB non-heap |
+| Kafka | 801–1,189 | 1,030–1,139 | 1 GiB + 0.5 GiB |
+| Schema Registry | 169–307 | 158–166 | 0.75 GiB |
+| MySQL (source, lab only) | 261–535 | 338–368 | — |
+| PostgreSQL (target, lab only) | 193–401 | 1,032–1,137 | — |
+
+The kernel killed nothing, so ADR-0031's 8 GiB floor stands. The lab VM also carries both databases, about 1.4–1.5 GiB together, where a real deployment carries DBX's 1 GiB. That makes the lab the harsher case.
+
+### Source temp tables
+
+The largest session temp tablespace was 52 MiB, and TempTable RAM reached 97 MiB summed over all connections.
 
 ## Reproduce
 
