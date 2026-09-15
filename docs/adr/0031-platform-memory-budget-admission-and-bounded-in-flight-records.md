@@ -57,7 +57,7 @@ With the provisional constants, the 8 GiB tier admits about five narrow ordinary
 
 - DBX reads `java.lang:type=Memory` from Connect and Kafka over JMX. The port is open on the Compose network only and never published to the host.
 - The environment check gains a memory-tier item. It concludes 不满足 (unsatisfied) when the host has less memory than its tier requires, or when an effective heap differs from the tier. ADR-0027's E5 minimum becomes this tier check. The item detects and explains; it changes nothing on the host.
-- Live heap usage goes to 运行监控 (run monitoring) and the diagnostic package. It does not go to 运行状况 (runtime condition), which ADR-0021 keeps free of host memory, and it never feeds admission. Detecting and recovering a worker left falsely healthy after an OOM belongs to [#77](https://github.com/liumingjian/dbx/issues/77).
+- Live heap usage goes to 运行监控 (run monitoring) and the diagnostic package. It does not go to 运行状况 (runtime condition), which ADR-0021 keeps free of host memory, and it never feeds admission. If the bound fails anyway, ADR-0032 crashes the worker and fails its running boxes.
 
 ## Operator wording
 
