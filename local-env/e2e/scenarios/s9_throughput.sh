@@ -327,7 +327,7 @@ heap_check() {
 # Peaks of the probes, as findings
 probe_findings() {
   local tag="$1"
-  finding "peak RSS ($tag, MiB): $(awk -F'\t' '$3 > p[$2] { p[$2] = $3 } END { for (c in p) printf "%s=%s ", c, p[c] }' "$(art)/rss-$tag.tsv")"
+  finding "peak RSS ($tag, MiB): $(awk -F'\t' 'NR > 1 && $3 > p[$2] { p[$2] = $3 } END { for (c in p) printf "%s=%s ", c, p[c] }' "$(art)/rss-$tag.tsv")"
   finding "source temp tables ($tag): TempTable RAM high-water **$(awk -F'\t' '$2 == "memory/temptable/physical_ram" && $4 > p { p = $4 } END { printf "%.1f", p / 1048576 }' "$(art)/tmp-$tag.tsv") MiB** (all connections), mmap high-water $(awk -F'\t' '$2 == "memory/temptable/physical_disk" && $4 > p { p = $4 } END { printf "%.1f", p / 1048576 }' "$(art)/tmp-$tag.tsv") MiB; largest session temp tablespace **$(awk -F'\t' '$2 ~ /^session_temp/ && $4 > p { p = $4 } END { printf "%.1f", p / 1048576 }' "$(art)/tmp-$tag.tsv") MiB**; $(paste "$(art)/tmp-status-$tag-before.txt" "$(art)/tmp-status-$tag-after.txt" | awk '{printf "%s +%d ", $1, $4 - $2}')"
 }
 
