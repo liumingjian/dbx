@@ -2,6 +2,8 @@
 
 > Amended by [ADR-0019](0019-migration-duration-estimate-before-the-run.md): a first run now shows a duration estimate before execution; the five-minute, 1% gate below governs only when the live remaining-time estimate takes over.
 
+> Amended by [ADR-0031](0031-platform-memory-budget-admission-and-bounded-in-flight-records.md): admission has a sixth, cumulative gate, the platform memory budget. Each box reserves Connect heap computed from its connector settings and its tables' preflight row sizes.
+
 DBX v1 optimizes total migration makespan while keeping database and Kafka safety limits deterministic and explainable. Each run first groups tables by identical connector-level execution signature, isolates query-mode and large-record tables, and packs ordinary tables by conservatively estimated bytes using largest-processing-time-first balancing; box target size is the Kafka disk safety budget divided by computed maximum concurrency, with at most 50 tables per box. Execution uses rolling admission with large-box starvation protection rather than strict waves.
 
 Concurrency is resource-aware but not runtime-adaptive: Connect tasks default to twice the logical CPU count, no more than 10 connector-active boxes may coexist, and source and target connection budgets independently default to 10% of each database's `max_connections` clamped to 4–20 with two connections reserved on each side. Kafka admission uses 60% of current available data-disk capacity, warns at 80%, and stops producing Sources at 90% usage or below 10 GB free; retention never substitutes for preserving unvalidated data.

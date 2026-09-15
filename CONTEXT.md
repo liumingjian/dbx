@@ -212,6 +212,11 @@ Starting the next eligible box whenever budgets permit, without a wave barrier.
 _Avoid_: Batch execution, strict waves
 _中文_: 滚动准入
 
+**Platform memory budget**:
+Memory the 迁移平台 grants running migrations (ADR-0031).
+_Avoid_: 堆, heap limit
+_中文_: 平台内存预算
+
 **Large record table**:
 A table with a source value or row over 1 MiB, run in an isolated box (ADR-0003).
 _Avoid_: LOB table, big table
