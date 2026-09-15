@@ -238,9 +238,14 @@ _Avoid_: 20 MB message limit, Kafka limit, field-size limit
 _中文_: 大记录包络
 
 **Source baseline**:
-A run's immutable boundary under write freeze: exact row counts and monotonic primary key terminal values.
+A run's immutable boundary under write freeze: exact row counts and keyset column terminal values.
 _Avoid_: Estimated row count, snapshot
 _中文_: 源基线
+
+**Keyset column**:
+A table's single integer, non-null, unique, non-negative column that DBX reads it in chunks by; tables without one are read in bulk (ADR-0037).
+_Avoid_: Incrementing column, monotonic key
+_中文_: 键集列
 
 **Write freeze**:
 The external, time-bounded, accountable commitment that a run's source data does not change.

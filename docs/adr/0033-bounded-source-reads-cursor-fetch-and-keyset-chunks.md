@@ -1,5 +1,5 @@
 ---
-status: accepted (amends ADR-0003's large-record envelope and ADR-0008's mandatory platform policies; supplies ADR-0031's read-ahead term)
+status: accepted (amends ADR-0003's large-record envelope and ADR-0008's mandatory platform policies; supplies ADR-0031's read-ahead term; the settings table covers keyset reads only, and ADR-0037 sets bulk reads)
 ---
 
 # Bounded Source reads: cursor fetch, byte-derived read-ahead, and keyset chunks
