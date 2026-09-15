@@ -1,3 +1,7 @@
+---
+status: accepted (self-healing clause made concrete by ADR-0032: every shipped JVM exits on OutOfMemoryError so Compose restarts it)
+---
+
 # Environment check detects and explains; DBX holds no host control
 
 > Amended by [ADR-0031](0031-platform-memory-budget-admission-and-bounded-in-flight-records.md). E5 becomes a memory-tier check: host memory against the tier, and the effective Connect and Kafka heaps, read over JMX on the Compose network only. JVM heap is therefore no longer unobservable. Container memory limits still are.
