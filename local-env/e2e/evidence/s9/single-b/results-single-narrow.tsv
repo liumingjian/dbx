@@ -1,0 +1,2 @@
+table	shape	rows	data_length	est_bytes	topic_bytes	src_done_s	sink_done_s	est_MiB_s	data_MiB_s	rows_s
+b_narrow_1	narrow	8000000	635437056	972000000	308006912	17.9	60.0	15.45	10.10	133333

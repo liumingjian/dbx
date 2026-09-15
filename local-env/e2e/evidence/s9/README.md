@@ -6,7 +6,17 @@ Throughput is measured in ADR-0002 estimator bytes per second, end to end: from 
 
 ## single/: the single-stream band (feeds 窗口下限, the minimum window)
 
-<!-- SINGLE -->
+There were two runs with exact completion counting. Each measured one table per shape, and each phase started on a freshly restarted worker. `single-a/` holds run A and `single-b/` holds run B.
+
+| Shape | Table | Rows | Run A | Run B | Band (estimator MiB/s) | DATA_LENGTH MiB/s | Rows/s | Source read done |
+|---|---|---|---|---|---|---|---|---|
+| Narrow keyed | `b_narrow_1` | 8,000,000 | 15.53 | 15.45 | **15.4–15.6** | 10.1 | 133–134k | 17.6–17.9 s of ~60 s |
+| Wide text | `b_wide_1` | 600,000 | 109.64 | 126.93 | **110–127** | 61–71 | 23.3–27.0k | 15.9–18.0 s of 22–26 s |
+| Large-record | `b_lob_1` | 1,000 × 1.5 MiB | 208.00 | 200.77 | **201–208** | 133–138 | 87–90 | 5.6–5.9 s of 11–12 s |
+
+The Source finishes reading well before PostgreSQL has every row, so in the lab the bottleneck is the Sink/target path.
+
+The wide and large-record runs last only 11–26 s. About 3 s of connector startup is 10–25% of such a run, which is why the wide band is the widest. The narrow run, at about 60 s, is the steadiest.
 
 The first single-stream figures (narrow 13.3, wide 86, lob 108 MiB/s) are superseded. S9 then detected completion through `pg_stat_user_tables.n_tup_ins`. PostgreSQL 15 publishes an idle backend's counters up to 10 s late, so every table ended with a flat ~10 s tail. S9 now switches to an exact `COUNT(*)` once the Source has read every row.
 
