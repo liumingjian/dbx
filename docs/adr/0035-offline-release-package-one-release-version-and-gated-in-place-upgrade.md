@@ -1,5 +1,5 @@
 ---
-status: accepted (amends ADR-0022's ladder with L4 and ADR-0031's tier reading; specifies ADR-0006's deployment secret for the built-in deployment)
+status: accepted (amends ADR-0022's ladder with L4 and ADR-0031's tier reading; specifies ADR-0006's deployment secret for the built-in deployment; per [#89](https://github.com/liumingjian/dbx/issues/89): the master-key item is ADR-0027's E8, and one installation record in H2 holds release version, key fingerprint, and rollback-window state; leftover cleanup never touches orphans (ADR-0001))
 ---
 
 # Offline release package, one release version, and in-place upgrade gated on no nonterminal run

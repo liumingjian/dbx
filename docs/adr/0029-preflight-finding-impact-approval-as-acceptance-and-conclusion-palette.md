@@ -2,13 +2,15 @@
 
 `dbx-prototype` grades findings in two levels, `blocking` (the task may not be created) and `warning` (each one ticked 我已知晓), and its validation enum has no `INCONCLUSIVE`. #23 had fixed three levels: red, orange, yellow. #45 made the three-state conclusion a floor the prototype port may not give up. Decided in [#52](https://github.com/liumingjian/dbx/issues/52). This ADR restates #23 §6 in the vocabulary below and supersedes its colour wording.
 
+> Amended by [#86](https://github.com/liumingjian/dbx/issues/86): the 阻塞 row no longer lists "structural-proof difference". Structural proof (结构证明) runs inside the run after DDL, so its failure is the table migration unit's 迁移失败 (ADR-0026), never a finding. The pre-approval target-side case is a rerun whose existing target table differs from the contract (ADR-0006), and that is the row's finding.
+
 ## Impact, not severity
 
 Every preflight finding (预检发现) carries one 预检发现影响 (preflight finding impact):
 
 | Impact | Colour | Findings |
 |---|---|---|
-| 阻塞 (blocking) | red | large record value or row over the 大记录包络; value domain out of range; zero date value rejected; source `auto_increment` already above 2^63-1; a same-name target table exists; structural-proof difference |
+| 阻塞 (blocking) | red | large record value or row over the 大记录包络; value domain out of range; zero date value rejected; source `auto_increment` already above 2^63-1; a same-name target table exists; an existing target table on a rerun differs from the contract |
 | 数据有损 (data loss) | orange | `NOT NULL` relaxed per column; primary key not built because it is too wide; sub-millisecond precision truncated to milliseconds |
 | 仅行为差异 (behaviour change only) | yellow | B-tier `DEFAULT` not built; sequence ceiling narrowed (`BIGINT UNSIGNED`); no primary key and no single candidate |
 

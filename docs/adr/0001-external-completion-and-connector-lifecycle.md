@@ -1,5 +1,5 @@
 ---
-status: accepted (stuck clause amended by ADR-0032: two consecutive boxes stuck without a single record pause admission)
+status: accepted (stuck clause amended by ADR-0032: two consecutive boxes stuck without a single record pause admission; bulk path amended by ADR-0037: "usable" means a keyset column, and bulk reads are capped at 64 MiB; warning clause amended by ADR-0021: the two-minute warning shows on the unit only)
 ---
 
 # External completion detection and run-isolated connector lifecycle

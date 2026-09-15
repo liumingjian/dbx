@@ -8,7 +8,7 @@ status: accepted (fills the supplemental SQL delivery gap ADR-0011 left open)
 
 ## The switches are cut
 
-None of the five switches has a v1 capability behind it. The primary key is mandatory (#23), and only its promotion from a unique index is a per-table choice. Defaults follow ADR-0011's whitelist. Indexes, foreign keys, and comments go to supplemental SQL. The whole 建表选项 (DDL options) block is cut, not disabled: a disabled switch tells the DBA the platform could do this. Its place holds one read-only line: the target table carries columns, types, `NOT NULL`, primary key, and identity; indexes, foreign keys, comments, and the rest go to supplemental SQL. 建表选项 is retired as a term. DDL stays read-only. X2Doris-style full-text editing stays rejected for ADR-0011's reason: DBX cannot prove edited SQL.
+None of the five switches has a v1 capability behind it. The source primary key is always built (#23); only promoting a unique-index candidate on a table without one is a per-table choice, and the operator may decline it. Defaults follow ADR-0011's whitelist. Indexes, foreign keys, and comments go to supplemental SQL. The whole 建表选项 (DDL options) block is cut, not disabled: a disabled switch tells the DBA the platform could do this. Its place holds one read-only line: the target table carries columns, types, `NOT NULL`, primary key, and identity; indexes, foreign keys, comments, and the rest go to supplemental SQL. 建表选项 is retired as a term. DDL stays read-only. X2Doris-style full-text editing stays rejected for ADR-0011's reason: DBX cannot prove edited SQL.
 
 ## Where the contract rendering appears
 
@@ -19,6 +19,8 @@ None of the five switches has a v1 capability behind it. The primary key is mand
 ## Structural proof
 
 Structural proof (结构证明) is a per-table gate, shown on the table migration unit and nowhere else. When it passes, the unit's timeline step under 创建目标表中 reads 结构证明通过. When it fails, the unit ends 迁移失败 with a reason code naming the target-creation stage. The table evidence drawer shows the structured difference (coordinate, expected, actual, violated invariant), translated through the error translation layer (ADR-0005), with the raw difference collapsed. There is no task-level proof summary: a failed unit is already red in 运行监控.
+
+Structural proof is never a preflight finding (预检发现): it runs after baseline and DDL, after approval ([#86](https://github.com/liumingjian/dbx/issues/86)). After recording the difference as evidence, the failed unit drops the table it just created, under the advisory lock and only while introspection shows the generation is still this run's, the table has zero rows, and no Sink was created. If any check fails, the table stays, and a rerun meets it as the blocking finding "an existing target table differs from the contract" (ADR-0029). Otherwise a rerun of the table follows the ordinary creation path.
 
 ## Supplemental SQL
 

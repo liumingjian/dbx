@@ -1,8 +1,10 @@
 ---
-status: accepted (discard clause amended by ADR-0023: task-level abandonment drops DBX-owned target tables; run-scoped write-freeze clause amended by ADR-0024: a task write freeze spans cross-window runs)
+status: accepted (discard clause amended by ADR-0023: task-level abandonment drops DBX-owned target tables; run-scoped write-freeze clause amended by ADR-0024: a task write freeze spans cross-window runs; target generation clause amended by #86: a failed structural proof drops the never-written table its run just created; recovery clause amended by ADR-0032: a Connect restart fails the running boxes and is never continued; budget clause amended by ADR-0039: one ten-minute budget, Schema Registry joins ADR-0021's platform clause, database unreachability stays run-scoped under this ADR's budget)
 ---
 
 # Versioned connections, evidence-based recovery, and clean reruns
+
+> **v1 suspension:** v1 ships only the built-in deployment, so the customer-owned Connect paragraphs (identically mounted secret path on DBX and every worker) have no subject in v1 and return with external clusters in v2, as for ADR-0003 and ADR-0009.
 
 > Specified by [ADR-0035](0035-offline-release-package-one-release-version-and-gated-in-place-upgrade.md) for the built-in deployment: the master key is a mounted file in the install's `secrets/` directory, beside the tombstone ledger. H2 holds only the key's fingerprint, and upgrade and rollback never write `secrets/`.
 
@@ -36,7 +38,7 @@ Target capability checks use an isolated, uniquely named probe object and exerci
 
 The source **write freeze** is a time-bounded operator commitment with database scope, accountable actor, confirmation time, expiry, and optional change reference. It must remain valid from exact source-baseline capture until every selected table reaches a validation terminal state or the run is stopped. The operator may extend the commitment before expiry without changing the baseline. Observed row or primary-key drift proves a violation, but absence of observed drift never proves that updates or deletes did not occur.
 
-At expiry, or when an operator declares the freeze broken, DBX stops admitting boxes, stops Source before Sink, preserves evidence, and fails unfinished units with a stable source-freeze reason. It never refreshes the baseline inside the same run. A new freeze and baseline require a new run.
+At expiry, or when an operator declares the freeze broken, DBX stops admitting boxes, stops Source before Sink, preserves evidence, and fails unfinished units with a stable source-freeze reason. It never refreshes the baseline inside the same run. A new freeze and baseline require a new run. ADR-0024 keeps this rule under a task write freeze and adds a warning before expiry ([#85](https://github.com/liumingjian/dbx/issues/85)).
 
 A run binds both the configured logical endpoint and the database instance identity observed during preflight. A process restart, IP change, or ordinary certificate renewal may continue only when product, instance identity, TLS trust, and data facts remain equivalent. A source or target instance change, an unprovable failover, or a changed trust boundary fails the affected execution. V1 chooses correctness over seamless database failover.
 
@@ -63,7 +65,7 @@ Cancellation applies to the whole run. It stops new admission and validation, co
 
 **Discard** is a separate, audited destructive command after execution has stopped. Run-local connectors, topics, subjects, probe objects, and secret projections are deleted only from authoritative ownership records and in dependency order. Schema Registry subjects are deleted only after their topic is confirmed absent and no retained topic shares them.
 
-A target table has a **target generation**. DBX creates a new generation when it first creates or deliberately truncates that table for a run. Discard may truncate a target table only while the current generation still belongs to that run, no connector can write it, its structure still matches, and no active run holds it. It never uses `CASCADE`, and it does not drop the table or schema by default. Once a later run takes a new generation, an older run can discard only its run-local resources and can never touch current target data. Discard appends resource facts; it never rewrites the run's original technical outcomes.
+A target table has a **target generation**. DBX creates a new generation when it first creates or deliberately truncates that table for a run. Discard may truncate a target table only while the current generation still belongs to that run, no connector can write it, its structure still matches, and no active run holds it. It never uses `CASCADE`, and it does not drop the table or schema by default. Once a later run takes a new generation, an older run can discard only its run-local resources and can never touch current target data. Discard appends resource facts; it never rewrites the run's original technical outcomes. One drop is automatic: when structural proof fails, the unit drops the table its own run just created and never wrote, under the conditions in ADR-0026 ([#86](https://github.com/liumingjian/dbx/issues/86)). That table never held data, so the DBA has nothing to clean up by hand.
 
 ## Rerun semantics and exclusion
 

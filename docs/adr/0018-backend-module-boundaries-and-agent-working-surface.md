@@ -1,5 +1,7 @@
 # Backend module boundaries and the agent working surface
 
+> **Status: module table and pure-core list superseded by [ADR-0036](0036-module-table-owns-every-v1-obligation.md)** (#83). Read ADR-0036 for the current modules; enforcement, module context, the session rule, and abstractions not drawn below still hold.
+
 DBX is built entirely by agents working in 100K-token sessions. Each session should face one deep module through its narrow interface plus the interfaces it consumes, never the whole repository. The backend is therefore split into eleven modules with one-way dependencies, a pure core, and boundaries that tests enforce. A convention an agent can quietly break is no boundary at all.
 
 ## Enforcement
@@ -31,7 +33,7 @@ When an ArchUnit rule goes red, fix the code. Changing a rule is an architectura
 
 Type mapping lives in `dialect`, not in its own module, because ADR-0008 makes it pair-owned. `gateway` and `preflight` fill gaps in the original candidate list; the ADRs already assumed both.
 
-The validation plan is frozen at contract approval, together with the contract, in the run version (ADR-0006).
+The validation plan is frozen into the run snapshot at run creation, together with the approved contract (ADR-0006).
 
 ## Dependency direction
 
@@ -52,7 +54,7 @@ Each module carries its own context so an agent can change it after reading only
 - A contract test (`*ContractTest`) is the primary documentation of the module's `api`.
 - `README.md` is navigation only and at most 40 lines: one-line responsibility, `api` entry points, contract test location, modules depended on, and relevant ADRs. A test enforces the limit. `orchestration`'s README lists every `api` entry point it consumes.
 - Terms are defined once, in root `CONTEXT.md`; READMEs link to them. Rationale lives once, in ADRs. Module names are implementation and stay out of `CONTEXT.md`, except that a module named after a domain term uses that term.
-- Root `CONTEXT.md` is capped at about 20K characters.
+- Root `CONTEXT.md` is capped at about 20K characters. The cap stands; #91 brought the file back under it.
 
 ## Session rule
 

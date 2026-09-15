@@ -1,5 +1,7 @@
 # Database dialect and database-pair extension seam
 
+> **v1 notes:** the active external-infrastructure probes in step 1 are suspended in v1 (built-in deployment only; see ADR-0003, ADR-0009). "Migration core" below maps onto [ADR-0036](0036-module-table-owns-every-v1-obligation.md)'s modules.
+
 > Amended by [ADR-0033](0033-bounded-source-reads-cursor-fetch-and-keyset-chunks.md): bounded Source reads join the platform policies no capability may omit or override. Every source dialect declares, as a typed execution requirement, how its reads stay bounded in the Connect heap and on the source server. A dialect that cannot declare this cannot be registered or certified.
 
 DBX v1 separates database-specific interpretation from the database-independent migration workflow. A source dialect, a target dialect, and an explicitly registered directed database pair compose the extension seam; each aggregate is made from fixed, strongly typed capabilities rather than a giant `Dialect` interface. This preserves reuse of endpoint behavior without treating any two registered endpoints as an automatically supported migration route.
