@@ -4,6 +4,8 @@ status: accepted (discard clause amended by ADR-0023: task-level abandonment dro
 
 # Versioned connections, evidence-based recovery, and clean reruns
 
+> Specified by [ADR-0035](0035-offline-release-package-one-release-version-and-gated-in-place-upgrade.md) for the built-in deployment: the master key is a mounted file in the install's `secrets/` directory, beside the tombstone ledger. H2 holds only the key's fingerprint, and upgrade and rollback never write `secrets/`.
+
 DBX v1 treats database access, execution recovery, and data reruns as separate concerns. A saved connection is reusable configuration; a migration run is an immutable execution snapshot; recovery may continue that run only while its original external execution can still be proven; a rerun always starts again from a clean target generation.
 
 ## Connection and credential model

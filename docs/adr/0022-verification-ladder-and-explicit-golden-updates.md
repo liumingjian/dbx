@@ -1,6 +1,8 @@
 # Verification ladder and explicit golden-file updates
 
-DBX is built by agents, so "the change is safe" must be something an agent can prove by running a command, not a judgement it makes. Verification is a three-rung ladder with a time budget per rung, a fixed rule for which rung each actor runs, and golden files whose updates are explicit and auditable. The failure this guards against most is an agent regenerating every snapshot and silently flattening the regression net — the engineering-side twin of the "quiet failure" ADR-0011 exists to prevent.
+> Amended by [ADR-0035](0035-offline-release-package-one-release-version-and-gated-in-place-upgrade.md): the ladder gains L4 `packageTest`, which proves the release package installs offline, upgrades from the previous release, and rolls back. It runs before every release tag and does not replace L3.
+
+DBX is built by agents, so "the change is safe" must be something an agent can prove by running a command, not a judgement it makes. Verification is a four-rung ladder with a time budget per rung, a fixed rule for which rung each actor runs, and golden files whose updates are explicit and auditable. The failure this guards against most is an agent regenerating every snapshot and silently flattening the regression net — the engineering-side twin of the "quiet failure" ADR-0011 exists to prevent.
 
 ## The ladder
 
@@ -9,6 +11,7 @@ DBX is built by agents, so "the change is safe" must be something an agent can p
 | L1 | `check` | Compilation, pure unit tests, ArchUnit rules (ADR-0018), `*ContractTest`, golden files, README-limit test | No | ≤ 2 min | §15.1 |
 | L2 | `seamTest` | Testcontainers seam tests against real MySQL 8, PostgreSQL 15, and Kafka; filterable per module | Yes | ≤ 10 min | §15.2 |
 | L3 | `e2eTest` | Full real stack: the five pinned services of the #9 test bed | Yes | Unbudgeted | §15.3 |
+| L4 | `packageTest` | The built release package: offline fresh install and smoke migration, upgrade from the previous release, rollback (ADR-0035) | Yes | Unbudgeted | §15.3 |
 
 A rung over budget is a defect: move the slow test down a rung or make it faster. L1 stays fast because ADR-0018 keeps most of the platform pure.
 
@@ -21,6 +24,7 @@ All execution — compilation included — runs on the mac through the `rexec` s
 - **Agent session**: L1 green before the session ends. When the change touches a side-effect shell — `gateway`, the Connect REST client in `connector`, or the `workflow` repositories — or their `api`, also that module's L2 green.
 - **CI, every PR**: L1 and L2.
 - **CI, merge into `main`**: L3 green when the change touches the backend or `dialect`. `main` is the last automatic gate, so the gate does not depend on any agent's discipline.
+- **Release, before the tag is pushed**: L4 green on the mac. A release without a green L4 receipt is not published.
 
 ## Golden files
 
