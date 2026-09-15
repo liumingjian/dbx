@@ -128,7 +128,7 @@ _Avoid_: Mapping script, route expression, 映射与规则, 模式映射
 _中文_: 映射规则
 
 **Preflight**:
-The exact source-side proof a table write contract needs before approval; only `SUPPORTED` proceeds.
+The exact proof, from source facts and the target's current state, that a table write contract needs before approval; only `SUPPORTED` proceeds.
 _Avoid_: Validation, estimate, warning acknowledgement, 评估, 预检查
 _中文_: 预检
 
@@ -143,8 +143,8 @@ _Avoid_: Editable DDL, sink schema, 建表选项 (DDL options)
 _中文_: 表写入契约
 
 **Structural proof**:
-The deterministic comparison of the actual target table with its contract; only zero difference starts the Sink.
-_Avoid_: Probe insert, table exists check
+The deterministic in-run comparison of the just-created target table with its contract; only zero difference starts the Sink, and a difference is the unit's 迁移失败, never a preflight finding.
+_Avoid_: Probe insert, table exists check, structural-proof difference (as a finding)
 _中文_: 结构证明
 
 **Supplemental SQL**:
