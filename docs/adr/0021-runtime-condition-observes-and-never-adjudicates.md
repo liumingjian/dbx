@@ -1,5 +1,5 @@
 ---
-status: accepted (amends the shell clause of ADR-0020 and the warning clauses of ADR-0001 and ADR-0002)
+status: accepted (amends the shell clause of ADR-0020 and the warning clauses of ADR-0001 and ADR-0002; execution-platform clause amended by ADR-0032: a Connect restart fails its running boxes at once, and the ten-minute grace covers unreachability only)
 ---
 
 # The runtime condition observes and never adjudicates

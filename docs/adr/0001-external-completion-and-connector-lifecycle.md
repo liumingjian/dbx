@@ -1,3 +1,7 @@
+---
+status: accepted (stuck clause amended by ADR-0032: two consecutive boxes stuck without a single record pause admission)
+---
+
 # External completion detection and run-isolated connector lifecycle
 
 Kafka Connect connectors do not complete an offline migration: they remain `RUNNING`, bulk sources repeat the full query, source offsets are delayed or absent, and connector names retain internal offsets. DBX therefore owns the lifecycle outside Connect. Every migration run receives an immutable run ID, every box receives a box ID, and connector and topic names include both IDs so retries never inherit prior offsets.
