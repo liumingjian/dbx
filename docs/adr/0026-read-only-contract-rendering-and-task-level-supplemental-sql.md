@@ -20,6 +20,8 @@ None of the five switches has a v1 capability behind it. The primary key is mand
 
 Structural proof (结构证明) is a per-table gate, shown on the table migration unit and nowhere else. When it passes, the unit's timeline step under 创建目标表中 reads 结构证明通过. When it fails, the unit ends 迁移失败 with a reason code naming the target-creation stage. The table evidence drawer shows the structured difference (coordinate, expected, actual, violated invariant), translated through the error translation layer (ADR-0005), with the raw difference collapsed. There is no task-level proof summary: a failed unit is already red in 运行监控.
 
+Structural proof is never a preflight finding (预检发现): it runs after baseline and DDL, after approval ([#86](https://github.com/liumingjian/dbx/issues/86)). After recording the difference as evidence, the failed unit drops the table it just created, under the advisory lock and only while introspection shows the generation is still this run's, the table has zero rows, and no Sink was created. If any check fails, the table stays, and a rerun meets it as the blocking finding "an existing target table differs from the contract" (ADR-0029). Otherwise a rerun of the table follows the ordinary creation path.
+
 ## Supplemental SQL
 
 - **Content.** Unique constraints, ordinary indexes, foreign keys, and table and column comments are executable statements. A B-tier default that translates to `ALTER COLUMN … SET DEFAULT` is executable too. `ON UPDATE CURRENT_TIMESTAMP` and collation appear only as SQL comments giving the source definition and "requires manual handling": #23 forbids generated triggers, and collation has no reliable PostgreSQL equivalent. Foreign keys come last.

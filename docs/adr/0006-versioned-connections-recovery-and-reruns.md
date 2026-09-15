@@ -1,5 +1,5 @@
 ---
-status: accepted (discard clause amended by ADR-0023: task-level abandonment drops DBX-owned target tables; run-scoped write-freeze clause amended by ADR-0024: a task write freeze spans cross-window runs)
+status: accepted (discard clause amended by ADR-0023: task-level abandonment drops DBX-owned target tables; run-scoped write-freeze clause amended by ADR-0024: a task write freeze spans cross-window runs; target generation clause amended by #86: a failed structural proof drops the never-written table its run just created)
 ---
 
 # Versioned connections, evidence-based recovery, and clean reruns
@@ -63,7 +63,7 @@ Cancellation applies to the whole run. It stops new admission and validation, co
 
 **Discard** is a separate, audited destructive command after execution has stopped. Run-local connectors, topics, subjects, probe objects, and secret projections are deleted only from authoritative ownership records and in dependency order. Schema Registry subjects are deleted only after their topic is confirmed absent and no retained topic shares them.
 
-A target table has a **target generation**. DBX creates a new generation when it first creates or deliberately truncates that table for a run. Discard may truncate a target table only while the current generation still belongs to that run, no connector can write it, its structure still matches, and no active run holds it. It never uses `CASCADE`, and it does not drop the table or schema by default. Once a later run takes a new generation, an older run can discard only its run-local resources and can never touch current target data. Discard appends resource facts; it never rewrites the run's original technical outcomes.
+A target table has a **target generation**. DBX creates a new generation when it first creates or deliberately truncates that table for a run. Discard may truncate a target table only while the current generation still belongs to that run, no connector can write it, its structure still matches, and no active run holds it. It never uses `CASCADE`, and it does not drop the table or schema by default. Once a later run takes a new generation, an older run can discard only its run-local resources and can never touch current target data. Discard appends resource facts; it never rewrites the run's original technical outcomes. One drop is automatic: when structural proof fails, the unit drops the table its own run just created and never wrote, under the conditions in ADR-0026 ([#86](https://github.com/liumingjian/dbx/issues/86)). That table never held data, so the DBA has nothing to clean up by hand.
 
 ## Rerun semantics and exclusion
 
