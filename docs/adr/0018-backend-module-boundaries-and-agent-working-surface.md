@@ -1,5 +1,7 @@
 # Backend module boundaries and the agent working surface
 
+> **Status: module table and pure-core list superseded by [ADR-0036](0036-module-table-owns-every-v1-obligation.md)** (#83). Read ADR-0036 for the current modules; enforcement, module context, the session rule, and abstractions not drawn below still hold.
+
 DBX is built entirely by agents working in 100K-token sessions. Each session should face one deep module through its narrow interface plus the interfaces it consumes, never the whole repository. The backend is therefore split into eleven modules with one-way dependencies, a pure core, and boundaries that tests enforce. A convention an agent can quietly break is no boundary at all.
 
 ## Enforcement
