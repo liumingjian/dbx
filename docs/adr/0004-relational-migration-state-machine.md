@@ -1,5 +1,5 @@
 ---
-status: accepted (task-state clause amended by ADR-0023: a migration task gains an abandonment lifecycle above its run projection; run-status precedence amended by ADR-0037: an open admission pause projects `ATTENTION_REQUIRED` ahead of active work)
+status: accepted (task-state clause amended by ADR-0023: a migration task gains an abandonment lifecycle above its run projection; run-status precedence amended by ADR-0039: an open admission pause projects `ATTENTION_REQUIRED` ahead of active work; task write freeze and task conclusion added by ADR-0024; aggregate list extended in ADR-0036's `workflow` row; per [#89](https://github.com/liumingjian/dbx/issues/89), no evidence retention in v1, hourly H2 backups keep the last 48, and the schema-created fact (creating run, time, `pg_namespace` OID) is write-once on the migration task)
 ---
 
 # Relational migration state with orthogonal phase and outcome

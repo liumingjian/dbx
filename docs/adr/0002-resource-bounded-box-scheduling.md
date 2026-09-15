@@ -1,5 +1,7 @@
 # Resource-bounded immutable box scheduling
 
+> Amended by [ADR-0021](0021-runtime-condition-observes-and-never-adjudicates.md): the warnings below (two-minute no-progress, 80% Kafka disk) turn the runtime condition to 需留意, with no banner and no interruption. Defined in [#89](https://github.com/liumingjian/dbx/issues/89): "computed maximum concurrency" for box target size is `min(10, Connect tasks ÷ tasks per box, source connection budget, target connection budget, ⌊(effective heap − B) ÷ R_narrow⌋)`, with ADR-0031's narrow-ordinary-box reservation at the effective heap read by the pre-admission environment check.
+
 > Amended by [ADR-0019](0019-migration-duration-estimate-before-the-run.md): a first run now shows a duration estimate before execution; the five-minute, 1% gate below governs only when the live remaining-time estimate takes over.
 
 > Amended by [ADR-0031](0031-platform-memory-budget-admission-and-bounded-in-flight-records.md): admission has a sixth, cumulative gate, the platform memory budget. Each box reserves Connect heap computed from its connector settings and its tables' preflight row sizes.

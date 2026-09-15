@@ -1,5 +1,5 @@
 ---
-status: accepted (amends ADR-0002 admission, ADR-0003 Connect heap and connector overrides, ADR-0027 E5 and JVM observability)
+status: accepted (amends ADR-0002 admission, ADR-0003 Connect heap and connector overrides, ADR-0027 E5 and JVM observability; constants and tiers calibrated by [#78](https://github.com/liumingjian/dbx/issues/78), no longer provisional)
 ---
 
 # Admission by platform memory budget, with bounded in-flight records per box
@@ -29,13 +29,13 @@ R = buffer.memory × E  +  read-ahead (ADR-0033)  +  2 × fetch.max.bytes  +  ma
 
 A box is admitted only while the sum of R over running boxes stays at or below `Connect heap − B`. The gate is cumulative, like the Kafka disk budget, so large-box starvation protection applies unchanged. It combines with ADR-0002's other gates by taking the tightest limit. It is static: the heap in the formula is the effective heap read at the pre-admission environment check, never a live usage figure.
 
-Provisional constants, versioned like the 25 MiB transport allowance and re-measured on connector, serializer, Kafka or JVM upgrades:
+Constants, calibrated by #78 and versioned like the 25 MiB transport allowance and re-measured on connector, serializer, Kafka or JVM upgrades:
 
 | Constant | Value | Basis |
 |---|---|---|
 | E, heap bytes per compressed in-flight byte | 100 | about 1.65 KB of heap ÷ about 20 compressed bytes per narrow row, rounded up |
-| X, heap bytes per decoded source byte on the Sink | 3 | provisional |
-| B, worker base overhead | 512 MiB | provisional |
+| X, heap bytes per decoded source byte on the Sink | 3 | calibrated by #78 |
+| B, worker base overhead | 512 MiB | calibrated by #78 |
 | E for large-record boxes | 3 | 1.5 MiB rows keep a Struct `byte[]`, a serialized `byte[]` and a compressed batch |
 
 With these values a narrow ordinary box reserves about 512 MiB, and a large-record box about 1 GiB. [#78](https://github.com/liumingjian/dbx/issues/78) calibrates the constants at the decided settings. It passes only if, for every shape, the measured peak heap per box is at or below that box's R.
@@ -53,7 +53,7 @@ The Connect heap is fixed at deployment by host-memory tier, never adapted at ru
 | DBX with embedded H2 | 1 GiB | 1 GiB |
 | OS and page cache headroom | 0.75 GiB | ≥4.75 GiB |
 
-With the provisional constants, the 8 GiB tier admits about five narrow ordinary boxes, or one large-record box and three ordinary ones. The ≥16 GiB tier reaches ADR-0002's ten-box cap. The tier rows are provisional until #78 runs each tier. If the 8 GiB tier is still killed by the kernel there, the floor rises to 12 GiB.
+With these constants, the 8 GiB tier admits about five narrow ordinary boxes, or one large-record box and three ordinary ones. The ≥16 GiB tier reaches ADR-0002's ten-box cap. [#78](https://github.com/liumingjian/dbx/issues/78) ran both tiers with no OOM, so the 8 GiB floor stands.
 
 ## Observation
 
