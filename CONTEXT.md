@@ -222,6 +222,11 @@ Starting the next eligible box whenever budgets permit, without a wave barrier.
 _Avoid_: Batch execution, strict waves
 _中文_: 滚动准入
 
+**Admission paused**:
+One run's rolling admission stopped after a second Connect restart or two zero-output stuck boxes, until the DBA continues it; the run shows attention required (ADR-0037).
+_Avoid_: 暂停, 运行已暂停
+_中文_: 准入已暂停
+
 **Platform memory budget**:
 Memory the 迁移平台 grants running migrations (ADR-0031).
 _Avoid_: 堆, heap limit

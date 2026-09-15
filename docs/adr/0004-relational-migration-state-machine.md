@@ -1,5 +1,5 @@
 ---
-status: accepted (task-state clause amended by ADR-0023: a migration task gains an abandonment lifecycle above its run projection)
+status: accepted (task-state clause amended by ADR-0023: a migration task gains an abandonment lifecycle above its run projection; run-status precedence amended by ADR-0037: an open admission pause projects `ATTENTION_REQUIRED` ahead of active work)
 ---
 
 # Relational migration state with orthogonal phase and outcome
