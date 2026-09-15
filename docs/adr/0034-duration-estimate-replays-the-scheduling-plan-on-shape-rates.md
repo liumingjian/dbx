@@ -4,6 +4,8 @@ status: accepted (amends ADR-0019's "before the run" clause)
 
 # The duration estimate replays the scheduling plan on per-shape stream rates under one shared ceiling
 
+> Amended by [ADR-0038](0038-duration-estimate-waits-for-preflight-and-history-is-per-source.md): history is kept per source data source (the ceiling per target), counted in finished table-unit transfers of at least 60 s under a matching estimate basis, with a minimum sample per parameter and range ends from the fit's residual ratios.
+
 ADR-0019 divides planned transfer bytes by "a throughput range", but the reference bands measured by [#63](https://github.com/liumingjian/dbx/issues/63) and [#78](https://github.com/liumingjian/dbx/issues/78) differ by table shape (narrow keyed 14.3–14.5, wide text 121–137, large-record 189–192 estimator MiB/s for one stream), by concurrency, and by memory tier. A single divisor either ignores the single-stream tail or double-counts admission. We decided that 预估耗时 (duration estimate) comes from replaying the scheduling plan, with each stream at its shape's rate and all running streams under one shared ceiling ([#80](https://github.com/liumingjian/dbx/issues/80)).
 
 ## Shape rate per table
