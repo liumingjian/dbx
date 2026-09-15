@@ -1,0 +1,5 @@
+org.apache.kafka.connect.errors.ConnectException: Error while polling for records
+Caused by: org.apache.kafka.connect.errors.ConnectException: Error while processing table querier
+	... 3 more
+Caused by: java.lang.OutOfMemoryError: Java heap space
+	... 4 more

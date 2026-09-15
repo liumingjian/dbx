@@ -1,0 +1,25 @@
+1:
+ num     #instances         #bytes  class name (module)
+-------------------------------------------------------
+   1:       7852132     2134800280  [B (java.base@17.0.13)
+   2:       2479934      138876304  org.apache.kafka.connect.source.SourceRecord
+   3:       5337621      128102904  java.lang.String (java.base@17.0.13)
+   4:       2532705      123705016  [Ljava.lang.Object; (java.base@17.0.13)
+   5:       2505935      120284880  java.util.HashMap (java.base@17.0.13)
+   6:       5001884      120045216  java.lang.Long (java.base@17.0.13)
+   7:       2449090      117556320  org.apache.kafka.clients.producer.KafkaProducer$AppendCallbacks
+   8:       2449086      117556128  org.apache.kafka.clients.producer.internals.FutureRecordMetadata
+   9:       2481003       99240120  java.math.BigDecimal (java.base@17.0.13)
+  10:       2449090       97963600  org.apache.kafka.clients.producer.ProducerRecord
+  11:       2449090       97963600  org.apache.kafka.connect.runtime.AbstractWorkerSourceTask$$Lambda$1367/0x00000088025c5208
+  12:       2583177       82661664  java.util.HashMap$Node (java.base@17.0.13)
+  13:       2509281       81836264  [Ljava.util.HashMap$Node; (java.base@17.0.13)
+  14:       2479934       79357888  java.sql.Timestamp (java.sql@17.0.13)
+  15:       2452720       78487040  org.apache.kafka.connect.runtime.SubmittedRecords$SubmittedRecord
+  16:       2450114       78403648  org.apache.kafka.connect.runtime.errors.ProcessingContext
+  17:       2488879       59733096  java.util.ArrayList (java.base@17.0.13)
+  18:       2480956       59542944  org.apache.kafka.connect.data.Struct
+  19:       2457181       58972344  java.util.LinkedList$Node (java.base@17.0.13)
+  20:       2450617       58814808  org.apache.kafka.common.header.internals.RecordHeaders
+  21:       2449086       58778064  org.apache.kafka.clients.producer.internals.ProducerBatch$Thunk
+  22:       2480956       39695296  org.apache.kafka.connect.header.ConnectHeaders
