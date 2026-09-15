@@ -4,6 +4,8 @@ status: accepted (amends ADR-0002 admission, ADR-0003 Connect heap and connector
 
 # Admission by platform memory budget, with bounded in-flight records per box
 
+> Amended by [ADR-0035](0035-offline-release-package-one-release-version-and-gated-in-place-upgrade.md): "host memory" in the tiers below means the memory containers can see (`docker info` MemTotal), not the machine's physical memory. The tier variable is `DBX_MEMORY_TIER`. The install script sets it to the highest tier that memory satisfies, and the DBA may choose a lower tier but never a higher one.
+
 At ADR-0002's default admission, eight single-table boxes exhausted ADR-0003's 4 GiB Connect heap in under 30 s on the reference machine. At 7.75 GiB the kernel killed the whole Connect container ([#63](https://github.com/liumingjian/dbx/issues/63), [#75](https://github.com/liumingjian/dbx/issues/75)). The cause is structural. Each record a Source has sent but Kafka has not yet acknowledged keeps its SourceRecord, converted ProducerRecord, callback, Thunk, future and SubmittedRecord reachable, about 1.65 KB of heap for a narrow row. Producer `buffer.memory` counts only compressed batch bytes, and Connect 3.9 has no setting that caps outstanding records. Connect also sets `max.block.ms=Long.MAX_VALUE`, so a full buffer blocks the task instead of failing it. With compressible narrow rows at a few dozen compressed bytes each, 128 MiB of buffer held about 2.45 million records.
 
 We decided that every box has a heap reservation derived from its own connector settings, and that admission never lets the reservations of running boxes exceed the Connect heap. A bigger heap or a lower box limit alone bounds nothing; the next table shape would break it.

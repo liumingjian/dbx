@@ -179,6 +179,16 @@ DBX's continuous account of whether it can keep migrating now and which root-cau
 _Avoid_: 监控, 健康检查, 日志, 仪表盘, 平台状态, 系统状态
 _中文_: 运行状况
 
+**Release version**:
+The one version that pins every component DBX ships; operators never see component versions (ADR-0035).
+_Avoid_: 版本号, 构建号, 组件版本
+_中文_: 发行版本
+
+**Rollback window**:
+From the end of an upgrade until the first migration run is admitted under the new release version: the only time returning to the previous release is allowed (ADR-0035).
+_Avoid_: 降级, 回滚
+_中文_: 回退窗口
+
 ### Scheduling and completion
 
 **Box**:
