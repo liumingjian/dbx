@@ -206,6 +206,10 @@ gc_log() { dc exec -T connect cat /tmp/gc.log 2>/dev/null | tr -d '\r'; }
 last_post_gc_mib() {
   gc_log | awk 'match($0, /[0-9]+M->[0-9]+M\(/) { s = substr($0, RSTART, RLENGTH); sub(/^[0-9]+M->/, "", s); sub(/M\($/, "", s); v = s } END { print v + 0 }'
 }
+# A stop-the-world full GC, logged as "Pause Full (Heap Inspection Initiated GC)". GC.run is no
+# use here: Kafka's launcher adds -XX:+ExplicitGCInvokesConcurrent, so System.gc() starts at most a
+# concurrent cycle and leaves old-generation garbage in every post-GC figure.
+full_gc() { dc exec -T connect jcmd 1 GC.class_histogram >/dev/null 2>&1; }
 jvm_uptime() { dc exec -T connect jcmd 1 VM.uptime 2>/dev/null | tr -d '\r' | awk 'NF==2 && $2=="s" {print $1}'; }
 connect_started() { docker inspect -f '{{.State.StartedAt}}' "$(dc ps -q connect)"; }
 
@@ -220,7 +224,7 @@ fresh_worker() {
   for i in $(seq 1 120); do
     if curl -sf "$CONNECT/connectors" >/dev/null; then
       sleep 10                                                     # group join
-      dc exec -T connect jcmd 1 GC.run >/dev/null 2>&1; sleep 2
+      full_gc; sleep 2
       BASE_MIB=$(last_post_gc_mib); STARTED=$(connect_started)
       return 0
     fi
@@ -297,7 +301,7 @@ probe() {
                FROM information_schema.innodb_session_temp_tablespaces WHERE state = 'ACTIVE'" \
     >> "$(art)/tmp-$tag.tsv"
   [ "$LIVE_GC_S" -gt 0 ] && elapsed_ge "$el" "${last_gc:-0}" "$LIVE_GC_S" \
-    && { dc exec -T connect jcmd 1 GC.run >/dev/null 2>&1; last_gc=$el; }
+    && { full_gc; last_gc=$el; }
   return 0
 }
 
@@ -307,14 +311,15 @@ heap_check() {
   local tag="$1" up0="$2"
   gc_log > "$(art)/gc-$tag.log"
   awk -F'\t' -v up0="$up0" -v base="$BASE_MIB" -v grace="$GRACE_S" -v OFS='\t' '
-    BEGIN { print "t", "post_gc_MiB", "sum_R_MiB", "excess_over_R" }
+    BEGIN { print "t", "post_gc_MiB", "sum_R_MiB", "excess_over_R", "full_gc" }
     FNR == NR { if (FNR > 1) { n++; adm[n] = $2; dn[n] = ($3 == "" ? 1e9 : $3); r[n] = $4 } next }
     match($0, /^\[[0-9]+ms\]/) {
       u = substr($0, 2, RLENGTH - 4) / 1000 - up0
       if (u < 0 || !match($0, /[0-9]+M->[0-9]+M\(/)) next
       s = substr($0, RSTART, RLENGTH); sub(/^[0-9]+M->/, "", s); sub(/M\($/, "", s)
       sum = 0; for (i = 1; i <= n; i++) if (adm[i] <= u && u <= dn[i] + grace) sum += r[i]
-      if (sum > 0) printf "%.1f\t%d\t%.1f\t%.3f\n", u, s, sum, (s - base) / sum
+      # Only a full GC leaves live objects alone; after a young GC the figure still holds old garbage
+      if (sum > 0) printf "%.1f\t%d\t%.1f\t%.3f\t%d\n", u, s, sum, (s - base) / sum, /Pause Full/ ? 1 : 0
     }' "$(art)/boxes-$tag.tsv" "$(art)/gc-$tag.log" > "$(art)/heap-check-$tag.tsv"
   local f="$(art)/heap-check-$tag.tsv" worst over total
   total=$(( $(wc -l < "$f") - 1 ))
@@ -322,6 +327,9 @@ heap_check() {
   worst=$(awk -F'\t' 'NR > 1 && (w == "" || $4 > w) { w = $4; l = $0 } END { print l }' "$f")
   HEAP_PEAK_EXCESS=$(awk -F'\t' -v b="$BASE_MIB" 'NR > 1 && $2 - b > p { p = $2 - b } END { print p + 0 }' "$f")
   finding "heap ($tag): idle worker **${BASE_MIB} MiB** post-GC (ADR-0031 B=${B_MIB}); peak post-GC excess over idle **${HEAP_PEAK_EXCESS} MiB**; worst (post-GC − idle) / ΣR = $(echo "$worst" | awk -F'\t' '{printf "**%s** at %ss (post-GC %s MiB, ΣR %s MiB)", $4, $1, $2, $3}'); **$over of $total** post-GC figures above idle + ΣR$( [ "$LIVE_GC_S" -gt 0 ] && echo "; forced full GC every ${LIVE_GC_S}s")"
+  # The verdict: live heap, from full GCs only
+  finding "heap live ($tag, full GCs only): $(awk -F'\t' 'NR > 1 && $5 == 1 { n++; if ($4 > 1) o++; if (w == "" || $4 > w) { w = $4; l = $1 " s, post-GC " $2 " MiB, ΣR " $3 " MiB" } }
+    END { if (n) printf "worst (live − idle) / ΣR **%s** at %s; **%d of %d** above idle + ΣR", w, l, o, n; else printf "no full GC in the phase" }' "$f")"
 }
 
 # Peaks of the probes, as findings
