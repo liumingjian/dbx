@@ -1,5 +1,7 @@
 # Frontend contract, mock boundary, and run progress transport
 
+> Amended by [ADR-0021](0021-runtime-condition-observes-and-never-adjudicates.md): an installation-scoped status channel sits beside `RunProgressSource`. Per [#89](https://github.com/liumingjian/dbx/issues/89), both default implementations poll every 10 s and refetch at once after a user command; SSE stays substitutable behind the seam.
+
 DBX is built frontend-first against mock data. This decision fixes where the frontend stops and the backend begins, and it answers the transport question ADR-0007 deliberately left open.
 
 Amended in [#50](https://github.com/liumingjian/dbx/issues/50): #45 replaced the frontend host with `dbx-prototype` (Ant Design 5, ADR-0017; journey and IA per ADR-0020). All three conclusions below survive the change of host unchanged; they are independent of the UI library. The section "On the prototype host" records how they land there.

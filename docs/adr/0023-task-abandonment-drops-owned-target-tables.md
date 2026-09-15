@@ -1,5 +1,5 @@
 ---
-status: accepted (amends the discard clause of ADR-0006 and the task-state clause of ADR-0004)
+status: accepted (amends the discard clause of ADR-0006 and the task-state clause of ADR-0004; per [#89](https://github.com/liumingjian/dbx/issues/89), the schema-created fact is write-once on the migration task: creating run, time, and `pg_namespace` OID)
 ---
 
 # Abandoning a migration task drops the target tables DBX still owns

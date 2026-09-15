@@ -8,7 +8,7 @@ status: accepted (fills the supplemental SQL delivery gap ADR-0011 left open)
 
 ## The switches are cut
 
-None of the five switches has a v1 capability behind it. The primary key is mandatory (#23), and only its promotion from a unique index is a per-table choice. Defaults follow ADR-0011's whitelist. Indexes, foreign keys, and comments go to supplemental SQL. The whole 建表选项 (DDL options) block is cut, not disabled: a disabled switch tells the DBA the platform could do this. Its place holds one read-only line: the target table carries columns, types, `NOT NULL`, primary key, and identity; indexes, foreign keys, comments, and the rest go to supplemental SQL. 建表选项 is retired as a term. DDL stays read-only. X2Doris-style full-text editing stays rejected for ADR-0011's reason: DBX cannot prove edited SQL.
+None of the five switches has a v1 capability behind it. The source primary key is always built (#23); only promoting a unique-index candidate on a table without one is a per-table choice, and the operator may decline it. Defaults follow ADR-0011's whitelist. Indexes, foreign keys, and comments go to supplemental SQL. The whole 建表选项 (DDL options) block is cut, not disabled: a disabled switch tells the DBA the platform could do this. Its place holds one read-only line: the target table carries columns, types, `NOT NULL`, primary key, and identity; indexes, foreign keys, comments, and the rest go to supplemental SQL. 建表选项 is retired as a term. DDL stays read-only. X2Doris-style full-text editing stays rejected for ADR-0011's reason: DBX cannot prove edited SQL.
 
 ## Where the contract rendering appears
 

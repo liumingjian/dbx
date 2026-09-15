@@ -1,5 +1,7 @@
 # Avro and Schema Registry lifecycle
 
+> **v1 notes:** customer-managed Registry text is suspended in v1 (built-in deployment only; see ADR-0009). Per [#89](https://github.com/liumingjian/dbx/issues/89), the fixed compatibility mode is `BACKWARD`, pinned in ADR-0027's E4 expected-configuration snapshot.
+
 DBX v1 uses Connect schemas serialized by the Confluent Avro converters and registered in Schema Registry for every data topic. JSON, schemaless records, Java serialization, and application-defined payload envelopes are not alternative v1 paths. The Avro representation is part of the approved table write contract because source extraction, Connect schema, Avro logical types, JDBC Sink binding, and the exact PostgreSQL target type must agree.
 
 ## Schema contract

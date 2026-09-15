@@ -1,5 +1,7 @@
 # Error translation and diagnostic evidence
 
+> Amended by later ADRs: [ADR-0027](0027-environment-check-detects-and-explains-without-host-control.md) adds the `ENVIRONMENT_CHECK` phase and its codes; [ADR-0021](0021-runtime-condition-observes-and-never-adjudicates.md), [ADR-0032](0032-out-of-memory-crashes-the-worker-and-fails-its-running-boxes.md), and [ADR-0039](0039-admission-paused-is-a-run-fact-that-requires-attention.md) add structured codes (execution platform unreachable, Connect restart, admission paused). Per [#89](https://github.com/liumingjian/dbx/issues/89), the first release ships a 21st external family, MySQL 1114 源库临时空间耗尽 (`SOURCE_DATABASE`, `TRANSFER`), and v1 ships zh-CN only. Per [#90](https://github.com/liumingjian/dbx/issues/90), the five-second status poll also runs ADR-0032's Connect restart-marker check.
+
 > **Status: amended in part by [ADR-0028](0028-diagnostic-package-scopes-manifest-and-no-values.md)** (#56). ADR-0028 governs the diagnostic package's scopes, trigger, manifest, and bound.
 
 DBX v1 separates observed failure facts, their operator-facing interpretation, and workflow state. This preserves truthful table timelines while keeping translation rules evolvable.
