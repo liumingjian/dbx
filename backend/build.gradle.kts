@@ -101,3 +101,7 @@ tasks.named("check") {
 
 // The document budget (#107) hangs off L1; see gradle/docbudget.gradle.kts.
 apply(from = "gradle/docbudget.gradle.kts")
+
+// L2, L3 and L4 of ADR-0022's ladder. Kept in their own script so that the tickets landing the
+// other L1 gates do not all edit the same file.
+apply(from = "gradle/rungs.gradle.kts")
