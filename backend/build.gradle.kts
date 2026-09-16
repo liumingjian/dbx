@@ -25,6 +25,7 @@ dependencies {
     implementation(libs.spring.boot.starter.jdbc)
 
     testImplementation(libs.junit.jupiter)
+    testImplementation(libs.archunit)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
