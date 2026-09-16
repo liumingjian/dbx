@@ -98,3 +98,6 @@ tasks.named("check") {
         logger.lifecycle("L1 (check) duration: $rendered — ADR-0022 budgets 2m; reported, not enforced.")
     }
 }
+
+// The document budget (#107) hangs off L1; see gradle/docbudget.gradle.kts.
+apply(from = "gradle/docbudget.gradle.kts")
