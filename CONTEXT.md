@@ -242,6 +242,11 @@ One run's admission stopped after a second Connect restart or two zero-output st
 _Avoid_: 暂停, 运行已暂停
 _中文_: 准入已暂停
 
+**Memory tier**:
+The deployment's memory bracket, fixed at install from the memory containers can see; it sets the platform's heaps and the ceiling on concurrent table migrations (ADR-0031).
+_Avoid_: Memory level, 内存规格, deployment size
+_中文_: 内存档位
+
 **Platform memory budget**:
 Memory the 迁移平台 grants running migrations (ADR-0031).
 _Avoid_: 堆, heap limit

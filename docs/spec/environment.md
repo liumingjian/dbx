@@ -34,7 +34,7 @@ Runs the environment check (环境自检) E0–E8: it probes the host, evaluates
 12. E2: Kafka, Connect and Schema Registry become ready within a bounded readiness budget, judged from `kafkaFacts`. (ADR-0027 §Catalog)
 13. E3: the Connect plugin inventory in `kafkaFacts` equals the `release.json` inventory. (ADR-0027 §Catalog; ADR-0035 §Release version)
 14. E4: platform-level configuration from `kafkaFacts` is compared with the expected-configuration snapshot named by `release.json`. The snapshot covers exactly these categories: broker `message.max.bytes` and `replica.fetch.max.bytes`, topic auto-create disabled, the Connect client override policy, the Connect converter configuration, the Schema Registry compatibility mode (`BACKWARD`), the default replication factor, `min.insync.replicas`, and log retention. Values are read from the snapshot, not hard-coded. Per-connector configuration and worker/JVM flags are excluded. (#89 items 3, 4; ADR-0027 §Catalog; ADR-0032 §Consequences)
-15. E5 (the memory tier): Unsatisfied when container-visible memory is below what `DBX_MEMORY_TIER` requires, or when the effective Connect or Kafka heap read from JMX `java.lang:type=Memory` differs from that tier's heap. (ADR-0031 §Observation, §Deployment memory tiers; ADR-0035 §Package and host; D-25)
+15. E5 (the memory tier): Unsatisfied when container-visible memory (`docker info` MemTotal) is below the threshold of the tier named by `DBX_MEMORY_TIER` — 8 GiB for the floor tier, 16 GiB for the recommended tier — or when the effective Connect or Kafka heap read from JMX `java.lang:type=Memory` differs from that tier's heap. Memory below the 8 GiB floor is refused by install (`release` I1), so E5's below-threshold case is memory that fell below its tier after install. (ADR-0031 §Deployment memory tiers, §Observation; ADR-0035 §Memory tier, §Host prerequisites; #98)
 16. E5 reports the effective Connect heap it read. It is the heap that admission and the box target size use for the run. (ADR-0031 §Platform memory budget; #89 item 2)
 17. E6: Kafka log-dir free space, from `describeLogDirs` in `kafkaFacts`, is at least 50 GB at startup and, before admission, at least twice the run's largest table. (ADR-0027 §Catalog; technical plan §11.2)
 18. E7: the H2 metadata directory is writable and has headroom. (ADR-0027 §Catalog)
@@ -53,7 +53,7 @@ Runs the environment check (环境自检) E0–E8: it probes the host, evaluates
 - Conclusions (4–9): L1, `EnvironmentContractTest`, covering the verdict fold, Inconclusive on probe failure, no waiver path, and guidance fields and codes per item.
 - E0, E1, E7, E8 (10, 11, 18, 19): L1, `HostProbeTest` against temp directories, fixture catalogs and fixture `release.json` files.
 - E2, E3, E4, E6 (12–14, 17): L1, `KafkaFactsEvaluationTest` over fixture `kafkaFacts` and a fixture expected-configuration snapshot.
-- E5 (15–16): L1 `MemoryTierTest` for the tier comparison; L2 `seamTest` `JmxHeapProbeSeamTest` against a real Kafka container's JMX.
+- E5 (15–16): L1 `MemoryTierTest` for the tier comparison at both thresholds and for a heap that differs from the tier's; L2 `seamTest` `JmxHeapProbeSeamTest` against a real Kafka container's JMX.
 - Scope (20–21): L1, `EnvironmentContractTest` checks the item list is exactly E0–E8 plus the capability-check entries.
 - Evidence (22–24): L1, `EnvironmentContractTest` covering result shape and repeatability. The end-to-end freeze and export are proven at L3 `e2eTest` under `workflow` and `orchestration`.
 
@@ -62,13 +62,14 @@ Runs the environment check (环境自检) E0–E8: it probes the host, evaluates
 1. **api + contract skeleton.** Add the `environment.api` result types (item ids E0–E8, conclusion, observed and expected values, versions, guidance, code, effective heap), a `check(scope, kafkaFacts, inputs)` and `sampleReadings` that return Inconclusive for every item, `EnvironmentContractTest` for obligations 4–6 and 22, `EnvironmentArchTest`, and the README. Blocked by `connector` slice 1 (the `kafkaFacts` types).
 2. **Kafka-facts items E2, E3, E4, E6.** Pure evaluators within the module, plus `KafkaFactsEvaluationTest`. Depends on slice 1.
 3. **Filesystem items E0, E1, E7.** Catalog validation, Connector/J checksum against the allowlist, the H2 directory probe, and `sampleReadings`, plus `HostProbeTest`. Depends on slice 1; blocked by `diagnosis` slice 2 (`validateCatalog`).
-4. **E5 memory tier.** JMX probe, tier comparison, and effective-heap output, plus `MemoryTierTest` and `JmxHeapProbeSeamTest` (L2). Depends on slice 1; D-25.
+4. **E5 memory tier.** JMX probe, tier comparison, and effective-heap output, plus `MemoryTierTest` and `JmxHeapProbeSeamTest` (L2). Depends on slice 1.
 5. **E8 master key.** Compares the two fingerprints in `inputs`. Depends on slice 1.
 6. **Guidance and codes.** Map each non-Satisfied item to its `ENVIRONMENT_CHECK` code and zh-CN message keys. Depends on slices 2–5, and is blocked by `diagnosis` slice 4 (the `ENVIRONMENT_CHECK` codes).
 
 ## Conflicts resolved
 
 - ADR-0027 E5 "host memory at least 8 GB" → the memory-tier check against container-visible memory and the effective heaps (ADR-0031 §Observation; ADR-0035 amendment note).
+- ADR-0031's ≥16 GiB tier against ADR-0035's "at least 18 GiB" → the threshold is 16 GiB of MemTotal; 18 GiB is guidance for the Docker Desktop allocation, which exceeds the MemTotal it exposes (#98).
 - ADR-0036's row "E0 to E7, the memory tier, and the master-key item" read as a separate tier item → the tier item *is* E5 (ADR-0031 §Observation), and the master-key item is E8 (#89 item 5).
 - ADR-0027's catalog E0–E7 has no key item, and ADR-0035 says "an environment check item" → E8 (#89 item 5; ADR-0027 status line).
 - ADR-0027 "JVM heap unobservable" → heap is read over JMX (ADR-0031), while worker/JVM flags stay out of E4 (ADR-0032 §Consequences).
@@ -82,7 +83,3 @@ Runs the environment check (环境自检) E0–E8: it probes the host, evaluates
 
 - E2 readiness budget and E7 headroom threshold: bounded values in the release configuration, shown as the item's expected value (ADR-0027 §Evidence).
 - How E5 reads container-visible memory: never through `docker.sock` or a host agent (ADR-0027).
-
-## Open items
-
-- **D-25** (T7): the MemTotal threshold of the ≥16 GiB tier: 16 GiB (ADR-0031) or 18 GiB (ADR-0035's advice). Blocks slice 4.

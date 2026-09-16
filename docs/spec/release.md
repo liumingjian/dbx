@@ -44,8 +44,8 @@ Specified in those modules' sub-specs; slice numbers are theirs.
 - C5. `secrets/master.key` reaches DBX as a mounted file, never an env var or `.env`; the ConfigProvider directory is mounted for DBX and Connect only; `drivers/` for Connect; `docker.sock` never (ADR-0035 §Master key, ADR-0006, ADR-0027).
 
 **Install (I)**
-- I1. Before starting anything, install checks CPU architecture, Docker Desktop running, Engine ≥ 29, Compose ≥ v2.20 and "Start Docker Desktop when you sign in"; each failure is explained in Chinese with a nonzero exit; these are not environment check items (ADR-0035 §Host prerequisites).
-- I2. Install picks the highest ADR-0031 tier that `docker info` MemTotal satisfies (never physical memory), prints how to raise Docker Desktop's memory if the recommended tier is missed, takes one DBA confirmation allowing only a lower tier, and writes `DBX_MEMORY_TIER` to `.env` (ADR-0035 §Memory tier).
+- I1. Before starting anything, install checks CPU architecture, Docker Desktop running, Engine ≥ 29, Compose ≥ v2.20, "Start Docker Desktop when you sign in", and `docker info` MemTotal of at least 8 GiB (ADR-0031's floor tier); each failure is explained in Chinese with a nonzero exit and nothing installed; these are not environment check items. The memory failure names the observed MemTotal and asks for at least 10 GiB of Docker Desktop memory before a re-run (ADR-0035 §Host prerequisites; #98).
+- I2. Install picks the highest ADR-0031 tier that `docker info` MemTotal satisfies (never physical memory), comparing against the thresholds 16 GiB and 8 GiB; below 8 GiB no tier exists and I1 has already refused, so I2 never runs without a tier to write. If the recommended tier is missed it prints how to raise Docker Desktop's memory, asking for at least 18 GiB because the configured allocation exceeds the MemTotal it exposes — guidance, not a threshold. It then takes one DBA confirmation allowing only a lower tier, and writes `DBX_MEMORY_TIER` to `.env` (ADR-0035 §Memory tier; ADR-0031 §Deployment memory tiers; #98).
 - I3. First install only: a random 256-bit key at `secrets/master.key`, mode 0600; the final message tells the DBA to copy `secrets/` off the machine (ADR-0035 §Master key).
 - I4. Install creates the directory layout, points `current` at the unpacked release, and starts the stack (ADR-0035 §Install directory).
 
@@ -69,7 +69,7 @@ Specified in those modules' sub-specs; slice numbers are theirs.
 All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (ADR-0035 §Verification):
 
 - `build` (P1–P4, R1–R5): members, checksums, and image digests that match `release.json`.
-- `freshInstall` (C1–C5, I1–I4): offline install with no registry, a smoke migration, tier and effective heaps agree, key mode 0600, no key in `docker inspect`.
+- `freshInstall` (C1–C5, I1–I4): offline install with no registry, a smoke migration, tier and effective heaps agree, key mode 0600, no key in `docker inspect`. Variants: MemTotal below 8 GiB refuses with a nonzero exit, no `.env` and no started stack; MemTotal at 15.6 GiB selects the 8 GiB tier and prints the 18 GiB guidance (#98).
 - `upgrade` (U1–U4): install the previous release, upgrade; H2 migrated, key fingerprint matches, history survived, volumes and `secrets/` unchanged. Variant: one nonterminal run means refusal and no change.
 - `rollback` (B1–B3): the previous release returns with its pre-upgrade history, restored by the previous release itself from the labelled pre-upgrade backup, with the restore request gone afterwards. Variants: one admitted run first means refusal from the window file alone, with the local API stopped; a second start of the restored stack does not restore again.
 - The first release runs only `build` and `freshInstall` (ADR-0035 §Verification).
@@ -79,7 +79,7 @@ All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (
 
 1. **Package build and `release.json`**: P1–P4, R1–R3, L4 `build`. No blockers.
 2. **Compose, `.env` template, release configuration**: C1–C5, R4, R5. Blocked by slice 1.
-3. **`dbx install`**: I1–I4, the L4 harness, `freshInstall`. Blocked by slice 2; `environment` slices 3 (E1), 4 (tier), 5 (E8); `workflow` slice 3 (installation record); `orchestration` slice 5 and `web` slice 4 (smoke migration); D-25, D-26.
+3. **`dbx install`**: I1–I4, the L4 harness, `freshInstall`. Blocked by slice 2; `environment` slices 3 (E1), 4 (tier), 5 (E8); `workflow` slice 3 (installation record); `orchestration` slice 5 and `web` slice 4 (smoke migration).
 4. **`dbx upgrade`**: U1–U4, L4 `upgrade`. Blocked by slice 3; `web` slice 3 (nonterminal-run query, installation read); `workflow` slice 9 (window opens).
 5. **`dbx rollback`**: B1–B3, L4 `rollback`. Blocked by slice 4; `workflow` slices 8 (backups, restore, window file) and 9; `orchestration` slice 5 (closes the window at first admission).
 6. **Release gate**: G1–G2, the tag-push check for an L4 receipt, certification on the release images. Blocked by slice 3; `connector` slice 7 (marker).
@@ -88,6 +88,8 @@ All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (
 
 - ADR-0003's 4 GiB Connect heap on ≥ 8 GiB → tier heaps 3 / 6 GiB, thresholds read as container-visible memory (ADR-0031, ADR-0035 notes).
 - ADR-0027's E5 "host memory ≥ 8 GB" → the memory-tier item, read against `docker info` MemTotal (ADR-0031, ADR-0035).
+- ADR-0031's ≥16 GiB tier against ADR-0035's "at least 18 GiB" → thresholds are 16 and 8 GiB of MemTotal; 18 GiB (and 10 GiB at the floor) is Docker Desktop allocation guidance (#98).
+- Below the 8 GiB floor, install-refusal against install-plus-E5 → I1 refuses; E5 covers only memory that falls below its tier after install (#98).
 - ADR-0035's unnumbered master-key item → E8, never waivable (#89 item 5).
 - ADR-0035/0036's "rollback-window fact and key fingerprint" → one installation record that also holds the release version (#89 item 5).
 - ADR-0010's "one tested mode" → `BACKWARD` (#89 item 3).
@@ -102,10 +104,3 @@ All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (
 
 - Schema Registry and DBX heap flags: within ADR-0031's RSS budgets (0.75 / 1 GiB), set from `DBX_MEMORY_TIER`.
 - R4 values (replication factor, `min.insync.replicas`, retention, converter settings): satisfiable by the single-node Kafka and observable via AdminClient or service REST (#89 item 4; ADR-0035).
-
-## Open items
-
-D-23 and D-24 are settled in [#97](https://github.com/liumingjian/dbx/issues/97).
-
-- **D-25** (T7): the MemTotal threshold of the ≥16 GiB tier (ADR-0031 16 GiB vs ADR-0035's 18 GiB advice). Blocks slice 3.
-- **D-26** (T7): below the 8 GiB tier, install refuses, or installs and E5 concludes 不满足. Blocks slice 3.

@@ -53,7 +53,7 @@ The cross-module slice graph is acyclic. Every blocking edge points to an earlie
 
 ## Decisions still open
 
-Compiling settled every obligation but 29 items, `D-1`–`D-29`, of which `D-1`–`D-13`, `D-19`–`D-24` and `D-27`–`D-29` are now resolved (7 open). Each is listed under **Open items** in the sub-specs it affects and blocks only the slices it names there. They are grouped into eight decision tickets on map #1:
+Compiling settled every obligation but 29 items, `D-1`–`D-29`, of which `D-1`–`D-13` and `D-19`–`D-29` are now resolved (5 open). Each is listed under **Open items** in the sub-specs it affects and blocks only the slices it names there. They are grouped into eight decision tickets on map #1:
 
 | Items | Ticket |
 |---|---|
@@ -63,7 +63,7 @@ Compiling settled every obligation but 29 items, `D-1`–`D-29`, of which `D-1`�
 | D-14–D-18 | [决策：运行状况的取值、磁盘停机之后的走向与状态通道的数据来源](https://github.com/liumingjian/dbx/issues/95) |
 | ~~D-19–D-21~~ **resolved** | [决策：诊断目录的补充](https://github.com/liumingjian/dbx/issues/96) |
 | ~~D-22–D-24~~ **resolved** | [决策：备份密钥、恢复与回退路径](https://github.com/liumingjian/dbx/issues/97) |
-| D-25–D-26 | [决策：安装时的内存档位](https://github.com/liumingjian/dbx/issues/98) |
+| ~~D-25–D-26~~ **resolved** | [决策：安装时的内存档位](https://github.com/liumingjian/dbx/issues/98) |
 | ~~D-27–D-29~~ **resolved** | [决策：控制台的放置与措辞](https://github.com/liumingjian/dbx/issues/99) |
 
 A resolved ticket moves its rulings into the ADRs and the affected sub-specs' Obligations, and deletes its `D-n` items. Items marked **Implementer decides** in a sub-spec are within-module choices bounded by the constraint stated there; they need no ticket.

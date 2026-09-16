@@ -15,7 +15,8 @@ DBX can never phone home, so everything it runs must arrive in one package and i
   - Docker Desktop is running;
   - Engine is 29 or later;
   - Compose is v2.20 or later;
-  - "Start Docker Desktop when you sign in" is enabled, because without it `restart: unless-stopped` never runs after the Mac reboots.
+  - "Start Docker Desktop when you sign in" is enabled, because without it `restart: unless-stopped` never runs after the Mac reboots;
+  - container-visible memory (`docker info` MemTotal) is at least 8 GiB, ADR-0031's floor tier ([#98](https://github.com/liumingjian/dbx/issues/98)). Below it no tier exists, so the script has no `DBX_MEMORY_TIER` to write; and a stack whose Connect and Kafka heaps exceed the VM's memory would be OOM-killed into a restart loop rather than serve a UI that could explain itself. The message names the observed MemTotal and tells the DBA to raise Docker Desktop's memory to at least 10 GiB and run install again.
 
   These checks are prerequisites for starting the stack at all. They are not environment check items: ADR-0027's checks still run at startup and before admission.
 - **Install directory.** The default is `~/dbx/`, which a script flag can change. Docker Desktop shares `/Users` by default.
@@ -32,8 +33,9 @@ DBX can never phone home, so everything it runs must arrive in one package and i
 - **Memory tier.**
   - The script reads the memory containers can see (`docker info` MemTotal), not the Mac's physical memory. It picks the highest ADR-0031 tier that memory satisfies and writes it to `.env` as `DBX_MEMORY_TIER`.
   - The DBA confirms the tier once. They may choose a lower tier, never a higher one.
-  - ADR-0031's tier thresholds are read as container-visible memory. They are never loosened to fit Docker Desktop's default allocation.
-  - Example: on the reference Mac mini, Docker Desktop exposes 15.6 GiB, so the script picks the 8 GiB tier. It then prints how to raise Docker Desktop's memory to at least 18 GiB for the recommended tier.
+  - ADR-0031's tier thresholds are read as container-visible memory: at least 8 GiB for the floor tier and at least 16 GiB for the recommended one. They are never loosened to fit Docker Desktop's default allocation.
+  - Docker Desktop's configured allocation is not the MemTotal it exposes, so the figure the script asks the DBA for is the threshold plus 2 GiB: at least 10 GiB to reach the floor tier, at least 18 GiB to reach the recommended one. These are guidance in a message, never thresholds ([#98](https://github.com/liumingjian/dbx/issues/98)).
+  - Example: on the reference Mac mini, Docker Desktop exposes 15.6 GiB, short of the 16 GiB threshold, so the script picks the 8 GiB tier. It then prints how to raise Docker Desktop's memory to at least 18 GiB for the recommended tier.
 
 ## Release version
 
@@ -106,6 +108,7 @@ The first release has no previous release, so it runs only the fresh-install ste
 - **Draining open runs before upgrading.** Rejected: a drain can take hours, and a bulk box may run for up to 24 hours (ADR-0001). A forced restart fails the boxes anyway (ADR-0032). Refusing the upgrade is simpler and easier to explain.
 - **Refusing upgrades for the whole life of a task write freeze.** Rejected: that could block security fixes for weeks over a commitment that concerns the source database, not the platform.
 - **Choosing the tier by the Mac's physical memory.** Rejected: containers see only the Docker VM's memory, so the script could pick a tier whose containers the kernel then kills.
+- **Installing below the 8 GiB floor and letting E5 conclude 不满足.** Rejected: there is no tier to write to `.env`, so the install has no lawful result, and the stack it would start crashloops instead of serving the UI that this option exists to provide. E5 keeps the post-install case, where memory shrinks below a tier that was satisfied at install time ([#98](https://github.com/liumingjian/dbx/issues/98)).
 - **Rollback at any time.** Rejected: it would silently drop post-upgrade runs.
 - **Restoring H2 from the `dbx` script, before repointing `current`.** Rejected: it needs the master key, AES-GCM, and the tombstone ledger in shell. Letting the previous release restore itself keeps one restore path for both triggers, the failed upgrade and ordinary H2 corruption.
 - **Treating an unreachable local API as an open rollback window.** Rejected: the API can be down for reasons unrelated to the upgrade, and the mistake destroys admitted runs.

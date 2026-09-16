@@ -1,5 +1,5 @@
 ---
-status: accepted (amends ADR-0002 admission, ADR-0003 Connect heap and connector overrides, ADR-0027 E5 and JVM observability; constants and tiers calibrated by [#78](https://github.com/liumingjian/dbx/issues/78), no longer provisional)
+status: accepted (amends ADR-0002 admission, ADR-0003 Connect heap and connector overrides, ADR-0027 E5 and JVM observability; constants and tiers calibrated by [#78](https://github.com/liumingjian/dbx/issues/78), no longer provisional; per [#98](https://github.com/liumingjian/dbx/issues/98): each tier's name is its MemTotal threshold, 8 and 16 GiB, and memory below the floor is refused at install)
 ---
 
 # Admission by platform memory budget, with bounded in-flight records per box
@@ -55,10 +55,14 @@ The Connect heap is fixed at deployment by host-memory tier, never adapted at ru
 
 With these constants, the 8 GiB tier admits about five narrow ordinary boxes, or one large-record box and three ordinary ones. The ≥16 GiB tier reaches ADR-0002's ten-box cap. [#78](https://github.com/liumingjian/dbx/issues/78) ran both tiers with no OOM, so the 8 GiB floor stands.
 
+**Thresholds.** A tier's name is its threshold in container-visible memory: the 8 GiB tier requires `docker info` MemTotal of at least 8 GiB, the ≥16 GiB tier at least 16 GiB ([#98](https://github.com/liumingjian/dbx/issues/98)). These two numbers are the only thresholds, and both the install script and E5 read them from here. The 16 GiB figure is the tier's own arithmetic: 11.25 GiB of component RSS plus the ≥4.75 GiB of OS and page-cache headroom the table reserves. Docker Desktop's configured memory allocation is not the MemTotal it exposes, because the VM keeps part of it, so the allocation a DBA must configure to clear a threshold is larger than the threshold. ADR-0035 carries that figure as guidance in a message; it is never a threshold, and no threshold here moves to accommodate it.
+
+**Below the floor.** MemTotal under 8 GiB satisfies no tier, so there is no `DBX_MEMORY_TIER` to write and the install refuses (ADR-0035 §Host prerequisites). E5 governs the other moment: memory that falls below its tier after install.
+
 ## Observation
 
 - DBX reads `java.lang:type=Memory` from Connect and Kafka over JMX. The port is open on the Compose network only and never published to the host.
-- The environment check gains a memory-tier item. It concludes 不满足 (unsatisfied) when the host has less memory than its tier requires, or when an effective heap differs from the tier. ADR-0027's E5 minimum becomes this tier check. The item detects and explains; it changes nothing on the host.
+- The environment check gains a memory-tier item. It concludes 不满足 (unsatisfied) when MemTotal is below the threshold of the tier named by `DBX_MEMORY_TIER`, or when an effective heap differs from that tier's. ADR-0027's E5 minimum becomes this tier check. The item detects and explains; it changes nothing on the host.
 - Live heap usage goes to 运行监控 (run monitoring) and the diagnostic package. It does not go to 运行状况 (runtime condition), which ADR-0021 keeps free of host memory, and it never feeds admission. If the bound fails anyway, ADR-0032 crashes the worker and fails its running boxes.
 
 ## Operator wording
