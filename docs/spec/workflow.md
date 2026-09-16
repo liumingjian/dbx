@@ -2,7 +2,7 @@
 
 Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway schema, backups, and every aggregate in ADR-0036's `workflow` row.
 
-**Read first**: ADR-0036, ADR-0018, ADR-0004, ADR-0012, ADR-0039, ADR-0024, ADR-0023, ADR-0006, ADR-0035; #89 items 5, 9, 10. CONTEXT.md terms: migration task (迁移任务), migration draft (迁移草稿), migration run (迁移运行), table migration unit (表迁移单元), run snapshot (运行快照), migration task status (迁移任务状态), task conclusion (整库结论), credential version (凭据版本), admission paused (准入已暂停), task write freeze (整库冻结承诺), target generation (目标代际), abandonment list (废弃清单), rollback window (回退窗口).
+**Read first**: ADR-0036, ADR-0018, ADR-0004, ADR-0012, ADR-0039, ADR-0024, ADR-0040, ADR-0023, ADR-0006, ADR-0035; #89 items 5, 9, 10. CONTEXT.md terms: migration task (迁移任务), migration draft (迁移草稿), migration run (迁移运行), table migration unit (表迁移单元), run snapshot (运行快照), migration task status (迁移任务状态), task conclusion (整库结论), drift check (漂移检查), task closing (收口), credential version (凭据版本), admission paused (准入已暂停), task write freeze (整库冻结承诺), target generation (目标代际), abandonment list (废弃清单), rollback window (回退窗口).
 
 ## Interface (`workflow.api`)
 
@@ -34,7 +34,7 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 11. Run status is a projection that can be rebuilt from units, boxes, and run facts. Precedence: cancellation in progress, then open admission pause, then active work, then required attention, then terminal severity (ADR-0004 §Derived; ADR-0039).
 12. Task status is `ACTIVE→ABANDONING→ABANDONED|PARTIALLY_ABANDONED` and sits above the run projection. It never rewrites run facts. An abandoned task accepts no new run (ADR-0023 §Task lifecycle).
 13. At most one nonterminal run per task (ADR-0006 §Target concurrency).
-14. Task conclusion is a never-edited projection: each table's latest unit result, overlaid with the closing drift check (`INCONCLUSIVE / SOURCE_CHANGED`). It is green only if every table is 迁移完成 and no drift was found (ADR-0024 §Task conclusion).
+14. Task conclusion is a never-edited projection: each table's latest unit result, overlaid with the closing drift check (`INCONCLUSIVE / SOURCE_CHANGED`). It is green only if every table is 迁移完成 and no drift was found (ADR-0024 §Task conclusion). It reads the latest closing 漂移检查 (drift check), so a run after a closing check leaves the task conclusion without one until the next closing (ADR-0040).
 
 **Aggregates (Flyway tables; semantics at pointer)**
 15. `installation`: exactly one row holding release version, master-key fingerprint, and rollback-window state (opened_at, closing_run_id, closed_at). Opens at upgrade end, closes at first admission under the new release (#89 item 5; ADR-0035 §Rollback window).
@@ -46,6 +46,8 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 21. `migration_task`: endpoints, schema, conversion switches, user mapping rules, and latest approved contracts (ADR-0004 §Aggregate). Plus task status, the confirmed abandonment list with per-table drop evidence and refusals (ADR-0023), and the write-once schema-created fact (creating run ID, time, `pg_namespace` OID) (#89 item 10).
 22. `task_write_freeze` plus append-only confirmations: accountable operator, deadline, extension, and gap attestation. A run freeze cannot pass the task deadline unless the task freeze is extended in the same command (ADR-0024 §Task write freeze).
 23. `split_snapshot`: the proposed split exactly as shown to the change board (ADR-0024 §Planning).
+23a. `drift_check`: a task-scoped immutable record, not a run record, holding its occasion (`BEFORE_RUN` or `CLOSING`), time, and one item per already-migrated table in the validation-item shape; never a `PASS`. `orchestration` supplies the evaluated facts (ADR-0040; ADR-0024 §Drift checks).
+23b. Task closing (收口) is an operator command, never automatic: it runs the closing drift check, writes the `CLOSING` `drift_check`, and only then may the task write freeze be released. DBX surfaces that closing is available once every in-scope table holds a terminal result, and never closes on its own. Closing is not terminal: a later run is allowed and requires a new closing check (ADR-0040).
 24. `migration_run`: run number, release version, and immutable snapshot. Snapshot: scope, mapping rules (AUTO origin), accepted findings, connection/credential versions, redacted endpoint and instance identity, pre-admission check conclusions, write freeze, baseline, contracts, validation plan, routing, scheduling plan, supplemental SQL (ADR-0004 §Aggregate; ADR-0006; ADR-0027 §Evidence; ADR-0026 §Timing). Run credential bindings are append-only (ADR-0006 §Connection). The run also holds the cancellation request (with finishing flag) and its converged fact (ADR-0004 §Derived; ADR-0024), and the admission-pause record (reason, trigger, time, continued_at), which survives restart (ADR-0039).
 25. `table_migration_unit`, `box`, `validation_execution` and `validation_item`, `error_occurrence` and `diagnosis`, `timeline_event`, `stage_attempt`, and `cleanup_request`, with fields per ADR-0004 §Aggregate and ADR-0005 §Occurrence. A zero-row unit has no box (ADR-0004 §Table state).
 26. `target_lease`: key is actual server identity + database + case-sensitive schema.table. Atomic over the whole scope; never expires by time (ADR-0006 §Target concurrency). An abandoning task keeps holding it (ADR-0023).
@@ -77,7 +79,7 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 2. **Pure projections and transition table**: obligations 9–14 at L1. Needs 1.
 3. **H2 foundation**: Flyway baseline, single-instance lease, command queue, `installation` row. Obligations 2–4, 6–8, 15 (row). Needs 1.
 4. **Connections**: `database_connection`, `credential_version`, `connection_check`, tombstone ledger. Obligations 16–19. Needs 3.
-5. **Drafts and tasks**: draft, task, task write freeze, split snapshot, schema-created fact, abandonment records. Obligations 20–23. Needs 2, 3; D-13.
+5. **Drafts and tasks**: draft, task, task write freeze, split snapshot, schema-created fact, abandonment records. Obligations 20–23b. Needs 2, 3.
 6. **Runs and execution records**: run snapshot, units, boxes, timeline, stage attempts, occurrences, validation, admission pause. Obligations 24, 25, 29b–29d, 33. Needs 2, 5.
 7. **Target safety, cleanup, condition**: leases, generations, cleanup requests, `condition_change`, export audit, progress coalescing. Obligations 5, 26–28, 29a. Needs 6; D-18.
 8. **Backups**: obligations 30–31. Needs 3; blocked by `connection` slice 3; D-22, D-23.
@@ -88,6 +90,7 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 - ADR-0004 precedence and ADR-0036 "the run stays running" → open pause projects `ATTENTION_REQUIRED` ahead of active work (ADR-0039).
 - ADR-0004's "no task state of its own" → task lifecycle above the projection (ADR-0023 §Task lifecycle).
 - ADR-0006's freeze ending with its run → nested inside the task write freeze (ADR-0024).
+- ADR-0024 leaving drift results unhomed → a task-scoped `drift_check`, closed by an operator command (ADR-0040).
 - ADR-0004's "later retention policy" and progress compaction → no evidence retention in v1, thinning deferred (#89 item 9).
 - ADR-0006's "retention removes backup artifacts on schedule" → keep the last 48 hourly backups (#89 item 9).
 - ADR-0036 ledger as `workflow` aggregate vs outside H2 (ADR-0006) → a `workflow`-owned file in `secrets/` (ADR-0035 §Master key).
@@ -102,6 +105,5 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 
 ## Open items
 
-- **D-13** (T3): where drift and closing-check results live; what marks the last run. Blocks slice 5.
 - **D-18** (T4): is the latest condition outcome persisted for `web`? Blocks slice 7.
 - **D-22**, **D-23** (T6): backup-key erasure and the restore path. Block slice 8.

@@ -2,7 +2,7 @@
 
 The use cases `web` calls and their drivers; sole caller of `workflow.api.command` and sole sequencer of other modules' side effects (ADR-0018 §Dependency direction, ADR-0036).
 
-**Read first**: ADR-0036, 0018, 0004, 0006, 0001, 0024, 0039, 0032, 0021, 0023, 0027, 0028, 0026, 0035, 0008 §Ownership; #89 items 5, 10. CONTEXT.md terms: migration run, table migration unit, box, run snapshot, write freeze, task write freeze, source baseline, target generation, cancellation, discard, abandonment, abandonment list, admission paused (准入已暂停), runtime condition (运行状况), environment check, connection check, re-migration, diagnostic package.
+**Read first**: ADR-0036, 0018, 0004, 0006, 0001, 0024, 0040, 0039, 0032, 0021, 0023, 0027, 0028, 0026, 0035, 0008 §Ownership; #89 items 5, 10. CONTEXT.md terms: migration run, table migration unit, box, run snapshot, write freeze, task write freeze, drift check (漂移检查), task closing (收口), source baseline, target generation, cancellation, discard, abandonment, abandonment list, admission paused (准入已暂停), runtime condition (运行状况), environment check, connection check, re-migration, diagnostic package.
 
 ## Interface (`orchestration.api`)
 All effectful; each command takes an idempotency key (ADR-0004). Names are final; each `web` endpoint maps to one. `*` = added at reconciliation, since `web` reaches pure modules only here (ADR-0018).
@@ -11,7 +11,7 @@ All effectful; each command takes an idempotency key (ADR-0004). Names are final
 - `execute(draftId, freezeConfirmation)` → run id
 - `cancelRun(runId, finishing)`, `extendFreeze`, `declareFreezeBroken`, `continueAdmission`, `adoptCredential`
 - `recordDisposition`, `runSampling`
-- `discardRun`, `remigrate`, `copyAsDraft` → draft id
+- `discardRun`, `remigrate`, `copyAsDraft` → draft id; `closeTask` (收口, ADR-0040)
 - `projectedAbandonmentList(draftId)`*, `abandonmentList(taskId)`, `abandonTask`, `retryAbandon`
 - `downloadSupplementalSql(taskId)`*, `packageManifest(scope)`*, `exportPackage(scope)`, `recheckEnvironment`
 
@@ -77,7 +77,8 @@ Internal: recovery, pollers, condition loop, cleanup-retry loop.
 
 **G. Cross-window**
 35. `remigrate`: pre-scope the draft to failed, undetermined, never-run tables, entering stage 3 (ADR-0020, ADR-0024).
-36. `driftPlan` before each later run, plus the closing check; a lapse without attestation means drifted (ADR-0024).
+36. `driftPlan` before each later run, plus the closing check; a lapse without attestation means drifted (ADR-0024). Each result is written as a task-scoped `drift_check` through `workflow`, with its occasion, never as a run record (ADR-0040).
+36a. `closeTask` (收口) is the operator command that marks the last run: it runs the closing drift check, writes the `CLOSING` `drift_check`, and releases the hold on the task write freeze. It is offered once every in-scope table holds a terminal result and is never invoked automatically; a run after a closing check requires a new closing (ADR-0040).
 37. At execution confirmation, if the upper bound exceeds the freeze limit, return `proposeSplit`'s proposal as a non-blocking warning and snapshot it (ADR-0024).
 
 **H. Recovery**
@@ -110,7 +111,7 @@ L1 on stubbed `api`s: `OrchestrationContractTest`, `ArchitectureTest` (A, B, E, 
 8. H; after 6, 7. Needs `contract` 7.
 9. 42–44; after 5.
 10. 45, `projectedAbandonmentList`; after 9. Needs `contract` 6.
-11. G; after 7. Needs `validation` 4; `scheduling` 4, 5; D-13.
+11. G; after 7. Needs `validation` 4; `scheduling` 4, 5; `workflow` 5.
 12. J; after 6. Needs `diagnosis` 8; `contract` 4.
 
 ## Conflicts resolved
@@ -118,13 +119,13 @@ L1 on stubbed `api`s: `OrchestrationContractTest`, `ArchitectureTest` (A, B, E, 
 - ADR-0006 continue after infra restart → ADR-0032 for Connect.
 - ADR-0021 grace (Kafka, Connect) → ADR-0039 adds SR; databases per ADR-0006.
 - ADR-0006 run-scoped freeze → ADR-0024 task freeze; run expiry stays (#85).
+- ADR-0024's unowned closing trigger → the operator's `closeTask` (ADR-0040).
 - ADR-0006 "never drops" → ADR-0023 abandonment, ADR-0026 (#86) proof-failure drop.
 - ADR-0019 estimate at stage 2 → ADR-0038.
 - ADR-0001 orphans vs ADR-0035 leftover cleanup → ownership records only.
 - Unowned in ADR-0036 → here, the only side-effect sequencer (ADR-0018): the unreachable timer, the 90% / 10 GB stop, validation slots, credential destruction, the freeze-limit warning; no fixed pre-expiry lead time (ADR-0024).
 
 ## Open items
-- **D-13** (T3): what marks the last run for the closing check. Blocks slice 11.
 - **D-17** (T4): after the 90% / 10 GB stop, does a box wait, fail, or resume? Blocks slice 6.
 - **D-18** (T4): does `web`'s status channel read a persisted outcome or a use case here? Blocks slice 6.
 - **D-8** (T2), **D-20** (T5): own connections vs budgets; the 24 h limit's code. Block slice 5.
