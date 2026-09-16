@@ -54,7 +54,8 @@ Each module carries its own context so an agent can change it after reading only
 - A contract test (`*ContractTest`) is the primary documentation of the module's `api`.
 - `README.md` is navigation only and at most 40 lines: one-line responsibility, `api` entry points, contract test location, modules depended on, and relevant ADRs. A test enforces the limit. `orchestration`'s README lists every `api` entry point it consumes.
 - Terms are defined once, in root `CONTEXT.md`; READMEs link to them. Rationale lives once, in ADRs. Module names are implementation and stay out of `CONTEXT.md`, except that a module named after a domain term uses that term.
-- Root `CONTEXT.md` is capped at about 20K characters. The cap stands; #91 brought the file back under it.
+- Root `CONTEXT.md` carries no length cap. It was capped at about 20K characters until the maintainer ruled the cap off (#102); the file is deliberately unchecked rather than checked against a larger number, because a cap nobody intends to enforce only invites the next squeeze to be argued against a figure that was never meant. `scripts/check-doc-budget.py` therefore skips it. The pressure the cap expressed is real and still applies — a new agent that burns its context on `CONTEXT.md` before starting work has already lost — but it is now a judgement made when editing the file, not a number the build asserts.
+- The sixteen sub-specs under `docs/spec/` keep their budget: at most 15,000 characters each, owned by `docs/spec/subspec-brief.md` §Budget and enforced at L1.
 
 ## Session rule
 
