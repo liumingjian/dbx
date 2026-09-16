@@ -91,20 +91,12 @@ Assembles, renders, and proves the table write contract (表写入契约), gener
 
 ## Conflicts resolved
 
-- ADR-0018's contract interface "`assemble`, `renderDdl`, `prove`" → ADR-0036 adds read-only rendering (ADR-0026) and the projected list (ADR-0023).
-- ADR-0011's body puts the Sink settings, default whitelist, and identity rules under the contract → ADR-0011's status note (ADR-0018): they belong to the target dialect in `dialect`, and the contract reaches them only through the dialect interface.
-- ADR-0011 leaves supplemental SQL timing and delivery to the product shell → ADR-0026 §Supplemental SQL decides both.
-- ADR-0029's original 阻塞 row lists "structural-proof difference" → the #86 amendment and ADR-0026 §Structural proof: it is the unit's 迁移失败, never a finding.
-- ADR-0008 ("the core alone produces the routing snapshot, configuration fingerprint, execution signature") and corpus-audit §5's proposed `contract.routingSnapshot` → ADR-0036: `connector` derives all of them in one place. `contract` only freezes the approved coordinates and routing decisions.
-- ADR-0008 says the target dialect "reads and compares" the actual structure, while ADR-0011 puts proof in the contract → ADR-0036 gives `prove` and its verdict to `contract`. The dialect supplies target-specific normalization through its interface.
-- ADR-0010's contract snapshot records the "observed schema identifier" → the contract is immutable at approval (ADR-0011): the observed id is a run fact in `workflow`; the converter configuration fingerprint is `connector`'s (ADR-0036).
+See [`conflicts.md`](conflicts.md#contract) — provenance only; every winning ruling is already an obligation above.
 
 ## Implementer decides
 
 - When `prove` returns `INCONCLUSIVE`: only when a required catalog fact is absent from its input, never on a difference; any non-`PROVEN` fails the unit (ADR-0008 §Ownership; ADR-0026 §Structural proof).
 - The golden-set name for "contract → DDL": one stable name per set, used with `-Pgolden.update=<name>` (ADR-0022).
-
-- ADR-0029's unowned target-side rows and ADR-0006's zero-difference review had no owner → `assemble` emits both findings, reusing `prove` for the rerun comparison, and `review` computes the zero-difference review (#92; ADR-0029 §Who emits a finding; ADR-0036 §Amended by #92).
 
 ## Open items
 

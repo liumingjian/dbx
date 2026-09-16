@@ -9,7 +9,8 @@ A sub-spec is the one document an implementing agent reads to build one module i
 - **Rulings outside ADRs**: the ten rulings of [#89](https://github.com/liumingjian/dbx/issues/89) live only in its resolution comment (`gh api repos/liumingjian/dbx/issues/89/comments --jq '.[].body'`); cite them as `(#89 item N)`.
 - **Later wins.** Where documents still disagree, the later ADR wins unless it says otherwise. Record every conflict you meet in the sub-spec's "Conflicts resolved" section with the winning pointer.
 - **Vocabulary**: use `CONTEXT.md` terms exactly; English prose, domain terms in Chinese glossed `English (原文)` on first use.
-- **Budget**: at most 12,000 characters. Push detail behind pointers rather than inline.
+- **Budget**: at most 15,000 characters, enforced by `scripts/check-doc-budget.py` (CI, and L1 `check` once the Gradle build exists). Push detail behind pointers rather than inline; rationale belongs in an ADR. The figure is a cap on *restatement*, not on a module's obligation count: it was 12,000 until [#100](https://github.com/liumingjian/dbx/issues/100) measured that the three largest modules cannot reach that without deleting obligations.
+- **Conflicts**: record each one in [`conflicts.md`](conflicts.md) under the module's heading, not in the sub-spec. The winning ruling belongs in Obligations; the losing text is provenance an implementing agent never needs (#100).
 - **Checkable**: every obligation must be verifiable by a named test at a named rung of the verification ladder (ADR-0022: L1 `check`, L2 `seamTest`, L3 `e2eTest`, L4 `packageTest`).
 - Invent nothing. If the corpus leaves something undecided, list it under "Open items" and do not decide it.
 
@@ -38,7 +39,7 @@ A sub-spec is the one document an implementing agent reads to build one module i
 <ordered, independently mergeable implementation slices, each sized to one session, with blocking edges between them; these become tickets>
 
 ## Conflicts resolved
-<losing text → winning text, pointers>
+<a pointer to this module's section of conflicts.md; the entries live there>
 
 ## Open items
 <undecided in the corpus; empty is fine>

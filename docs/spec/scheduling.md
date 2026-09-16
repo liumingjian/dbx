@@ -88,21 +88,9 @@ All rungs are L1 (`check`). The module has no shell, so it needs no L2 (ADR-0022
 5. **predict, history** (27–31). Blocked by slice 4.
 6. **predict, in-run** (32–34). Blocked by slice 4.
 
-
 ## Conflicts resolved
 
-- ADR-0018 module row "`plan`, `admit`" → ADR-0036 adds `predict(run-history rates)` and the estimate.
-- ADR-0002 ¶4 "exact frozen row count" behind planned transfer bytes → the 预估行数 at preflight; the exact 源基线 count is a separate `plan` input (#92; ADR-0002 as amended).
-- ADR-0002 "five gates" → ADR-0031: a sixth, cumulative memory gate.
-- ADR-0002 "computed maximum concurrency" (undefined) → #89 item 2's formula, with its terms fixed by #93.
-- ADR-0002 "no first-run estimate" → ADR-0019: an estimate before every run. ADR-0002's gate governs only the handover to the remaining-time estimate.
-- ADR-0019 "bytes ÷ a throughput range" → ADR-0034: plan replay on shape rates under a shared ceiling.
-- ADR-0019 and TP §10 "once the migration scope is settled" → ADR-0038: only after preflight completes, with no stage-2 estimate.
-- ADR-0019 and ADR-0034 "this deployment's past runs" → ADR-0038: per source data source, with the ceiling per target.
-- ADR-0034 "history refits parameter by parameter" (no minimum) → ADR-0038's minimums and residual-ratio ends.
-- corpus-audit §5 `estimate` → ADR-0036's `predict`; the split stays here as `proposeSplit` (ADR-0024 §Planning); the freeze-limit warning is `orchestration`'s.
-- Unowned history storage → `workflow` persists it (sole H2 writer, ADR-0036 §Considered options).
-- corpus-audit §5 signature derivation here → `connector` derives it (ADR-0036).
+See [`conflicts.md`](conflicts.md#scheduling) — provenance only; every winning ruling is already an obligation above.
 
 ## Implementer decides
 

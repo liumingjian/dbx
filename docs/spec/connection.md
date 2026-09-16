@@ -86,15 +86,7 @@ Consumers: `workflow` slice 8 waits on slice 3; `orchestration` slice 2 waits on
 
 ## Conflicts resolved
 
-- ADR-0006: "the master key is supplied independently as a deployment secret" → ADR-0035 §Master key: a mounted file `secrets/master.key`, with only its fingerprint in H2. ADR-0006's own note defers to ADR-0035.
-- ADR-0036 row `environment`: "E0 to E7 … and the master-key item" → #89 item 5: the master-key item is E8. That is `environment`'s concern, not this module's.
-- corpus-audit.md §5 "proposed `connection`": connection CRUD and archive, the tombstone ledger, the master-key fingerprint, and the secret projection → ADR-0036 §Modules. CRUD, the ledger and the fingerprint belong to `workflow`; the ConfigProvider projection belongs to `connector`; `connection` "holds no H2 tables".
-- ADR-0018 §Pure core: "side effects are confined to `gateway`, the Connect REST client, and the `workflow` repositories" → ADR-0036 §Dependencies and purity adds `connection` (it reads the master-key file) as an effectful shell.
-- Who calls `encrypt` on a new credential version → `orchestration` before its `workflow.api.command` (it is the only command caller; ADR-0036 names only backups as `workflow`'s crypto use).
-- How `connector` gets plaintext → from `orchestration`, like `gateway`; `connector` never references `connection` (ADR-0036 §Dependencies and purity).
-- `decrypt` gated on tombstone reapply (ADR-0006) → the caller sequences it; `connection` holds no state to know (ADR-0036 "never persists").
-- ADR-0006's ledger "tracks wrapped backup keys" vs obligation 19a's unrecoverability → the ledger tracks identity and fingerprint; the wrapped bytes live with the backup artifact, because an append-only file can never unsay what it holds (ADR-0006 as amended by #97).
-- ADR-0036's four-name Interface column vs a `wrap` with no inverse → `unwrap` is a sixth entry point (#97).
+See [`conflicts.md`](conflicts.md#connection) — provenance only; every winning ruling is already an obligation above.
 
 ## Implementer decides
 

@@ -1,0 +1,19 @@
+# The character budgets of CONTEXT.md and the sub-specs were remembered rather
+# than enforced, and drifted every time a decision ticket folded its rulings back
+# in (#100). This makes them a check.
+name: docs-budget
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  budget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/check-doc-budget.py

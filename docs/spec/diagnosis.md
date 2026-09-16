@@ -83,15 +83,7 @@ Translates error occurrences into catalogued diagnoses and computes the content 
 
 ## Conflicts resolved
 
-- ADR-0005 and ADR-0022 golden 3 "20 families" → 21 families (#89 item 1; technical plan §9.5).
-- ADR-0005 "reserves locale keys … falling back to Chinese" and ADR-0017/0020 two-locale layout → v1 zh-CN only, keys kept (#89 item 6).
-- ADR-0018 row `diagnosis`: `diagnose` only → adds `package(inputs)` (ADR-0036).
-- ADR-0005 package includes "raw REST responses" → included only after value scrubbing (ADR-0028 §No data values).
-- ADR-0005 package "bounded" → 50 MB with a fixed truncation order (ADR-0028 §Bound).
-- ADR-0021 unreachable platform = Kafka or Connect → Schema Registry joins (ADR-0039).
-- corpus-audit §1 puts package assembly and export audit in `diagnosis` → `orchestration` assembles and audits; `diagnosis` computes content only (ADR-0036).
-
-- Unassigned repeat-aggregation fingerprint (ADR-0005) → `diagnose` output; `workflow` aggregates occurrences (ADR-0036 `diagnosis` row).
+See [`conflicts.md`](conflicts.md#diagnosis) — provenance only; every winning ruling is already an obligation above.
 
 ## Implementer decides
 

@@ -81,11 +81,5 @@ All five names are final (reconciliation).
 
 ## Conflicts resolved
 
-- ADR-0018 row "Data validation; `plan`, `evaluate`" and pure "evaluation half" only → ADR-0036 row adds baseline, drift, and sampling plans, and makes the plan and evaluation halves pure (ADR-0036 §Modules, §Dependencies and purity).
-- ADR-0018 `preflight` row "row-count probe" and corpus-audit's proposed baseline owner → baseline is `validation`'s; row count is not a preflight probe (ADR-0036 §Modules, §Considered options).
-- ADR-0024 §Drift checks and ADR-0006 "primary key terminal value/drift" → keyset column terminal values (ADR-0037; CONTEXT.md Source baseline; TP §4 step 8).
-- ADR-0029 prototype `VerifyResult` (`error`, no `INCONCLUSIVE`) → five item states, `error` becomes `INCONCLUSIVE` (ADR-0029 §Validation vocabulary).
-- CONTEXT.md "Value checksum sample" → **Value sample**; 抽样值比对 is TP §9.3's manual deterministic sample and computes no checksum (ADR-0040).
-- TP §9.2 non-nullness "for a primary key" only → every source `NOT NULL` contract column (ADR-0040).
-- TP §9.3 sampling applied to every keyed table → a large record table is covered by 大记录值完整性 instead (ADR-0040).
-- Validation plan "frozen at contract approval" (corpus-audit item 54) → frozen into the run snapshot at run creation (ADR-0018 §Modules as amended).
+See [`conflicts.md`](conflicts.md#validation) — provenance only; every winning ruling is already an obligation above.
+

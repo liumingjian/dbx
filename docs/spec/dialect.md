@@ -112,18 +112,7 @@ No slice is blocked by another module.
 
 ## Conflicts resolved
 
-- ADR-0008 "core alone produces routing snapshot, fingerprint, signature" → `connector` derives them; the dialect only supplies requirements (ADR-0036 `connector` row).
-- ADR-0008 "target dialect renders DDL … reads and compares" → `contract` owns `renderDdl` and `prove`, fed by `ddlPlan` and `normalizeCatalog` (ADR-0036 `contract` row; ADR-0018 §Dependency direction).
-- ADR-0011 body puts the Sink settings under the contract → they belong to the target dialect (ADR-0011 status note; ADR-0018).
-- ADR-0033's settings table read as covering all reads → keyset reads only; bulk reads take an empty suffix, `2147483647`, and the 64 MiB cap (ADR-0037).
-- ADR-0001 "usable monotonic incrementing column" → keyset column, with no monotonicity requirement (ADR-0037).
-- `MAX(LENGTH(column))` → ADR-0003's byte formula (TP §6.6).
-- ADR-0018 purity list → ADR-0036's list (ADR-0036).
-- ADR-0008 step 1 infrastructure probes → suspended in v1 (ADR-0008 v1 note; ADR-0003 status).
-- Supplemental statements as a dialect entry (ADR-0026 "the same pure function … as the contract") → `target.supplementalStatements` renders; `contract.assemble` calls it from the same snapshot (ADR-0036 `contract` row).
-- `batch.max.rows` and N (ADR-0033 "the core injects") → computed from M in `connector.deriveBox`, the one normalized-configuration derivation; the dialect declares only the requirement (ADR-0036 `connector` row; obligation 22).
-
-- TP §7.1 leaves the prune/rename projection's renderer unnamed → `source.queryProjection` renders it, `connector.deriveBox` only places and fingerprints it, because the projection has two consumers and `preflight` reaches only `dialect.api` (#92; ADR-0036 §Amended by #92).
+See [`conflicts.md`](conflicts.md#dialect) — provenance only; every winning ruling is already an obligation above.
 
 ## Open items
 
