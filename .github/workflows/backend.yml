@@ -1,0 +1,39 @@
+# Runs L1 (`check`, ADR-0022) on every pull request and on every push to main.
+#
+# ADR-0022 §Who runs which rung also wants L2 on every PR and L3 on merge to main. Both need Docker
+# and a runner this project does not have yet, so they are deferred to #108 rather than silently
+# skipped — the gap is named so it is not mistaken for coverage.
+name: backend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      # The commit range the Golden-Update trailer gate judges (ADR-0022 §Explicit updates). Without
+      # it the gate skips, so CI is where the gate actually bites; a first push to a branch reports
+      # an all-zero start, which the gate reads as "no range" rather than as a failure.
+      GOLDEN_RANGE: >-
+        ${{ github.event_name == 'pull_request'
+            && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha)
+            || format('{0}..{1}', github.event.before, github.sha) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The gate needs both ends of the range and the diff between them; the default shallow
+          # checkout has neither.
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew check
