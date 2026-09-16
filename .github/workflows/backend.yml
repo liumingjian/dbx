@@ -15,8 +15,20 @@ defaults:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      # The commit range the Golden-Update trailer gate judges (ADR-0022 §Explicit updates). Without
+      # it the gate skips, so CI is where the gate actually bites; a first push to a branch reports
+      # an all-zero start, which the gate reads as "no range" rather than as a failure.
+      GOLDEN_RANGE: >-
+        ${{ github.event_name == 'pull_request'
+            && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha)
+            || format('{0}..{1}', github.event.before, github.sha) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The gate needs both ends of the range and the diff between them; the default shallow
+          # checkout has neither.
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

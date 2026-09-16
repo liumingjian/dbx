@@ -98,3 +98,6 @@ tasks.named("check") {
         logger.lifecycle("L1 (check) duration: $rendered — ADR-0022 budgets 2m; reported, not enforced.")
     }
 }
+
+// ADR-0022 §Explicit updates. Kept in its own script so one initiative at a time touches this file.
+apply(from = "gradle/golden.gradle.kts")
