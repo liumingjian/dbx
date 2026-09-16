@@ -13,6 +13,13 @@ junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "jun
 # The launcher's version line differs from junit-jupiter's and has to stay in step with it, so it
 # comes from the Spring Boot BOM, which is itself pinned by springBoot above.
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+# L2 (`seamTest`) only — ADR-0022 keeps Docker off the L1 classpath. Versions come from the Spring
+# Boot BOM (pinned by springBoot above), which manages the Testcontainers BOM, so the container
+# libraries stay in step with the Boot release rather than drifting on their own line.
+testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter" }
+testcontainers-mysql = { module = "org.testcontainers:mysql" }
+testcontainers-postgresql = { module = "org.testcontainers:postgresql" }
+testcontainers-kafka = { module = "org.testcontainers:kafka" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }

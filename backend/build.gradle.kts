@@ -98,3 +98,7 @@ tasks.named("check") {
         logger.lifecycle("L1 (check) duration: $rendered — ADR-0022 budgets 2m; reported, not enforced.")
     }
 }
+
+// L2, L3 and L4 of ADR-0022's ladder. Kept in their own script so that the tickets landing the
+// other L1 gates do not all edit the same file.
+apply(from = "gradle/rungs.gradle.kts")
