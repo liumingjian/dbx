@@ -53,12 +53,12 @@ The cross-module slice graph is acyclic. Every blocking edge points to an earlie
 
 ## Decisions still open
 
-Compiling settled every obligation but 29 items, `D-1`–`D-29`, of which `D-1`–`D-4` are now resolved (25 open). Each is listed under **Open items** in the sub-specs it affects and blocks only the slices it names there. They are grouped into eight decision tickets on map #1:
+Compiling settled every obligation but 29 items, `D-1`–`D-29`, of which `D-1`–`D-9` are now resolved (20 open). Each is listed under **Open items** in the sub-specs it affects and blocks only the slices it names there. They are grouped into eight decision tickets on map #1:
 
 | Items | Ticket |
 |---|---|
 | ~~D-1–D-4~~ **resolved** | [决策：预检发现的判定归属与 Source 投影](https://github.com/liumingjian/dbx/issues/92) |
-| D-5–D-9 | [决策：调度器的输入与预估稳定性](https://github.com/liumingjian/dbx/issues/93) |
+| ~~D-5–D-9~~ **resolved** | [决策：调度器的输入与预估稳定性](https://github.com/liumingjian/dbx/issues/93) |
 | D-10–D-13 | [决策：校验检查的定义与漂移记录](https://github.com/liumingjian/dbx/issues/94) |
 | D-14–D-18 | [决策：运行状况的取值、磁盘停机之后的走向与状态通道的数据来源](https://github.com/liumingjian/dbx/issues/95) |
 | D-19–D-21 | [决策：诊断目录的补充](https://github.com/liumingjian/dbx/issues/96) |

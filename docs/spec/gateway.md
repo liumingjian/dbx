@@ -27,7 +27,7 @@ ADR-0036 names one entry point: **executes typed SQL plans**.
 3. Supports exactly three TLS modes: TLS disabled (不启用 TLS), server authenticated (校验服务端证书), and mutual (双向证书校验). Authentication is username and password only. Tokens, Kerberos, SSH tunnels, and multi-host URLs are rejected (ADR-0006 §Connection and credential model; CONTEXT TLS mode).
 4. Never decrypts a credential or reads the master key. Secret and TLS material arrive only in `binding` (ADR-0036 §Dependencies and purity).
 5. Opens source connections read-only and never issues a write or lock statement against the source (ADR-0006 §Capability checks).
-6. Validation reads use dedicated read-only connections (TP §9.1).
+6. Validation reads use dedicated read-only connections. Every connection `gateway` opens for DBX's own work — probes, discovery, preflight, baseline, validation, drift checks, target maintenance — comes out of ADR-0002's two reserved connections per side, never out of a connector's budget; the caller enforces the at-most-two-per-endpoint limit (TP §9.1; ADR-0002 §Box demand, #93).
 7. Reports the effective server character set, timezone, TLS state, product and version, stable instance identity, and driver version. It reads them from the server and never trusts configuration text (ADR-0006 §Connection and credential model).
 8. When `binding` carries an expected instance identity, execution is refused if the observed identity differs from it, and the typed failure names the change. There is no failover fallback (ADR-0006 §Write-freeze contract and endpoint identity).
 
@@ -43,7 +43,7 @@ ADR-0036 names one entry point: **executes typed SQL plans**.
 17. Returns evidence and audit facts to the caller and writes no H2 state (ADR-0018 §Dependency direction; see Conflicts 1).
 
 **Transactions and advisory locks**
-18. Runs a transactional plan sequence in one transaction: commit on full success, roll back on any failure. No connection outlives a call (ADR-0008 §Plans; ADR-0012 §Persistence boundary).
+18. Runs a transactional plan sequence in one transaction: commit on full success, roll back on any failure. No connection outlives a call, and v1 ships no source or target JDBC connection pool: a pool would hold idle connections that ADR-0002's two-per-side reserve cannot account for (ADR-0008 §Plans; ADR-0012 §Persistence boundary; ADR-0002 §Box demand, #93).
 19. Guarded mode acquires a PostgreSQL transaction-scoped advisory lock first. It then runs the reread plans in the same transaction and compares the reread facts with the confirmed facts field by field. It runs the action plans only if they are equal. On any difference it rolls back and returns the observed facts (ADR-0006 §Rerun semantics, §Target concurrency).
 20. Guarded mode is the only way to run a plan for target creation, truncation, structural checks, target generation changes, discard, abandonment drops, and the failed-structural-proof drop (ADR-0006 §Target concurrency; ADR-0023; ADR-0026).
 21. Returns the `pg_class` OID of each table it creates, and the `pg_namespace` OID of each schema it creates, as result facts (ADR-0023; #89 item 10).
@@ -62,7 +62,7 @@ ADR-0036 names one entry point: **executes typed SQL plans**.
 ## Slices
 
 1. **`api` + `GatewayContractTest` skeleton.** Covers `execute`, the frozen binding, the three modes, typed results and failures, and evidence. Tests are red or pending until slices 2–4 land. Blocked by `dialect` slice 1 (typed SQL plan type).
-2. **Binding and connection-check probe** (Obligations 1–8, 22). Blocked by slice 1; `dialect` slice 5 (`source.connectionSemantics`); D-8 (pooling vs budgets).
+2. **Binding and connection-check probe** (Obligations 1–8, 22). Blocked by slice 1; `dialect` slice 5 (`source.connectionSemantics`).
 3. **Plan execution** (Obligations 9–17). Covers parameter and result checks, timeout classes, cancellation with termination confirmation, and failure classification. Blocked by slice 2.
 4. **Transactions, advisory-lock guard, probes** (Obligations 18–21, 23). Blocked by slice 3.
 
@@ -78,7 +78,3 @@ ADR-0036 names one entry point: **executes typed SQL plans**.
 - Fetch strategy for DBX's own source reads: bounded in DBX's heap; value-affecting parameters equal `source.connectionSemantics` (ADR-0033; ADR-0006).
 - How the allowed operation kinds reach `execute`: caller-supplied, never by depending on `workflow` (ADR-0008 §Plans; ADR-0036).
 - The closed set of timeout classes and their other defaults: preflight stays configurable, validation 30 min, every timeout maps to 查询超时 (ADR-0003; TP §9.1).
-
-## Open items
-
-- **D-8** (T2): whether DBX's own JDBC connections, and any pooling, count against scheduling's connection budgets (ADR-0002). Blocks slice 2.

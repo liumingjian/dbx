@@ -15,7 +15,7 @@ We decided that every box has a heap reservation derived from its own connector 
 The settings below are part of the execution signature.
 
 - **Ordinary boxes, Source producer.** `buffer.memory=4194304` (4 MiB), `batch.size=262144`, `linger.ms=10`, `enable.idempotence=true`, `max.in.flight.requests.per.connection=5`, `acks=all`, `compression.type=zstd`. Idempotence keeps per-partition order at five in-flight requests, so the small buffer does not cost the ordering that `max.in.flight=1` bought. Ordinary rows are at most 1 MiB (ADR-0003), so 4 MiB still fits the largest record.
-- **Ordinary boxes, Sink consumer.** `fetch.max.bytes=8388608`, `max.partition.fetch.bytes=2097152`. `max.poll.records` is `clamp(64 MiB ÷ M, 1, 500)` rounded down to a power of two, where M is the largest exact row byte length across the box's tables from ADR-0003's preflight. Narrow tables keep 500. The power-of-two rounding limits how finely this splits execution signatures.
+- **Ordinary boxes, Sink consumer.** `fetch.max.bytes=8388608`, `max.partition.fetch.bytes=2097152`. `max.poll.records` is `clamp(64 MiB ÷ M, 1, 500)` rounded down to a power of two, where M is the largest exact row byte length across the box's tables from ADR-0003's preflight. The rounding runs first and the clamp second ([#93](https://github.com/liumingjian/dbx/issues/93)); that order is why narrow tables keep 500 rather than falling to 256. The power-of-two rounding limits how finely this splits execution signatures.
 - **Large record tables.** ADR-0003's settings stand: 128 MiB `buffer.memory`, 16 KiB `batch.size`, `max.in.flight.requests.per.connection=1`, Sink `max.poll.records=1` with 25/50 MiB fetch limits. Their record count is already bounded by row size.
 - **Source read-ahead** (`batch.max.rows`, cursor fetch, `max.buffer.size`) is decided by [ADR-0033](0033-bounded-source-reads-cursor-fetch-and-keyset-chunks.md), which bounds it in bytes by M: `read-ahead = (batch.max.rows + max.buffer.size) × M × X`.
 
@@ -38,7 +38,7 @@ Constants, calibrated by #78 and versioned like the 25 MiB transport allowance a
 | B, worker base overhead | 512 MiB | calibrated by #78 |
 | E for large-record boxes | 3 | 1.5 MiB rows keep a Struct `byte[]`, a serialized `byte[]` and a compressed batch |
 
-With these values a narrow ordinary box reserves about 512 MiB, and a large-record box about 1 GiB. [#78](https://github.com/liumingjian/dbx/issues/78) calibrates the constants at the decided settings. It passes only if, for every shape, the measured peak heap per box is at or below that box's R.
+With these values a large-record box reserves about 1 GiB. `R_narrow`, the narrow-ordinary-box reservation that #89 item 2 divides the heap by to get computed maximum concurrency, is a **versioned constant of 512 MiB** ([#93](https://github.com/liumingjian/dbx/issues/93)). The formula evaluated at the narrow anchor — M = 1 KiB, `max.poll.records` = 500, read-ahead at its 8 MiB cap — gives about 426 MiB; 512 MiB is that rounded up for headroom, and it is the value the tier arithmetic below assumes. `R_narrow` sets the box target size only. Admission itself always uses each box's own R, so the rounding costs no safety; it only packs boxes slightly larger. [#78](https://github.com/liumingjian/dbx/issues/78) calibrates the constants at the decided settings. It passes only if, for every shape, the measured peak heap per box is at or below that box's R.
 
 ## Deployment memory tiers
 

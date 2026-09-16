@@ -218,7 +218,7 @@ _Avoid_: Queue snapshot, live packing
 _中文_: 调度计划
 
 **Rolling admission**:
-Starting the next eligible box whenever budgets permit; no wave barrier.
+Starting the next eligible box whenever budgets permit; no wave barrier. A blocked head-of-line box reserves cumulative capacity so it cannot starve (ADR-0002).
 _Avoid_: Batch execution, strict waves
 _中文_: 滚动准入
 
