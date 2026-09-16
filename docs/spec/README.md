@@ -49,18 +49,18 @@ The cross-module slice graph is acyclic. Every blocking edge points to an earlie
 
 - **Takeable at once**: slice 1 of every module whose slice 1 has no cross-module blocker (`dialect`, `connection`, `condition`, `scheduling`, `workflow`, `web`, `release`), and every `frontend` slice in order. `frontend` is mock-backed throughout and blocks `web` slices 2–6 through its slice 3 (the contract port).
 - **Critical path**: `dialect` slices unblock most of the backend. `orchestration` slices point at the providers' real slices, for example its run driver at `connector` slice 4 (the Connect REST client).
-- Each sub-spec's Slices section holds the exact edges; a slice also waits on any `D-n` item it names (below).
+- Each sub-spec's Slices section holds the exact edges; no slice waits on a `D-n` item any more (below).
 
-## Decisions still open
+## Decisions settled
 
-Compiling settled every obligation but 29 items, `D-1`–`D-29`, of which `D-1`–`D-13` and `D-19`–`D-29` are now resolved (5 open). Each is listed under **Open items** in the sub-specs it affects and blocks only the slices it names there. They are grouped into eight decision tickets on map #1:
+Compiling settled every obligation but 29 items, `D-1`–`D-29`. **All 29 are now resolved**, `D-25`–`D-26` last; every sub-spec's **Open items** section now reads None, and no slice waits on a `D-n`. They were grouped into eight decision tickets on map #1:
 
 | Items | Ticket |
 |---|---|
 | ~~D-1–D-4~~ **resolved** | [决策：预检发现的判定归属与 Source 投影](https://github.com/liumingjian/dbx/issues/92) |
 | ~~D-5–D-9~~ **resolved** | [决策：调度器的输入与预估稳定性](https://github.com/liumingjian/dbx/issues/93) |
 | ~~D-10–D-13~~ **resolved** | [决策：校验检查的定义与漂移记录](https://github.com/liumingjian/dbx/issues/94) |
-| D-14–D-18 | [决策：运行状况的取值、磁盘停机之后的走向与状态通道的数据来源](https://github.com/liumingjian/dbx/issues/95) |
+| ~~D-14–D-18~~ **resolved** | [决策：运行状况的取值、磁盘停机之后的走向与状态通道的数据来源](https://github.com/liumingjian/dbx/issues/95) |
 | ~~D-19–D-21~~ **resolved** | [决策：诊断目录的补充](https://github.com/liumingjian/dbx/issues/96) |
 | ~~D-22–D-24~~ **resolved** | [决策：备份密钥、恢复与回退路径](https://github.com/liumingjian/dbx/issues/97) |
 | ~~D-25–D-26~~ **resolved** | [决策：安装时的内存档位](https://github.com/liumingjian/dbx/issues/98) |

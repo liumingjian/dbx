@@ -83,3 +83,7 @@ Runs the environment check (环境自检) E0–E8: it probes the host, evaluates
 
 - E2 readiness budget and E7 headroom threshold: bounded values in the release configuration, shown as the item's expected value (ADR-0027 §Evidence).
 - How E5 reads container-visible memory: never through `docker.sock` or a host agent (ADR-0027).
+
+## Open items
+
+None. D-25 is settled in [#98](https://github.com/liumingjian/dbx/issues/98): the ≥16 GiB tier's threshold is 16 GiB of MemTotal, and it lives in obligation 15.

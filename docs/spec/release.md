@@ -104,3 +104,7 @@ All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (
 
 - Schema Registry and DBX heap flags: within ADR-0031's RSS budgets (0.75 / 1 GiB), set from `DBX_MEMORY_TIER`.
 - R4 values (replication factor, `min.insync.replicas`, retention, converter settings): satisfiable by the single-node Kafka and observable via AdminClient or service REST (#89 item 4; ADR-0035).
+
+## Open items
+
+None. D-23 and D-24 are settled in [#97](https://github.com/liumingjian/dbx/issues/97). D-25 and D-26 are settled in [#98](https://github.com/liumingjian/dbx/issues/98): the tier thresholds are 16 and 8 GiB of MemTotal, and MemTotal below 8 GiB is refused by I1.
