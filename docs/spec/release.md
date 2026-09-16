@@ -105,5 +105,7 @@ All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (
 
 ## Open items
 
+D-23 and D-24 are settled in [#97](https://github.com/liumingjian/dbx/issues/97).
+
 - **D-25** (T7): the MemTotal threshold of the ≥16 GiB tier (ADR-0031 16 GiB vs ADR-0035's 18 GiB advice). Blocks slice 3.
 - **D-26** (T7): below the 8 GiB tier, install refuses, or installs and E5 concludes 不满足. Blocks slice 3.

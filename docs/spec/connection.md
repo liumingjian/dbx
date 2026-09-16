@@ -103,4 +103,4 @@ Consumers: `workflow` slice 8 waits on slice 3; `orchestration` slice 2 waits on
 
 ## Open items
 
-None.
+None. D-22 and D-23 are settled in [#97](https://github.com/liumingjian/dbx/issues/97).

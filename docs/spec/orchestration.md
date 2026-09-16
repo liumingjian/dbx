@@ -14,6 +14,7 @@ All effectful; each command takes an idempotency key (ADR-0004). Names are final
 - `discardRun`, `remigrate`, `copyAsDraft` → draft id; `closeTask` (收口, ADR-0040)
 - `projectedAbandonmentList(draftId)`*, `abandonmentList(taskId)`, `abandonTask`, `retryAbandon`
 - `downloadSupplementalSql(taskId)`*, `packageManifest(scope)`*, `exportPackage(scope)`, `recheckEnvironment`
+- `latestCondition()`* → the latest `ConditionOutcome` held in memory; read-only, so no idempotency key
 
 Internal: recovery, pollers, condition loop, cleanup-retry loop.
 
@@ -63,7 +64,9 @@ Internal: recovery, pollers, condition loop, cleanup-retry loop.
 26. Connect restarted → fail its boxes at once; replant the marker (ADR-0032).
 27. Second restart or two consecutive zero-output 卡死 boxes → record the pause; after continue one more strike pauses again; counters come from persisted facts, never reset (ADR-0039, ADR-0032).
 28. `continueAdmission` closes the pause (ADR-0039).
-28a. At ≥ 90% Kafka disk or < 10 GB free, stop producing Sources (ADR-0002; ADR-0021 §Gates); the aftermath is D-17.
+28a. At ≥ 90% Kafka disk or < 10 GB free, stop producing Sources (ADR-0002; ADR-0021 §Gates). Boxes already running keep running, and no box fails for this reason ever.
+28b. Admission resumes on the first fold whose reading is back under the gate, with no separate resume threshold. If no box is running and the disk is still at the stop level, the run keeps waiting: the banner, the 待回收占用 entry into 丢弃, and write-freeze expiry are the only exits (ADR-0021 §Gates).
+28c. The condition loop holds the latest `ConditionOutcome` in memory, and `latestCondition()` serves it without re-gathering or any external call. Before the first fold after startup it answers 无法判定 with the reason *尚未取得读数*. The outcome is never persisted; only the change entry and the pause are (ADR-0021 §Consequences; ADR-0036 `workflow` row).
 
 **E. Condition and environment inputs**
 29. Every 10 s: `kafkaFacts`, `sampleReadings`, `workflow` facts → `fold` → record changes and pauses (ADR-0021).
@@ -108,7 +111,7 @@ L1 on stubbed `api`s: `OrchestrationContractTest`, `ArchitectureTest` (A, B, E, 
 3. 7–13; after 2. Needs `environment` 1; `validation` 4; `scheduling` 2; `connector` 2; `gateway` 4; `workflow` 6, 7, 8.
 4. 14–16; after 3. Needs `contract` 3, 5; `dialect` 8.
 5. 17–24; after 4. Needs `scheduling` 3, 6; `connector` 3–7; `diagnosis` 3, 4; `validation` 3, 5; `workflow` 9.
-6. D, E; after 5. Needs `condition` 2, 3; `environment` 3; D-17, D-18.
+6. D, E; after 5. Needs `condition` 2, 3; `environment` 3.
 7. F; after 5.
 8. H; after 6, 7. Needs `contract` 7; 40a and 40b need `workflow` 8.
 9. 42–44; after 5.
@@ -128,5 +131,4 @@ L1 on stubbed `api`s: `OrchestrationContractTest`, `ArchitectureTest` (A, B, E, 
 - Unowned in ADR-0036 → here, the only side-effect sequencer (ADR-0018): the unreachable timer, the 90% / 10 GB stop, validation slots, credential destruction, the freeze-limit warning; no fixed pre-expiry lead time (ADR-0024).
 
 ## Open items
-- **D-17** (T4): after the 90% / 10 GB stop, does a box wait, fail, or resume? Blocks slice 6.
-- **D-18** (T4): does `web`'s status channel read a persisted outcome or a use case here? Blocks slice 6.
+None. D-20 is settled in [#96](https://github.com/liumingjian/dbx/issues/96); D-17 and D-18 in [#95](https://github.com/liumingjian/dbx/issues/95) (obligations 28a–28c).

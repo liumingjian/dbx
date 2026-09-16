@@ -53,7 +53,7 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 25. `table_migration_unit`, `box`, `validation_execution` and `validation_item`, `error_occurrence` and `diagnosis`, `timeline_event`, `stage_attempt`, and `cleanup_request`, with fields per ADR-0004 §Aggregate and ADR-0005 §Occurrence. A unit-scoped `error_occurrence` also records the unit's 阶段 as at the occurrence, so the interface reads that 阶段 as a fact instead of deriving one from the diagnosis classification phase (ADR-0030, [#96](https://github.com/liumingjian/dbx/issues/96)). A zero-row unit has no box (ADR-0004 §Table state).
 26. `target_lease`: key is actual server identity + database + case-sensitive schema.table. Atomic over the whole scope; never expires by time (ADR-0006 §Target concurrency). An abandoning task keeps holding it (ADR-0023).
 27. `target_generation`: target key, owning run, and `pg_class` OID (ADR-0006 §Cancellation; ADR-0023).
-28. `condition_change`: time, from, to, and reason, bounded to about the last 1,000 (ADR-0021 §History). Installation-package export audit (time, scope, checksum) sits beside it; run-package exports go on the run timeline (ADR-0028 §Audit).
+28. `condition_change`: time, from, to, and reason, bounded to about the last 1,000 (ADR-0021 §History). There is no latest-condition row: the outcome is an observation of now, kept in memory by `orchestration` (ADR-0021 §Consequences; #95). Installation-package export audit (time, scope, checksum) sits beside it; run-package exports go on the run timeline (ADR-0028 §Audit).
 29. No evidence retention and no task deletion (#89 item 9; ADR-0023 §Records).
 29a. `startup_check`: only the latest startup environment-check conclusions (ADR-0027 §Evidence).
 29b. Estimate history: finished-transfer samples per source and ceiling observations per target, each with its estimate-basis fingerprint (ADR-0038).
@@ -90,7 +90,7 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 4. **Connections**: `database_connection`, `credential_version`, `connection_check`, tombstone ledger. Obligations 16–19. Needs 3.
 5. **Drafts and tasks**: draft, task, task write freeze, split snapshot, schema-created fact, abandonment records. Obligations 20–23b. Needs 2, 3.
 6. **Runs and execution records**: run snapshot, units, boxes, timeline, stage attempts, occurrences, validation, admission pause. Obligations 24, 25, 29b–29d, 33. Needs 2, 5.
-7. **Target safety, cleanup, condition**: leases, generations, cleanup requests, `condition_change`, export audit, progress coalescing. Obligations 5, 26–28, 29a. Needs 6; D-18.
+7. **Target safety, cleanup, condition**: leases, generations, cleanup requests, `condition_change`, export audit, progress coalescing. Obligations 5, 26–28, 29a. Needs 6.
 8. **Backups and restore**: obligations 30–31f. Needs 3; blocked by `connection` slice 3.
 9. **Release facts**: rollback-window open/close, any-nonterminal-run query, release version on the run. Obligations 15 (window), 32. Needs 6.
 
@@ -116,5 +116,4 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 
 ## Open items
 
-- **D-18** (T4): is the latest condition outcome persisted for `web`? Blocks slice 7.
-
+None. D-18 is settled in [#95](https://github.com/liumingjian/dbx/issues/95): the latest outcome is not persisted. D-22 and D-23 are settled in [#97](https://github.com/liumingjian/dbx/issues/97).
