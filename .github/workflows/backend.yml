@@ -1,0 +1,25 @@
+# Runs L1 (`check`, ADR-0022) on every pull request and on every push to main. L2, L3 and L4 need
+# Docker and a runner this project does not have yet; wiring them is a named follow-up ticket, not a
+# gap in this one.
+name: backend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew check

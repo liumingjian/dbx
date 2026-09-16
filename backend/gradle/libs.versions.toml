@@ -1,0 +1,19 @@
+# The single place every backend dependency version is declared. The release bill of materials
+# (release sub-spec R1) reads versions from here rather than from build scripts.
+
+[versions]
+springBoot = "3.5.3"
+springDependencyManagement = "1.1.7"
+junit = "5.12.2"
+
+[libraries]
+spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web", version.ref = "springBoot" }
+spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc", version.ref = "springBoot" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+# The launcher's version line differs from junit-jupiter's and has to stay in step with it, so it
+# comes from the Spring Boot BOM, which is itself pinned by springBoot above.
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
+spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "springDependencyManagement" }
