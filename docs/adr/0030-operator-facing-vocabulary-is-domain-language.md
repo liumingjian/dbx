@@ -9,8 +9,24 @@ DBX persists each value as an enum literal. A literal is an identifier that happ
 ## What never reaches the operator
 
 - **Box (箱).** A box is an internal scheduling detail. Unit states named after it are presented as 等待调度 and 因关联失败而阻塞.
-- **Diagnosis classification phase (诊断分类阶段).** Its values (ADR-0005, plus `ENVIRONMENT_CHECK` from ADR-0027) are cut finer than the workflow and named after execution-platform work the operator does not run. `CONNECTOR_PROVISIONING` names connector work, which the interface never shows, and the rest would present a second, differently cut phase vocabulary beside 阶段 without telling the operator anything actionable. Where DBX must say when something happened, it shows the unit's own 阶段, which every value maps into. `ENVIRONMENT_CHECK` belongs to no unit and is shown as the 环境自检 item it concerns. The classification stays in the diagnostic evidence for support.
+- **Diagnosis classification phase (诊断分类阶段).** Its values (ADR-0005, plus `ENVIRONMENT_CHECK` from ADR-0027) are cut finer than the workflow and named after execution-platform work the operator does not run. `CONNECTOR_PROVISIONING` names connector work, which the interface never shows, and the rest would present a second, differently cut phase vocabulary beside 阶段 without telling the operator anything actionable. Where DBX must say when something happened, it shows the unit's own 阶段, which every value maps into. That 阶段 is a recorded fact, never a translation: `workflow` stores the unit's 阶段 as at the moment of the error occurrence, and the interface reads it. No screen and no pure module re-derives a value that already has a true one; a static table asked to stand in for it could only disagree with the timeline ([#96](https://github.com/liumingjian/dbx/issues/96)). `ENVIRONMENT_CHECK` belongs to no unit and is shown as the 环境自检 item it concerns. A diagnosis scoped to a box or to the run (准入已暂停) shows at its own scope and borrows no 阶段. The classification stays in the diagnostic evidence for support.
 - **Kafka Connect and Kafka as separate root-cause domains.** They present as one 迁移平台 domain, because telling them apart is DBX's job, not the operator's, and surfacing the split would require understanding the platform. The specific domain stays in the diagnostic evidence, so the audit record loses nothing. 迁移平台 must stay distinct from DBX 自身: one names the machinery DBX drives, the other DBX's own logic (ADR-0021).
+
+### Every classification phase lies inside one unit 阶段
+
+This is an invariant the catalog must satisfy, checked once by contract test, not a function called at runtime. It is what makes the recorded 阶段 a faithful answer to "when did this happen".
+
+| 诊断分类阶段 | 落在单元 阶段 |
+| --- | --- |
+| `CONNECTION`, `METADATA_READ` | 已读取源结构 |
+| `PREFLIGHT` | 预检中 |
+| `TARGET_PREPARATION`, `CONTRACT_CHECK` | 创建目标表中 |
+| `CONNECTOR_PROVISIONING`, `TRANSFER`, `COMPLETION_DETECTION` | 传输中 |
+| `VALIDATION` | 校验中 |
+| `CLEANUP` | 已结束 |
+| `ENVIRONMENT_CHECK` | belongs to no unit |
+
+The mapping is one-way. 等待批准, 已批准待执行 and 等待调度 have no classification phase facing them, because no diagnosed failure happens while a unit sits in them.
 
 ## Wording choices that encode a distinction
 

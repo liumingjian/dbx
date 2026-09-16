@@ -292,6 +292,11 @@ A terminal box diagnosis: no progress past the hard threshold while connectors l
 _Avoid_: Slow, failed, timed out
 _中文_: 卡死
 
+**Over time limit**:
+A terminal box diagnosis: the box was still progressing when it reached the hard run limit (ADR-0001).
+_Avoid_: 卡死, 超时, 停滞
+_中文_: 超出 24 小时上限
+
 ### Estimates
 
 **Duration estimate**:
