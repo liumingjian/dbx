@@ -53,7 +53,7 @@ The operator console: renders `web`'s facts and sends commands; computes no esti
 22. An open 准入已暂停 shows the run as 需要人工处理, with its reason and 「继续迁移」 beside 「取消运行」 (ADR-0039).
 23. 取消 offers 收尾取消. When units will not finish before the freeze expires, the console states the choice: extend the freeze, or those units fail at expiry (ADR-0024).
 24. 校验报告 keeps technical results, preflight exclusions, and dispositions in separate panes. After a disposition, the original 无法判定/未通过 stays visible beside 完成，已接受风险 (ADR-0029; #64 Gap 1).
-25. 日志 and the evidence drawer show error cards in the order what / where / affected / one action. Raw detail collapsed; an unknown diagnosis offers export. 结构证明 appears only on the unit (ADR-0005 §Operator presentation; ADR-0026; ADR-0028).
+25. 日志 and the evidence drawer show error cards in the order what / where / affected / one action. The 阶段 on a card is the unit 阶段 `workflow` recorded on the occurrence, read as a fact; the diagnosis classification phase is never shown or translated, a box- or run-scoped diagnosis (准入已暂停) shows at its own scope with no 阶段, and an `ENVIRONMENT_CHECK` diagnosis shows as its 环境自检 item (ADR-0030, [#96](https://github.com/liumingjian/dbx/issues/96)). Raw detail collapsed; an unknown diagnosis offers export. 结构证明 appears only on the unit (ADR-0005 §Operator presentation; ADR-0026; ADR-0028).
 26. 运行快照 holds the frozen DDL per table, the environment check conclusions, and run package export (ADR-0026; ADR-0027; ADR-0028).
 27. 重新迁移 creates a draft pre-scoped to failed, undetermined, cancelled-stopped, never-run, and drifted tables. The draft enters stage 3 (ADR-0024; ADR-0020).
 
@@ -94,7 +94,7 @@ Mock-backed; no cross-module blocker. Slice 3 blocks `web` slices 2–6. Real-ba
 9. **Stage 4 drawer** (←8): obligation 16.
 10. **Stage 5** (←9): obligation 17.
 11. **Task list and 运行监控** (←3,4,5; D-28, D-29): run switcher, obligations 20–23.
-12. **Run tabs and evidence** (←11; D-21): obligations 21, 24–26.
+12. **Run tabs and evidence** (←11): obligations 21, 24–26.
 13. **Task header** (←11,10; D-28): obligations 18–19, 27.
 
 ## Conflicts resolved
@@ -116,4 +116,3 @@ Mock-backed; no cross-module blocker. Slice 3 blocks `web` slices 2–6. Real-ba
 - **D-27** (T8): where General preferences (timezone, confirm-dangerous, page size) are stored (ADR-0016). Blocks slice 7.
 - **D-28** (T8): where 重新迁移, 复制为迁移草稿, and the remaining 整库冻结承诺 time sit (#89 item 8). Blocks slices 11, 13.
 - **D-29** (T8): wording for live heap usage in 运行监控 (ADR-0031 §Operator wording). Blocks slice 11.
-- **D-21** (T5): the unit 阶段 shown for a diagnosis's classification phase. Blocks slice 12.

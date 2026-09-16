@@ -42,9 +42,13 @@ Translates error occurrences into catalogued diagnoses and computes the content 
 17. Twenty-one `EXTERNAL_TRANSLATION` families ship: ADR-0005's twenty plus MySQL 1114 源库临时空间耗尽 (`SOURCE_DATABASE`, `TRANSFER`) (ADR-0005 §Rule catalog, #89 item 1).
 18. Family 14 (oversize) names the transport boundary that rejected the record, the serialized size when available, and the keep-freeze / inspect-lengths / new-run action (ADR-0003, runtime-oversize paragraph).
 19. Family 21 says DBX reads in chunks using up to 64 MiB of source temporary space per connection, and tells the DBA to check the InnoDB temporary tablespace and data-directory free disk; not folded into family 1 (ADR-0033, #89 item 1).
-20. Structured codes in the catalog cover: box `STUCK`; preflight conclusions; the target-contract reverse-check difference (coordinate, expected, actual, violated invariant); validation results; execution platform unreachable (Kafka, Connect or Schema Registry); 迁移平台在传输中重启; 迁移平台无法启动新的读取; and one code per environment-check item E0–E8 under `ENVIRONMENT_CHECK` (ADR-0005 §Decision, ADR-0026, ADR-0021, ADR-0039, ADR-0032, ADR-0027, #89 item 5).
+20. Structured codes in the catalog cover: box `STUCK`; box 超出 24 小时上限; preflight conclusions; the target-contract reverse-check difference (coordinate, expected, actual, violated invariant); validation results; execution platform unreachable (Kafka, Connect or Schema Registry); 迁移平台在传输中重启; 迁移平台无法启动新的读取; and one code per environment-check item E0–E8 under `ENVIRONMENT_CHECK` (ADR-0005 §Decision, ADR-0026, ADR-0021, ADR-0039, ADR-0032, ADR-0027, #89 item 5).
+20b. 准入已暂停 has no code of its own: it is a state the run holds, not an occurrence, and a diagnosis carries exactly one primary phase while the pause belongs to no unit or box. Its two trigger codes 迁移平台在传输中重启 and 迁移平台无法启动新的读取 are its catalogued form (ADR-0039 §No catalog code, [#96](https://github.com/liumingjian/dbx/issues/96)).
+20c. 超出 24 小时上限 is classified `TRANSFER` / `PLATFORM` at box scope: the rule that stopped the box is DBX's own and DBX cannot prove the source was slow. Its message states that transfer passed the 24 h limit and DBX stopped the box, names the box's tables as affected, and recommends keeping topics and target data and re-running with a smaller scope. It never reuses 卡死 or 超时, which name a different fact (ADR-0001, ADR-0030, [#96](https://github.com/liumingjian/dbx/issues/96)).
 21. Structured and fallback codes do not count toward the 21 families (ADR-0005 §Decision, ADR-0027 §Diagnoses).
 22. A diagnosis's message answers, in order: what happened, where, what is affected, one recommended action (ADR-0005 §Operator presentation).
+
+22b. The classification phase is never rendered to the operator and `diagnose` output carries no unit 阶段: the 阶段 an error card shows is the fact `workflow` recorded on the occurrence. Every catalogued phase must lie inside the unit 阶段 ADR-0030 maps it to (ADR-0030 §Every classification phase, [#96](https://github.com/liumingjian/dbx/issues/96)).
 
 **Diagnostic package content**
 23. An installation package holds the latest startup environment-check conclusions, a fresh check taken at export, the runtime condition change record, orphan `dbx-` resources, and versions (ADR-0028 §Scopes, ADR-0021).
@@ -63,6 +67,7 @@ Translates error occurrences into catalogued diagnoses and computes the content 
 - 4–12: L1 `DiagnosisContractTest` (classification, scope-by-routing, precedence, wrapper, conflict, unknown copy, scrubbed evidence).
 - 13–16: L1 `DiagnosisCatalogContractTest` with a malformed-catalog fixture per rejection, and a zh-CN-only key check.
 - 17–22: L1 golden set `error-translation` (ADR-0022 golden 3): per family positive, negative, overlap and redaction fixtures → code and explanation; structured codes as fixed inputs. L3 `e2eTest` exercises all 21 families (technical plan §15.3).
+- 20b, 20c, 22b: L1 `DiagnosisCatalogContractTest` asserts no code exists for 准入已暂停, that 超出 24 小时上限 is `TRANSFER` / `PLATFORM` at box scope and shares no wording with `STUCK`, and that every catalogued classification phase lies inside the unit 阶段 of ADR-0030's table; `DiagnosisContractTest` asserts `diagnose` output carries no 阶段.
 - 23–31: L1 `DiagnosticPackageContractTest` per scope, planted-value scrubber fixtures, manifest completeness, a 50 MB truncation case, version fields.
 
 ## Slices
@@ -70,7 +75,7 @@ Translates error occurrences into catalogued diagnoses and computes the content 
 1. **api + contract skeleton** — `diagnosis.api` types and both entry points as stubs, README, empty `DiagnosisContractTest` and `DiagnosticPackageContractTest`, ArchUnit purity green (1–3). Blocks: none.
 2. **Catalog and `validateCatalog`** — JSON resource schema, loader from the classpath, validation (13–16). Blocks on 1.
 3. **Classification and matching engine** — precedence, wrapper rule, conflict and unknown fallbacks, routing-snapshot scope, normalized fingerprint (4–12). Blocks on 2; `connector` slice 1 (routing-snapshot type).
-4. **Structured codes** — catalog entries and mapping for every item of obligation 20, `ENVIRONMENT_CHECK` codes included (20, 21). Blocks on 3; D-19, D-20, D-21. Inputs are this module's own records.
+4. **Structured codes** — catalog entries and mapping for every item of obligation 20, `ENVIRONMENT_CHECK` codes included (20, 20b, 20c, 21, 22b). Blocks on 3. Inputs are this module's own records.
 5. **External families 1–11** with golden fixtures (17, 22). Blocks on 3.
 6. **External families 12–21** with golden fixtures, including oversize and 1114 text (17–19, 22). Blocks on 5.
 7. **Value scrubber** — whole-segment placeholder, identifier pass-through (12, 27, 28). Blocks on 1.
@@ -94,6 +99,4 @@ Translates error occurrences into catalogued diagnoses and computes the content 
 
 ## Open items
 
-- **D-19** (T5): does admission paused get a catalog code (ADR-0005 header) or stay a run fact with a reason (ADR-0039)? Blocks slice 4.
-- **D-20** (T5): code and wording for a box that hits the 24 h limit (ADR-0001). Blocks slice 4.
-- **D-21** (T5): how each classification phase maps onto the unit's 阶段 (ADR-0030), and who owns the mapping. Blocks slice 4; `frontend` slice 12.
+- None. D-19, D-20 and D-21 were settled by [#96](https://github.com/liumingjian/dbx/issues/96) and live in obligations 20, 20b, 20c and 22b.

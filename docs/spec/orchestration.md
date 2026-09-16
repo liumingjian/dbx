@@ -53,7 +53,7 @@ Internal: recovery, pollers, condition loop, cleanup-retry loop.
 18. Per box: decrypt and `projectSecret`, create topics, start Sink, prove healthy, start Source; delete Source at read complete, Sink at write complete, then validate (ADR-0001, 0010, 0006).
 19. 5 s status poll: `diagnose`, persist status and trace before deletion, check the marker; 10 s progress (ADR-0005, ADR-0004 §Timeline).
 20. Attribute failures via the routing snapshot: unit `FAILED`, or members `BLOCKED_BY_BOX_FAILURE`; a box failure stops that box only, never retried (ADR-0005, ADR-0002).
-21. 卡死 or the 24 h limit: delete the connectors, keep topics and target (ADR-0001).
+21. 卡死 or the 24 h limit: delete the connectors, keep topics and target (ADR-0001). The two are distinct box failures and carry distinct structured diagnoses, `STUCK` and 超出 24 小时上限 (`TRANSFER`, `PLATFORM`); `connector.judge` reports which boundary was crossed and `diagnosis` owns both codes ([#96](https://github.com/liumingjian/dbx/issues/96)).
 22. Validate only inside a valid freeze, ≤ 2 DBX connections per endpoint per run (ADR-0002's reserve, not validation-only; #93); on success delete the topic, then the subject once it is absent (TP §9.1, ADR-0004).
 23. `runSampling` and `recordDisposition` never rewrite an item (TP §9.3–9.4).
 24. Remaining time is `predict` on observed rates; log each 无法预估 switch; store each transfer sample and ceiling observation in `workflow` (ADR-0019, ADR-0038).
@@ -105,7 +105,7 @@ L1 on stubbed `api`s: `OrchestrationContractTest`, `ArchitectureTest` (A, B, E, 
 2. B, `supportedPairs`, `contractRendering`. Needs `connection` 2; `gateway` 2, 3; `dialect` 2, 5; `preflight` 2; `contract` 2, 3; `scheduling` 4; `workflow` 4, 5.
 3. 7–13; after 2. Needs `environment` 1; `validation` 4; `scheduling` 2; `connector` 2; `gateway` 4; `workflow` 6, 7, 8.
 4. 14–16; after 3. Needs `contract` 3, 5; `dialect` 8.
-5. 17–24; after 4. Needs `scheduling` 3, 6; `connector` 3–7; `diagnosis` 3; `validation` 3, 5; `workflow` 9; D-20.
+5. 17–24; after 4. Needs `scheduling` 3, 6; `connector` 3–7; `diagnosis` 3, 4; `validation` 3, 5; `workflow` 9.
 6. D, E; after 5. Needs `condition` 2, 3; `environment` 3; D-17, D-18.
 7. F; after 5.
 8. H; after 6, 7. Needs `contract` 7.
@@ -128,4 +128,3 @@ L1 on stubbed `api`s: `OrchestrationContractTest`, `ArchitectureTest` (A, B, E, 
 ## Open items
 - **D-17** (T4): after the 90% / 10 GB stop, does a box wait, fail, or resume? Blocks slice 6.
 - **D-18** (T4): does `web`'s status channel read a persisted outcome or a use case here? Blocks slice 6.
-- **D-20** (T5): the 24 h limit's code. Blocks slice 5.

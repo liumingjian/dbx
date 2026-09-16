@@ -65,7 +65,7 @@ No other module's side effects: `orchestration` decrypts through `connection.dec
 27. `RUNNING` status and Source-offset REST data never make a completion verdict (ADR-0001, ADR-0009).
 28. No progress while healthy: `SUSPECTED_STUCK` at 2 min, `STUCK` at 10 min, flagging a zero-record box for ADR-0032's two-box rule (ADR-0001, ADR-0032 §Wedges).
 29. Time while Kafka, Connect, or SR is unreachable, or while a task fails on the database, accrues no stuck time (ADR-0021, ADR-0039).
-30. A box running 24 h is `OVER_TIME_LIMIT` (ADR-0001 bulk paragraph).
+30. A box running 24 h is `OVER_TIME_LIMIT` (ADR-0001 bulk paragraph). `judge` reports the fact only; the structured code 超出 24 小时上限 and its wording are `diagnosis`'s ([#96](https://github.com/liumingjian/dbx/issues/96)).
 31. `judge` reads no clock, HTTP client, or `JdbcTemplate`; time arrives as input (ADR-0018 §Enforcement, ADR-0036).
 
 ## Verification
@@ -111,4 +111,3 @@ No other module's side effects: `orchestration` decrypts through `connection.dec
 
 ## Open items
 
-- **D-20** (T5): the diagnosis code for `OVER_TIME_LIMIT` (ADR-0001) is `diagnosis`'s; `judge` only reports it.
