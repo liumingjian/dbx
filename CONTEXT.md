@@ -46,6 +46,11 @@ A task's verdict from each table's latest unit result and the closing drift chec
 _Avoid_: Migration task status, overall success, 全部完成, 整库完成
 _中文_: 整库结论
 
+**Task closing**:
+The operator's act of ending a task: it runs the closing drift check and produces the task conclusion, and only then may the task write freeze be released; DBX prompts but never closes (ADR-0040).
+_Avoid_: Abandonment, 废弃, 完成, 结束运行
+_中文_: 收口
+
 **Table migration phase**:
 Where a unit stands in execution (ADR-0004), never how it turned out.
 _Avoid_: Status, step
@@ -368,6 +373,11 @@ An operator's audited decision on a failed or inconclusive result; never a pass.
 _Avoid_: Manual pass, overridden result
 _中文_: 校验处置
 
+**Drift check**:
+A task-scoped, immutable reread of every already-migrated table against its original source baseline, before a later run or at closing; reports drift or "no drift observed", never a pass (ADR-0024, ADR-0040).
+_Avoid_: Validation execution, 复校, 二次校验
+_中文_: 漂移检查
+
 ### Diagnosis
 
 **Error occurrence**:
@@ -648,11 +658,11 @@ The condition takes its worst item's value; only the last two stop admission (AD
 
 **Primary key terminal value**: _中文_: 主键终值比对
 
-**Null constraint conformance**: _中文_: 非空约束符合性
+**Null constraint conformance**: every source `NOT NULL` contract column, not only key components (ADR-0040). _中文_: 非空约束符合性
 
-**Value checksum sample**: a sample, never full equality. _Avoid_: 全量比对 _中文_: 抽样值比对
+**Value sample**: a sample, never full equality, and never a checksum (ADR-0040). _Avoid_: 全量比对, 校验和, checksum _中文_: 抽样值比对
 
-**Large record value integrity**: _中文_: 大记录值完整性
+**Large record value integrity**: source-byte length over a 大记录表's large columns; length equality, never value equality (ADR-0040). _Avoid_: 内容比对, 大记录抽样 _中文_: 大记录值完整性
 
 ### Scope exclusion reason
 

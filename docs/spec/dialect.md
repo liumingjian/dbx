@@ -64,6 +64,8 @@ None: `dialect` is the bottom of the dependency graph (ADR-0018 §Dependency dir
 21. Connection semantics are the fingerprinted TP §6.5 Connector/J settings, including `useCursorFetch=true` and no `defaultFetchSize` (TP §6.5; ADR-0033).
 22. The bounded-read requirement declares cursor fetch, byte-derived fetch sizing, `LIMIT` keyset chunks, and bulk reads only within the 64 MiB cap (ADR-0033 §Settings; ADR-0037 §Bulk path).
 23. Validation and sampling plans, including the target key lookups, follow TP §9.2–9.3 (at most 300 numeric columns per batch, key-order rules, typed key lookups).
+23a. `pair.validationCapabilities` declares, per column, whether source and target source-byte length is provably comparable: binary and BLOB columns and UTF-8 text are, a non-UTF-8 source character set is not, because MySQL's `CAST(E AS BINARY)` counts source-charset bytes and PostgreSQL's `octet_length` counts UTF-8 bytes. `validation` marks what is not provable `NOT_APPLICABLE`, never compares anyway (ADR-0040).
+23b. Fact plans for 非空约束符合性 and 大记录值完整性 ride in the obligation 23 batches: a per-column null count, and for a large record table's large columns the non-null count, `SUM`, and `MAX` of the obligation 16 byte-length expression (ADR-0040; ADR-0003).
 
 **Target plans**
 24. `ddlPlan` builds only the minimal writable table: exact types; `NOT NULL` except the approved relaxation; the primary key or the approved candidate; identity, or an owned sequence for `numeric(20,0)`; `CHECK` for `ENUM`; whitelisted defaults (`CURRENT_TIMESTAMP(n)` → `LOCALTIMESTAMP(n)`) (ADR-0011 §DDL; TP §7.3).
