@@ -1,0 +1,6 @@
+# scheduling
+
+The box plan, admission, and the duration estimate and remaining time: `plan`, `admit`, `predict`.
+
+- Sub-spec: [docs/spec/scheduling.md](/docs/spec/scheduling.md)
+- ADRs: [ADR-0002](/docs/adr/0002-resource-bounded-box-scheduling.md), [ADR-0013](/docs/adr/0013-single-table-execution-granularity.md), [ADR-0018](/docs/adr/0018-backend-module-boundaries-and-agent-working-surface.md), [ADR-0019](/docs/adr/0019-migration-duration-estimate-before-the-run.md), [ADR-0021](/docs/adr/0021-runtime-condition-observes-and-never-adjudicates.md), [ADR-0022](/docs/adr/0022-verification-ladder-and-explicit-golden-updates.md), [ADR-0024](/docs/adr/0024-cross-window-batches-as-runs-under-a-task-write-freeze.md), [ADR-0031](/docs/adr/0031-platform-memory-budget-admission-and-bounded-in-flight-records.md), [ADR-0033](/docs/adr/0033-bounded-source-reads-cursor-fetch-and-keyset-chunks.md), [ADR-0034](/docs/adr/0034-duration-estimate-replays-the-scheduling-plan-on-shape-rates.md), [ADR-0036](/docs/adr/0036-module-table-owns-every-v1-obligation.md), [ADR-0038](/docs/adr/0038-duration-estimate-waits-for-preflight-and-history-is-per-source.md), [ADR-0039](/docs/adr/0039-admission-paused-is-a-run-fact-that-requires-attention.md)
