@@ -48,7 +48,8 @@ val goldenTrailerGate = tasks.register<JavaExec>("goldenTrailerGate") {
     classpath = testSources.runtimeClasspath
     // The gate runs from the repository root: golden paths and commits are the repository's, not the
     // backend subproject's. The range comes from -Pgolden.range or the GOLDEN_RANGE variable CI sets;
-    // with neither, the gate skips and says so rather than inventing a base commit.
+    // with neither, GoldenTrailerGateMain falls back to the branch's own commits so the gate bites at
+    // L1 too, and skips with a reason when even that cannot be resolved.
     argumentProviders.add {
         val range = providers.gradleProperty("golden.range").orNull
         listOfNotNull(

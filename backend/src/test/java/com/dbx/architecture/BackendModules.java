@@ -1,5 +1,8 @@
 package com.dbx.architecture;
 
+import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.importer.ClassFileImporter;
+import com.tngtech.archunit.core.importer.ImportOption;
 import java.util.List;
 
 /**
@@ -55,6 +58,27 @@ public final class BackendModules {
 
     /** The package root the fourteen modules live under in the production sources. */
     public static final String PRODUCTION_ROOT = "com.dbx";
+
+    /**
+     * The classes the rules are enforced against: production sources with the violation fixtures
+     * kept out.
+     *
+     * <p>It lives here, beside the module table, rather than in {@code ModuleBoundaryTest}, because
+     * two tests depend on this exact import and they have to depend on the <em>same</em> one.
+     * {@code ModuleBoundaryTest} checks the rules against it; {@code ModuleBoundaryRuleFixtureTest}
+     * asserts no fixture class reaches it. When each built its own importer, the second test was
+     * asserting a filter it had just written itself, so deleting the real exclusion would not have
+     * failed anything — the vacuous green ADR-0022 exists to catch.
+     *
+     * <p>Both import options are needed: the first keeps test classes out, the second says why the
+     * fixture tree in particular must never reach this run.
+     */
+    public static JavaClasses productionClasses() {
+        return new ClassFileImporter()
+                .withImportOption(new ImportOption.DoNotIncludeTests())
+                .withImportOption(location -> !location.contains("/com/dbx/archfixture/"))
+                .importPackages(PRODUCTION_ROOT);
+    }
 
     private BackendModules() {
     }

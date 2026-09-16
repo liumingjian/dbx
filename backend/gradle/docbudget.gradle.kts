@@ -1,3 +1,5 @@
+import org.gradle.language.base.plugins.LifecycleBasePlugin
+
 // --- #107: the document budget rides L1 ---------------------------------------------------------
 //
 // `CONTEXT.md` and the sub-specs carry character budgets because an agent's context window is a
@@ -15,7 +17,7 @@ val repoRoot = rootDir.parentFile
 val docBudgetScript = File(repoRoot, "scripts/check-doc-budget.py")
 
 val checkDocBudget = tasks.register<Exec>("checkDocBudget") {
-    group = "verification"
+    group = LifecycleBasePlugin.VERIFICATION_GROUP
     description = "Checks CONTEXT.md and the sub-specs against their character budgets (#107)."
 
     workingDir = repoRoot

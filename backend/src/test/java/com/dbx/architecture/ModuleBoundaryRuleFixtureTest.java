@@ -66,9 +66,7 @@ class ModuleBoundaryRuleFixtureTest {
     /** The fixture tree is the rules' subject here and must never be the production run's. */
     @Test
     void theFixtureTreeIsExcludedFromTheProductionRun() {
-        JavaClasses productionClasses = new ClassFileImporter()
-                .withImportOption(location -> !location.contains("/com/dbx/archfixture/"))
-                .importPackages(BackendModules.PRODUCTION_ROOT);
+        JavaClasses productionClasses = BackendModules.productionClasses();
 
         assertTrue(
                 productionClasses.stream().noneMatch(c -> c.getPackageName().startsWith(FIXTURE_ROOT)),

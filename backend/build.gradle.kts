@@ -1,4 +1,3 @@
-import java.time.Duration
 
 plugins {
     java
@@ -84,21 +83,12 @@ val forbiddenPersistenceDependencies =
         )
     }
 
-// --- ADR-0022: the rung reports its own duration ----------------------------------------------
-//
-// ADR-0022 budgets L1 at two minutes, but a wall-clock assertion on a shared mac would be flaky, so
-// the rung prints what it took and leaves the verdict to the human reading it.
-
-val checkStartedAtMillis = System.currentTimeMillis()
-
 tasks.named("check") {
     dependsOn(forbiddenPersistenceDependencies)
-    doLast {
-        val elapsed = Duration.ofMillis(System.currentTimeMillis() - checkStartedAtMillis)
-        val rendered = "%dm %02ds".format(elapsed.toMinutes(), elapsed.toSecondsPart())
-        logger.lifecycle("L1 (check) duration: $rendered — ADR-0022 budgets 2m; reported, not enforced.")
-    }
 }
+
+// L1's own duration line is registered by gradle/rungs.gradle.kts along with the other three rungs,
+// so all four report the same way from one place.
 
 // The document budget (#107) hangs off L1; see gradle/docbudget.gradle.kts.
 apply(from = "gradle/docbudget.gradle.kts")

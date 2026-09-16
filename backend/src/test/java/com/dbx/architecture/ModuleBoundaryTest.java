@@ -14,14 +14,11 @@ import org.junit.jupiter.api.Test;
 class ModuleBoundaryTest {
 
     /**
-     * Production classes only. The violation fixtures live in the test sources under
-     * {@code com.dbx.archfixture}, so both import options are needed: the first keeps test classes
-     * out, the second says why the fixture tree in particular must never reach this run.
+     * Production classes only, imported by {@link BackendModules#productionClasses()} so that the
+     * fixture test asserting the exclusion holds is talking about this very import and not one of
+     * its own.
      */
-    private static final JavaClasses PRODUCTION_CLASSES = new ClassFileImporter()
-            .withImportOption(new ImportOption.DoNotIncludeTests())
-            .withImportOption(location -> !location.contains("/com/dbx/archfixture/"))
-            .importPackages(BackendModules.PRODUCTION_ROOT);
+    private static final JavaClasses PRODUCTION_CLASSES = BackendModules.productionClasses();
 
     @Test
     void noModuleReferencesAnotherModulesNonApiPackage() {

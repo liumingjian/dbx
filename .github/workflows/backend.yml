@@ -1,6 +1,8 @@
-# Runs L1 (`check`, ADR-0022) on every pull request and on every push to main. L2, L3 and L4 need
-# Docker and a runner this project does not have yet; wiring them is a named follow-up ticket, not a
-# gap in this one.
+# Runs L1 (`check`, ADR-0022) on every pull request and on every push to main.
+#
+# ADR-0022 §Who runs which rung also wants L2 on every PR and L3 on merge to main. Both need Docker
+# and a runner this project does not have yet, so they are deferred to #108 rather than silently
+# skipped — the gap is named so it is not mistaken for coverage.
 name: backend
 
 on:

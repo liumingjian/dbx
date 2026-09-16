@@ -22,6 +22,41 @@ import org.gradle.language.base.plugins.LifecycleBasePlugin
 // off for this reason.
 val rungStartedAtMillis = System.currentTimeMillis()
 
+/**
+ * Registers the finalizer that prints one rung's duration.
+ *
+ * All four rungs report through here, `check` included, so the wording and the shape of the line
+ * are decided once. A finalizer rather than a `doLast` on the rung itself: a `Test` task whose
+ * source set is empty is skipped as NO-SOURCE, and a skipped task runs neither its actions nor its
+ * `doLast`, so an agent invoking an upper rung today would see no line at all. A finalizer runs
+ * whether the rung ran, was skipped, or failed — and a failed rung's duration is worth reading too.
+ *
+ * ADR-0022 budgets each rung, but a wall-clock assertion on a shared mac would be flaky, so the
+ * line reports and leaves the verdict to the human reading it.
+ */
+fun registerDurationReport(rungName: String, level: String, budgetNote: String) =
+    tasks.register("${rungName}Duration") {
+        description = "Prints how long $rungName took (ADR-0022 budget: $budgetNote, reported only)."
+        doLast {
+            val elapsed = Duration.ofMillis(System.currentTimeMillis() - rungStartedAtMillis)
+            val rendered = "%dm %02ds".format(elapsed.toMinutes(), elapsed.toSecondsPart())
+            logger.lifecycle(
+                "$level ($rungName) duration: $rendered — ADR-0022 budgets $budgetNote; " +
+                    "reported, not enforced."
+            )
+        }
+    }
+
+// L1 is defined in build.gradle.kts but reports through the same helper as the upper three, so the
+// four rungs of the ladder cannot drift into four different duration lines. Registered before the
+// `named` block rather than inside it: registering a task while the task container is being
+// configured is an error in Gradle 9.
+val checkDurationReport = registerDurationReport("check", "L1", "2m")
+
+tasks.named("check") {
+    finalizedBy(checkDurationReport)
+}
+
 val sourceSets = extensions.getByType<SourceSetContainer>()
 // A script applied with `apply(from = ...)` gets no type-safe `libs` accessor, so the catalog is
 // resolved by hand rather than by moving these dependencies into build.gradle.kts.
@@ -62,22 +97,7 @@ fun registerRung(
     sourceSet.compileClasspath += mainOutput
     sourceSet.runtimeClasspath += mainOutput
 
-    // The duration line is a separate finalizer rather than a `doLast` on the rung itself, which is
-    // where `check` puts it. A `Test` task whose source set is empty is skipped as NO-SOURCE, and a
-    // skipped task runs neither its actions nor its `doLast`; an agent would then invoke an upper
-    // rung today and see no line at all. A finalizer runs whether the rung ran, was skipped, or
-    // failed — and a failed rung's duration is worth reading too.
-    val durationReport = tasks.register("${rungName}Duration") {
-        description = "Prints how long $rungName took (ADR-0022 budget: $budgetNote, reported only)."
-        doLast {
-            val elapsed = Duration.ofMillis(System.currentTimeMillis() - rungStartedAtMillis)
-            val rendered = "%dm %02ds".format(elapsed.toMinutes(), elapsed.toSecondsPart())
-            logger.lifecycle(
-                "$level ($rungName) duration: $rendered — ADR-0022 budgets $budgetNote; " +
-                    "reported, not enforced."
-            )
-        }
-    }
+    val durationReport = registerDurationReport(rungName, level, budgetNote)
 
     return tasks.register<Test>(rungName) {
         group = LifecycleBasePlugin.VERIFICATION_GROUP
