@@ -1,5 +1,5 @@
 ---
-status: accepted (amends the shell clause of ADR-0020 and the warning clauses of ADR-0001 and ADR-0002; execution-platform clause amended by ADR-0032: a Connect restart fails its running boxes at once, and the ten-minute grace covers unreachability only; extended by ADR-0039 to Schema Registry, while database unreachability never changes the condition)
+status: accepted (amends the shell clause of ADR-0020 and the warning clauses of ADR-0001 and ADR-0002; execution-platform clause amended by ADR-0032: a Connect restart fails its running boxes at once, and the ten-minute grace covers unreachability only; extended by ADR-0039 to Schema Registry, while database unreachability never changes the condition; #95 settles which readings are 无法判定, the root-cause domain and who-acts text, the aftermath of the 90% / 10 GB stop, and the status channel's source)
 ---
 
 # The runtime condition observes and never adjudicates
@@ -8,6 +8,19 @@ DBX v1 ships its own single-node Kafka, Connect, and Schema Registry, and the cu
 
 - **Audience and wording.** The only reader is the single DBA user; v1 introduces no operations role. The interface never names broker, topic, connector, task, lag, or Schema Registry. The condition says whether DBX can keep working and which root-cause domain stands in the way: 运行环境, 迁移平台, or DBX 自身. Native readings belong in the diagnostic package only.
 - **Form.** The top bar gets one persistent indicator next to language and theme, amending ADR-0020's shell. It shows an icon and the condition value, and opens a per-item panel. A global banner appears only when the condition is 受阻 or 无法判定, and it states the reason and who acts. There is no page and no dashboard.
+
+  **Root-cause domain and who acts ([#95](https://github.com/liumingjian/dbx/issues/95)).** `condition` owns a closed table of six rows and authors nothing beyond it:
+
+  | Reason | Domain | Who acts |
+  |---|---|---|
+  | Kafka data-disk usage at 80%, at 90%, or under 10 GB free | 运行环境 | The DBA frees space on the host, or discards (丢弃) a run's 待回收占用 from the same panel |
+  | Kafka, Connect, or Schema Registry unreachable | 迁移平台 | Nobody: DBX is recovering on its own. If it persists, export the diagnostic package and contact support |
+  | H2 metadata directory not writable | 运行环境 | The DBA restores write permission and free space on the data directory |
+  | *迁移平台发生过重启* | 迁移平台 | First occurrence: nobody. On the pause, the DBA presses 继续迁移 or cancels the run |
+  | *迁移平台无法启动新的读取* | 迁移平台 | The DBA presses 继续迁移 or cancels the run |
+  | An unmet environment-check item | From `environment` | From `environment` |
+
+  待回收占用 is no reason of its own; it rides on the disk row. The H2 row is 运行环境 and not DBX 自身 because the fix lives in the host's permissions and free space, not in DBX's own logic, which is the line ADR-0030 draws. Reasons that come from the environment check carry their own domain and who-acts text with them: `environment` already owns that wording, so `condition` moves it and never rewrites it.
 - **Items and sources.** Four items:
   - Kafka data-disk usage: the environment check's E6 reading, sampled every 10 s.
   - Reachability of Kafka, Connect, and Schema Registry: E2's readiness probes.
@@ -16,7 +29,16 @@ DBX v1 ships its own single-node Kafka, Connect, and Schema Registry, and the cu
 
   Host memory, lag, offsets, throughput, and individual connector or task state are excluded. They belong to startup, to progress, to 运行监控, or to a single run.
 - **Values.** 畅通, 需留意, 受阻, 无法判定. The whole condition takes its worst item's value, and only the last two stop admission. The condition also lists the latest environment check's unmet items as reasons, without re-running or rewriting them.
+
+  **Which readings are 无法判定 ([#95](https://github.com/liumingjian/dbx/issues/95)).** 受阻 and 无法判定 gate identically, so the split is one of honesty: 受阻 says DBX knows something is broken, 无法判定 says DBX does not know. A probe whose failure is itself an answer is therefore never 无法判定 — reachability that does not answer *is* unreachable, and the H2 probe is a local write that either succeeds or fails. Both give 受阻, and neither can ever be 无法判定. Exactly two readings are:
+
+  - The disk item, when no `describeLogDirs` sample has succeeded for 60 s, which is six consecutive 10 s samples. Until then the last good reading stands.
+  - An environment-check item concluding 无法判定, carried in as a whole-condition reason.
+
+  **Unmet environment-check items raise the value, and are never counted twice.** An unmet item is not decoration beside the four items: 不满足 contributes 受阻 and 无法判定 contributes 无法判定, because the environment check already refuses to start a migration on either (ADR-0027 §Conclusions), and a condition reading 畅通 while nothing may start would be a lie. E2, E6, and E7 *are* the reachability, disk, and H2 items, so only E0, E1, E3, E4, E5, and E8 enter, as whole-condition reasons.
 - **Gates are unchanged.** The condition interrupts nothing by itself. ADR-0002's 60% admission gate and 90% / 10 GB stop still act as written, and at 90% the stop now also raises the banner. The 80% warning that ADR-0002 left unplaced turns the condition to 需留意, with no banner and no interruption.
+
+  **After the 90% / 10 GB stop, boxes wait, admission resumes on its own, and nothing fails ([#95](https://github.com/liumingjian/dbx/issues/95)).** The stop halts producing new Sources and nothing else. Boxes already running keep running, Sinks keep draining, and cleanup keeps reclaiming — which is the only force that can bring the disk back down, so failing those boxes would deepen the very condition the stop answers, and ADR-0002 then forbids an automatic retry. Admission resumes on the first fold whose reading is back under the gate, with no separate resume threshold and no hysteresis: ADR-0002's 60% admission gate is far stricter than 90% and already supplies the margin. When no box is running and the disk is still at the stop level, nothing inside DBX can free space, and DBX *still* does not fail the run. The 受阻 banner, the per-run 待回收占用 entry into 丢弃, and write-freeze expiry with its pre-expiry warning (ADR-0006) are the answer, because failing the run would hand the DBA nothing but a re-migration.
 - **Table-scoped signals stay with tables.** ADR-0001's two-minute "suspected stuck" warning appears only on the affected table migration units in 运行监控, never in the runtime condition.
 - **Execution platform unreachable mid-run.** 卡死 covers only connectors that still report healthy, and Docker restarts containers itself. While Kafka or Connect is unreachable:
   - DBX admits no new box.
@@ -39,4 +61,4 @@ DBX v1 ships its own single-node Kafka, Connect, and Schema Registry, and the cu
 
 ## Consequences
 
-The backend needs an installation-scoped status channel beside the run-scoped `RunProgressSource` of ADR-0016. The diagnosis catalog of ADR-0005 gains one structured code for an unreachable execution platform. The diagnostic package ([#56](https://github.com/liumingjian/dbx/issues/56)) should carry the condition-change record.
+The backend needs an installation-scoped status channel beside the run-scoped `RunProgressSource` of ADR-0016. That channel serves the latest outcome `orchestration` already holds in memory from gathering the items and calling `fold`, exposed as an `orchestration` use case that `web` calls ([#95](https://github.com/liumingjian/dbx/issues/95)). The outcome is an observation of now and not a fact: persisting it would let the endpoint answer with a stale condition after a DBX restart, and would add a 10 s write to the single-writer queue that no reader needs durable. `workflow` therefore persists the condition-change record and the admission pause, and no latest-outcome row. Before the first fold after startup, the use case answers 无法判定 with the reason *尚未取得读数*. This is `web`'s one read that goes through an `orchestration` use case rather than `workflow.api.query`; the endpoint still triggers no external call, because it reads the cached outcome. The diagnosis catalog of ADR-0005 gains one structured code for an unreachable execution platform. The diagnostic package ([#56](https://github.com/liumingjian/dbx/issues/56)) should carry the condition-change record.

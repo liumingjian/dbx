@@ -32,6 +32,8 @@ None. `orchestration` gathers the items from `connector.kafkaFacts`, `environmen
 8. Disk usage ≥ 90% or free space < 10 GB gives 受阻 with the banner (ADR-0021 §Gates are unchanged; ADR-0002).
 9. Kafka, Connect, or Schema Registry unreachable gives 受阻 (ADR-0021 §Execution platform unreachable; ADR-0039 §One ten-minute budget).
 10. When the platform becomes reachable again, the reachability item leaves 受阻 on the next fold with no other input (ADR-0021 §Execution platform unreachable).
+8a. A non-writable H2 directory gives 受阻 with the banner (ADR-0021 §Form, §Values).
+8b. An item is 无法判定 only when the disk reading has had no successful `describeLogDirs` sample for 60 s (six consecutive 10 s samples); until then the last good reading stands. Reachability and H2 are never 无法判定: a probe that does not answer is itself the answer (ADR-0021 §Values).
 11. The disk item carries reclaimable occupancy as *DBX 待回收占用 X GB*, grouped by the runs that hold it, each group keyed by run id so the UI can link to 丢弃. It is display only: its bytes are already inside the E6 reading (ADR-0021 §Space awaiting reclamation; ADR-0002).
 
 **D. Fold and admission stop**
@@ -41,10 +43,12 @@ None. `orchestration` gathers the items from `connector.kafkaFacts`, `environmen
 15. 受阻 caused by a pause clears on the first fold after the DBA continues (CONTEXT.md Runtime condition value; ADR-0039 §One resume path).
 16. The banner flag is set only for 受阻 or 无法判定, and the outcome states the reason and who acts (ADR-0021 §Form).
 17. The latest environment check's unmet items appear as reasons verbatim. `fold` never re-evaluates or rewrites them (ADR-0021 §Values).
+17a. An unmet environment-check item raises the whole value: 不满足 gives 受阻, 无法判定 gives 无法判定. Only E0, E1, E3, E4, E5, E8 enter as whole-condition reasons; E2, E6, E7 are already items and are never counted twice (ADR-0021 §Values; ADR-0027 §Conclusions).
 18. The condition interrupts nothing: the outcome contains no box failure, cancellation, or gate override (ADR-0021 §Gates are unchanged).
 
 **E. Restart counters and pause**
 19. A run's first Connect restart gives 需留意 with the reason *迁移平台发生过重启*, and that run's admission continues (ADR-0032 §The second restart…).
+19a. That 需留意 projects the run's restart count, not a timed event: it holds while the run is nonterminal, goes once no nonterminal run holds a restart count, and never decays on a timer (ADR-0032 §The second restart…).
 20. A run's second Connect restart gives 受阻 and requests a pause for that run with reason *迁移平台发生过重启* (ADR-0032 §The second restart…; ADR-0039 §One resume path).
 21. Two consecutive boxes of a run reaching 卡死 (stuck) with zero records give 受阻 and request a pause with reason *迁移平台无法启动新的读取* (ADR-0032 §Wedges not caused by OOM; ADR-0039 §One resume path).
 22. After a continue, a single further restart or a single further zero-output stuck box requests a pause again. Counters never reset (ADR-0039 §Once warned, one more strikes).
@@ -54,6 +58,8 @@ None. `orchestration` gathers the items from `connector.kafkaFacts`, `environmen
 **F. Change entry and wording**
 25. A change entry (time, from value, to value, reason) is emitted only when the whole value differs from the previous outcome's. It carries no metric samples (ADR-0021 §History).
 26. Reason texts use only the domains 运行环境, 迁移平台, and DBX 自身, and never contain broker, topic, connector, task, lag, or Schema Registry (ADR-0021 §Audience and wording; ADR-0030).
+26a. Each reason `condition` authors carries the domain and who-acts text of ADR-0021 §Form's six-row table: disk 运行环境, reachability 迁移平台, H2 运行环境, both pause reasons 迁移平台. 待回收占用 is no reason of its own; it rides on the disk row (ADR-0030).
+26b. Environment-check reasons carry `environment`'s own domain and who-acts text through unchanged; `condition` authors neither (obligation 17).
 27. Reason texts are zh-CN message keys (#89 item 6).
 
 ## Verification
@@ -64,19 +70,19 @@ All groups are pure and verified at L1 `check`. No L2 is required, because `cond
 |---|---|---|
 | A | L1 | ArchUnit purity and `api`-only rules (ADR-0018); `ConditionContractTest.determinism` |
 | B | L1 | `ConditionContractTest.items`: compile-time shape of the input record, orphan exclusion |
-| C | L1 | `ConditionContractTest.itemValues`: 79/80/89/90% and 10 GB boundaries; each platform service unreachable, then reachable again; reclaimable grouping |
-| D | L1 | `ConditionContractTest.foldAndStop`: worst-value table over all value pairs; stop signal; pause-scoped stop; banner; unmet items passed through unchanged |
-| E | L1 | `ConditionContractTest.restartCounters`: restart 1 and 2; stuck 1 and 2 (zero-output and with output); pause, continue, one more strike; two runs isolated |
-| F | L1 | `ConditionContractTest.changeEntry`; `ConditionWordingTest`: scans every reason key's zh-CN text for forbidden words |
+| C | L1 | `ConditionContractTest.itemValues`: 79/80/89/90% and 10 GB boundaries; each platform service unreachable, then reachable again; H2 unwritable; the 60 s stale-sample boundary and that reachability/H2 never yield 无法判定; reclaimable grouping |
+| D | L1 | `ConditionContractTest.foldAndStop`: worst-value table over all value pairs; stop signal; pause-scoped stop; banner; unmet items passed through unchanged, and each unmet conclusion's effect on the value with E2/E6/E7 excluded |
+| E | L1 | `ConditionContractTest.restartCounters`: restart 1 and 2, including that the first 需留意 holds until the run is terminal; stuck 1 and 2 (zero-output and with output); pause, continue, one more strike; two runs isolated |
+| F | L1 | `ConditionContractTest.changeEntry`; `ConditionReasonDomainTest`: every authored reason's domain and who-acts key against ADR-0021 §Form, and environment-sourced reasons passed through; `ConditionWordingTest`: scans every reason key's zh-CN text for forbidden words |
 
 The end-to-end restart and unreachable paths are proven in `connector`'s and `orchestration`'s L3 scenarios, not here (ADR-0032 §Consequences).
 
 ## Slices
 
 1. **`api` and `ConditionContractTest` skeleton**: input and outcome records, the `fold` signature, value ordering, worst-value fold, installation-wide stop signal, and determinism (A, 12, 13). README ≤ 40 lines. No blockers.
-2. **Item values and exclusions**: disk, reachability, H2, reclaimable-occupancy aggregate, orphan exclusion, and unmet-item reasons (B, C, 17). Blocked by slice 1; D-14.
-3. **Restart counters and pause signal**: 14–15 and 19–24. Blocked by slice 1; D-16.
-4. **Change entry, banner, and wording**: 16, 18, and F. Blocked by slices 2 and 3; D-15.
+2. **Item values and exclusions**: disk, reachability, H2, reclaimable-occupancy aggregate, orphan exclusion, and unmet-item reasons (B, C, 17, 17a). Blocked by slice 1.
+3. **Restart counters and pause signal**: 14–15 and 19–24. Blocked by slice 1.
+4. **Change entry, banner, and wording**: 16, 18, and F. Blocked by slices 2 and 3.
 
 `condition` has no cross-module blockers. Its consumers are `orchestration` (gathering and calling `fold`, writing pauses) and `workflow` (persisting the pause and the change record). Both wait for `condition` slice 1.
 
@@ -96,6 +102,4 @@ The end-to-end restart and unreachable paths are proven in `connector`'s and `or
 
 ## Open items
 
-- **D-14** (T4): the H2 item's value when unwritable, and which readings make an item 无法判定 (ADR-0021). Blocks slice 2.
-- **D-15** (T4): root-cause domain and "who acts" text per item and reason (ADR-0021 §Form). Blocks slice 4.
-- **D-16** (T4): how long the first restart's 需留意 lasts (ADR-0032). Blocks slice 3.
+None. D-14, D-15, and D-16 are settled in [#95](https://github.com/liumingjian/dbx/issues/95) and recorded in ADR-0021 and ADR-0032.

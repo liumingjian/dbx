@@ -11,7 +11,7 @@ None. `web` is the top of the dependency graph, so no module may depend on it (A
 ## Consumes
 
 - `workflow.api.query`: every read (progress, timelines, table migration units, task list, drafts, run projection) (ADR-0018 §Dependency direction; ADR-0036 workflow row "Unchanged").
-- `orchestration.api` (names per the `orchestration` sub-spec), for every write and assembled artefact: `saveConnection`, `checkConnection`, `supportedPairs`, `saveDraft`, `discardDraft`, `runPreflight`, `contractRendering`, `execute`, `cancelRun`, `extendFreeze`, `declareFreezeBroken`, `continueAdmission`, `adoptCredential`, `recordDisposition`, `runSampling`, `discardRun`, `remigrate`, `copyAsDraft`, `projectedAbandonmentList`, `abandonmentList`, `abandonTask`, `retryAbandon`, `downloadSupplementalSql`, `packageManifest`, `exportPackage`, `recheckEnvironment`. Pure modules (`contract.renderDdl`, `projectedList`) are reached only through these (ADR-0018 §Dependency direction).
+- `orchestration.api` (names per the `orchestration` sub-spec), for every write and assembled artefact: `saveConnection`, `checkConnection`, `supportedPairs`, `saveDraft`, `discardDraft`, `runPreflight`, `contractRendering`, `execute`, `cancelRun`, `extendFreeze`, `declareFreezeBroken`, `continueAdmission`, `adoptCredential`, `recordDisposition`, `runSampling`, `discardRun`, `remigrate`, `copyAsDraft`, `projectedAbandonmentList`, `abandonmentList`, `abandonTask`, `retryAbandon`, `downloadSupplementalSql`, `packageManifest`, `exportPackage`, `recheckEnvironment`, and `latestCondition` — the one read that goes through `orchestration` rather than `workflow.api.query`, because the latest condition outcome is never persisted (ADR-0021 §Consequences). Pure modules (`contract.renderDdl`, `projectedList`) are reached only through these (ADR-0018 §Dependency direction).
 - Never `workflow.api.command`, and never any deep module's side effects (ADR-0018 §Enforcement; ADR-0036 §Dependencies and purity).
 
 ## Obligations
@@ -31,7 +31,7 @@ None. `web` is the top of the dependency graph, so no module may depend on it (A
 **C. Progress channels**
 9. `GET /api/migration-runs/{runId}/progress` returns the run's latest `RunProgressSnapshot` from the coalesced H2 progress, and never triggers an external call (ADR-0016 §Progress transport; ADR-0004 flush cadence).
 10. Snapshots may lag or jump. `web` never interpolates or smooths them (ADR-0016 §Progress transport).
-11. An installation-scoped status endpoint returns the runtime condition's value, its per-item values, and the open reasons, admission-paused reasons included (ADR-0021 §Consequences; ADR-0039 bullet 1).
+11. An installation-scoped status endpoint returns the runtime condition's value, its per-item values, and the open reasons with their root-cause domain and who-acts text, admission-paused reasons included. It serves `orchestration.latestCondition()` and, like the progress channel, triggers no external call. Before the first fold after startup it answers 无法判定 with the reason *尚未取得读数* (ADR-0021 §Form, §Consequences; ADR-0039 bullet 1).
 12. Both channels are designed for a 10 s poll plus one immediate refetch after a user command. The endpoints stay stateless per request, so SSE can later replace polling behind the same seam (#89 item 7).
 13. While the environment check concludes 不满足, `web` still serves the UI, the status endpoint, and diagnostic export. Only the start of migrations is refused, and `orchestration` does the refusing (ADR-0027 §Consequence of failure).
 
@@ -66,7 +66,7 @@ None. `web` is the top of the dependency graph, so no module may depend on it (A
 
 1. **Skeleton**: the `web.api` placeholder package, the README, `WebContractTest` with all contract paths marked pending, the `/api` prefix and error body, ArchUnit green. No blockers.
 2. **Read endpoints**: task list and drafts, task detail with task header, run projection, units, timelines, validation report, preflight findings, run snapshot, task conclusion (4, 9–10, 14 read). Blocked by `workflow` slice 1, `frontend` slice 3.
-3. **Status channel and installation**: condition status, installation record, nonterminal-run query, 关于 (11–13, 25–27). Blocked by `workflow` slice 1, `frontend` slice 3; D-18.
+3. **Status channel and installation**: condition status, installation record, nonterminal-run query, 关于 (11–13, 25–27). Blocked by `workflow` slice 1, `frontend` slice 3, `orchestration` slice 6.
 4. **Draft and run commands** (14–18, 22). Blocked by `orchestration` slice 1, `frontend` slice 3.
 5. **Destructive commands**: discard, abandonment, retry, abandonment lists (19–21). Blocked by `orchestration` slice 1, `frontend` slice 3.
 6. **Downloads**: supplemental SQL and diagnostic package (23–24). Blocked by `orchestration` slice 1, `frontend` slice 3.
@@ -90,4 +90,4 @@ Each slice depends on slice 1; slices 2–6 are otherwise independent. Provider 
 
 ## Open items
 
-- **D-18** (T4): the status channel's source: a persisted latest outcome via `workflow.api.query`, or an `orchestration` use case (ADR-0036 says `orchestration` calls `condition.fold`). Blocks slice 3.
+None. D-18 is settled in [#95](https://github.com/liumingjian/dbx/issues/95): the channel serves `orchestration.latestCondition()`.
