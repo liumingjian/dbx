@@ -84,14 +84,7 @@ Each slice depends on slice 1; slices 2–6 are otherwise independent. Provider 
 
 ## Conflicts resolved
 
-- ADR-0016 "the default real implementation polls" with no cadence, and the `feature/30`/`impl/*` branches' `DEFAULT_POLL_INTERVAL_MS = 2_000` → 10 s plus a refetch after a command (#89 item 7; ADR-0016 amendment note).
-- ADR-0018 web row, with only HTTP adapters → adds the status channel and the nonterminal-run query (ADR-0036 web row).
-- ADR-0036 "Admission paused … the run stays running" → the run projects `ATTENTION_REQUIRED` while the pause is open (ADR-0039).
-- ADR-0005 and ADR-0017/0020 two-locale text → zh-CN only in v1 (#89 item 6).
-- Brief: "the contract lives in `frontend/` on main" → `origin/main` has no `frontend/src/contract/`. The contract exists on `origin/feature/30-frontend-module` and `origin/impl/*`, and ADR-0016 §On the prototype host ports it in `frontend` slice 3.
-
-- The TS contract is missing on `main` → `frontend` slice 3 ports it and declares every path and payload, including the surfaces it predated (status channel, installation record, nonterminal runs, 继续迁移, abandonment, downloads, export) (ADR-0016 §Contract).
-- `web` calling pure `contract` entries directly → only through `orchestration` use cases (ADR-0018 draws only `web → orchestration` and `workflow.api.query`).
+See [`conflicts.md`](conflicts.md#web) — provenance only; every winning ruling is already an obligation above.
 
 ## Implementer decides
 

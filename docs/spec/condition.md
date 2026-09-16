@@ -88,17 +88,7 @@ The end-to-end restart and unreachable paths are proven in `connector`'s and `or
 
 ## Conflicts resolved
 
-1. ADR-0021 §Values: "only the last two stop admission" (installation-wide) → ADR-0039 §A durable run fact: 受阻 caused by a pause stops that run only.
-2. ADR-0021 §Execution platform unreachable covers "Kafka or Connect" → ADR-0039 §One ten-minute budget adds Schema Registry. ADR-0032 ends the grace once a Connect restart is seen.
-3. ADR-0006 §Recovery of the same execution groups database unavailability with platform unavailability → ADR-0039 §One ten-minute budget: database unreachability never changes the condition.
-4. ADR-0002's amendment note says the two-minute no-progress warning turns the condition to 需留意 → ADR-0021 §Table-scoped signals: it never enters the condition (the ADR the note cites).
-5. ADR-0036 lists "the change record" in both the `condition` and `workflow` rows → `condition` computes the entry and `workflow` persists and bounds it (ADR-0036 §Dependencies and purity: `condition` is pure).
-6. corpus-audit §5 proposed `record(change)` and `admissionAllowed()` → ADR-0036 Interface: `fold` only, and both are fields of its outcome.
-
-7. Counter storage, unnamed in ADR-0036 → derived from run facts `workflow` persists (sole H2 writer; ADR-0039 "counters do not reset").
-8. Owner of the ten-minute unreachable timer → `orchestration`, which alone fails boxes through `workflow.api.command` (ADR-0018 §Dependency direction; ADR-0039; `orchestration` obligation 25).
-9. Disk-threshold denominator → the E6 reading: log-dir used ÷ total from `describeLogDirs` (ADR-0027 E6; ADR-0021 §Items and sources).
-10. The change record's bound → `workflow`'s, at about 1,000 (ADR-0021 §History).
+See [`conflicts.md`](conflicts.md#condition) — provenance only; every winning ruling is already an obligation above.
 
 ## Open items
 

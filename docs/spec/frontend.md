@@ -7,11 +7,11 @@ The operator console: renders `web`'s facts and sends commands; computes no esti
 ## Surfaces
 
 - Shell: a flat sidebar (迁移任务 / 数据源 / 系统设置) and a top bar with theme and the 运行状况 (runtime condition) indicator, which opens a per-item panel. A global banner shows on 受阻/无法判定 only. No language switch, login, dashboard, or search (ADR-0021 §Form; #89 item 6). `/tasks` lists tasks and drafts (ADR-0020).
-- `/tasks/new/:draftId/:stage`: the five-stage migration wizard (迁移向导). Stage 4 has a per-table drawer URL (ADR-0020 §wizard).
-- `/tasks/:taskId/runs/:runNo/:tab`: a task header, a run switcher (「第 N 次迁移运行」), and five run-scoped tabs 运行监控 / 校验报告 / 预检发现 / 日志 / 运行快照. The header's 整库结论 opens a per-table drawer. Table evidence opens as the drawer `…/:tab/tables/:unitId` (ADR-0020; #89 item 8).
-- `/datasources`: connection list, form, and 连接校验 (#46 per-page).
-- `/settings/general` and `/settings/about`: preferences; the release version (发行版本); installation 诊断包 (diagnostic package) export (#46; ADR-0035; ADR-0028).
-- `/recovery`: the 恢复态 (recovery mode) surface, reachable only when `web` serves recovery mode. It replaces the shell entirely — no sidebar, no 运行状况 indicator, because both read H2 ([#97](https://github.com/liumingjian/dbx/issues/97); ADR-0006 §Recovery).
+- `/tasks/new/:draftId/:stage`: the five-stage migration wizard (迁移向导), stage 4 with a per-table drawer URL (ADR-0020 §wizard).
+- `/tasks/:taskId/runs/:runNo/:tab`: task header, run switcher (「第 N 次迁移运行」), and five run-scoped tabs 运行监控 / 校验报告 / 预检发现 / 日志 / 运行快照. The header's 整库结论 opens a per-table drawer; table evidence opens as `…/:tab/tables/:unitId` (ADR-0020; #89 item 8).
+- `/datasources`: connection list, form, 连接校验 (#46 per-page).
+- `/settings/general` and `/settings/about`: preferences; 发行版本; installation 诊断包 export (#46; ADR-0035; ADR-0028).
+- `/recovery`: the 恢复态 (recovery mode) surface, served only when `web` serves recovery mode. It replaces the shell entirely — no sidebar, no 运行状况 indicator ([#97](https://github.com/liumingjian/dbx/issues/97); ADR-0006 §Recovery).
 
 ## Consumes
 
@@ -23,7 +23,7 @@ The operator console: renders `web`'s facts and sends commands; computes no esti
 
 **A. Host and state**
 1. `frontend/` holds the `dbx-prototype@55507fb` snapshot, cut to #46. B/Cut items deleted: no flags or hidden routes (#46 Q8; #64 Engineering shape).
-2. Server state lives only in TanStack Query. zustand holds only theme and sidebar collapse. The General preferences of 系统设置 are installation-scoped server state, never zustand (ADR-0016 §State split as amended by [#99](https://github.com/liumingjian/dbx/issues/99)).
+2. Server state lives only in TanStack Query; zustand holds only theme and sidebar collapse. The General preferences of 系统设置 are installation-scoped server state, never zustand (ADR-0016 §State split as amended by [#99](https://github.com/liumingjian/dbx/issues/99)).
 3. MSW and scenarios run only in dev and in an explicit demo build. Production has no mocks or external URLs (ADR-0016 §Build; ADR-0017 §Fonts).
 4. `?scenario=` is the only scenario state. No component reads wall-clock time for domain facts. Views tolerate jumping or lagging progress (ADR-0016).
 5. Every stage, tab, and drawer restores from its URL on refresh (ADR-0020).
@@ -31,8 +31,8 @@ The operator console: renders `web`'s facts and sends commands; computes no esti
 **B. Vocabulary and conclusions**
 6. Only zh-CN ships. Copy via message keys. Every enum value renders its `CONTEXT.md` `_中文_` wording (#89 item 6; ADR-0030).
 7. No `_Avoid_` word, and none of box, connector, topic, broker, lag, Schema Registry, heap, 回滚, or 诊断分类阶段, appears in any screen (ADR-0030; ADR-0021; ADR-0031 §Operator wording).
-8. `conclusion.ts` is the only mapping from a conclusion to its indicator. `ConclusionIndicator` always renders shape, colour, and label. Palette and kinds follow ADR-0029, including `accepted-risk`. 无法判定 is neutral grey with a question mark (ADR-0017; ADR-0029 §Palette).
-9. Lint forbids antd `Tag color` and `Badge status` for conclusions, and forbids importing `Table` outside `DataTable` (ADR-0017; ADR-0025).
+8. `conclusion.ts` is the only mapping from a conclusion to its indicator. `ConclusionIndicator` always renders shape, colour, and label. Palette and kinds follow ADR-0029, including `accepted-risk`; 无法判定 is neutral grey with a question mark (ADR-0017; ADR-0029 §Palette).
+9. Lint forbids antd `Tag color` and `Badge status` for conclusions, and importing `Table` outside `DataTable` (ADR-0017; ADR-0025).
 10. The Chinese typography layer applies under `:lang(zh)`, with a 32 px control floor. Token values live only in `src/theme/antd.ts` and `tokens.css` (ADR-0017).
 
 **C. Tables and selection**
@@ -43,31 +43,31 @@ The operator console: renders `web`'s facts and sends commands; computes no esti
 13. An unmet gate redirects to the first unmet stage. Credentials are never entered inline. A `public` target schema is refused (ADR-0020; #64 story 6).
 14. Stage 3 groups findings as 阻塞 / 数据有损 / 仅行为差异. 无法判定 is a separate neutral group showing its reason. Blocking gates per table, and nothing offers 我已知晓 (ADR-0029).
 15. 预估耗时 first appears at stage 3, with confidence, source, 窗口下限, and preflight time. A stale table replaces the number with 「预检已过期，重新预检后更新」. A 低置信 estimate shows ADR-0034's fixed sentence (ADR-0038; ADR-0034).
-16. Stage 4 has an 例外数 column. Its drawer has the tabs 列 / DDL（只读）/ 补建 SQL, with table rename in the header. On 列, each column gets a type chosen only from the pair's allowed list, a live ≤63-byte unique name check, 恢复默认, and an origin tag. Each edit stales that table's preflight. The DDL switches are gone, replaced by one read-only line (#64 Gap 3; ADR-0026).
-17. Stage 5 shows counts per impact and contract class, each opening its tables' drawers. It carries the required two-part freeze block, 整库冻结承诺 plus this run's 写冻结. The block holds the split proposal when the upper bound exceeds the limit, which warns but never blocks. 执行 stays disabled until the block is complete, then opens a restating second confirmation (ADR-0020; ADR-0024; ADR-0026; #64 Gap 2).
+16. Stage 4 has an 例外数 column. Its drawer has the tabs 列 / DDL（只读）/ 补建 SQL, with table rename in the header. On 列, each column gets a type chosen only from the pair's allowed list, a live ≤63-byte unique name check, 恢复默认, and an origin tag. Each edit stales that table's preflight. The DDL switches are replaced by one read-only line (#64 Gap 3; ADR-0026).
+17. Stage 5 shows counts per impact and contract class, each opening its tables' drawers. It carries the required two-part freeze block, 整库冻结承诺 plus this run's 写冻结, which holds the split proposal when the upper bound exceeds the limit (warns, never blocks). 执行 stays disabled until the block is complete, then opens a restating second confirmation (ADR-0020; ADR-0024; ADR-0026; #64 Gap 2).
 
 **E. Task console**
-18. The task header holds every task-scoped fact and action, the five tabs staying purely run-scoped: task status (进行中/废弃中/已废弃/部分废弃); a 整库结论 summary that opens a per-table drawer, with drift shown as 「无法判定 · 源端数据已变化」; the 整库冻结承诺 as 「剩余 <时长>」, or 「已过期，重新确认后方可发起运行」 once it has lapsed; 下载补建 SQL; 重新迁移 as the primary action; and 复制为迁移草稿 beside 废弃 in a secondary menu, where only 废弃 is styled danger. 废弃 is enabled only when no run is nonterminal (#89 item 8; ADR-0024; ADR-0026; ADR-0023).
-18a. 重新迁移 is enabled only when no run is nonterminal, the task is neither 废弃中 nor 已废弃, and obligation 27's scope is non-empty; otherwise it is disabled and states which of those it fails. 复制为迁移草稿 stays enabled on an abandoned task, being the only forward path from one (ADR-0023). The 整库冻结承诺 remaining time arrives from `web` with each 10 s poll and is never a client-side countdown (obligation 4).
+18. The task header holds every task-scoped fact and action, the five tabs staying purely run-scoped: task status (进行中/废弃中/已废弃/部分废弃); a 整库结论 summary opening a per-table drawer, drift shown as 「无法判定 · 源端数据已变化」; the 整库冻结承诺 as 「剩余 <时长>」, or 「已过期，重新确认后方可发起运行」 once lapsed; 下载补建 SQL; 重新迁移 as the primary action; 复制为迁移草稿 beside 废弃 in a secondary menu, only 废弃 styled danger. 废弃 is enabled only when no run is nonterminal (#89 item 8; ADR-0024; ADR-0026; ADR-0023).
+18a. 重新迁移 is enabled only when no run is nonterminal, the task is neither 废弃中 nor 已废弃, and obligation 27's scope is non-empty; otherwise it is disabled and states which it fails. 复制为迁移草稿 stays enabled on an abandoned task, the only forward path from one (ADR-0023). The 整库冻结承诺 remaining time arrives from `web` with each 10 s poll, never a client-side countdown (obligation 4).
 19. 废弃 shows the exportable 废弃清单 with a read tick, a separate tick for red rows, and the schema name typed in. An approved draft can export 预估废弃清单, labelled projected (ADR-0023).
-20. 运行监控 shows the phase strip, 预计剩余 or 无法预估 with its reason, throughput, and 「平台内存预算 · 已用 N%」, which is the **reserved** share of the budget, never a live reading and never a MiB figure. The binding limit reads 平台内存预算, the same term. Suspected-stuck marks sit on units only (ADR-0019; ADR-0031 §Operator wording as amended by [#99](https://github.com/liumingjian/dbx/issues/99); ADR-0021).
+20. 运行监控 shows the phase strip, 预计剩余 or 无法预估 with its reason, throughput, and 「平台内存预算 · 已用 N%」 — the **reserved** share, never a live reading and never a MiB figure. The binding limit reads 平台内存预算, the same term. Suspected-stuck marks sit on units only (ADR-0019; ADR-0031 §Operator wording as amended by [#99](https://github.com/liumingjian/dbx/issues/99); ADR-0021).
 21. A unit whose validation is `INCONCLUSIVE` shows phase 校验中 and a separate 校验 column with 重新校验 and 校验处置 (#64 Gap 1).
 22. An open 准入已暂停 shows the run as 需要人工处理, with its reason and 「继续迁移」 beside 「取消运行」 (ADR-0039).
 23. 取消 offers 收尾取消. When units will not finish before the freeze expires, the console states the choice: extend the freeze, or those units fail at expiry (ADR-0024).
 24. 校验报告 keeps technical results, preflight exclusions, and dispositions in separate panes. After a disposition, the original 无法判定/未通过 stays visible beside 完成，已接受风险 (ADR-0029; #64 Gap 1).
-25. 日志 and the evidence drawer show error cards in the order what / where / affected / one action. The 阶段 on a card is the unit 阶段 `workflow` recorded on the occurrence, read as a fact; the diagnosis classification phase is never shown or translated, a box- or run-scoped diagnosis (准入已暂停) shows at its own scope with no 阶段, and an `ENVIRONMENT_CHECK` diagnosis shows as its 环境自检 item (ADR-0030, [#96](https://github.com/liumingjian/dbx/issues/96)). Raw detail collapsed; an unknown diagnosis offers export. 结构证明 appears only on the unit (ADR-0005 §Operator presentation; ADR-0026; ADR-0028).
+25. 日志 and the evidence drawer show error cards in the order what / where / affected / one action. A card's 阶段 is the unit 阶段 `workflow` recorded on the occurrence, read as a fact; the diagnosis classification phase is never shown or translated; a box- or run-scoped diagnosis (准入已暂停) shows at its own scope with no 阶段; an `ENVIRONMENT_CHECK` diagnosis shows as its 环境自检 item (ADR-0030, [#96](https://github.com/liumingjian/dbx/issues/96)). Raw detail collapsed; an unknown diagnosis offers export. 结构证明 appears only on the unit (ADR-0005 §Operator presentation; ADR-0026; ADR-0028).
 26. 运行快照 holds the frozen DDL per table, the environment check conclusions, and run package export (ADR-0026; ADR-0027; ADR-0028).
-27. 重新迁移 creates a draft pre-scoped to failed, undetermined, cancelled-stopped, never-run, and drifted tables. The draft enters stage 3. It is entered from the task header only (obligation 18) (ADR-0024; ADR-0020).
+27. 重新迁移 creates a draft pre-scoped to failed, undetermined, cancelled-stopped, never-run, and drifted tables, entering stage 3. It is entered from the task header only (obligation 18) (ADR-0024; ADR-0020).
 
 **F. Shell, data sources, settings**
 28. The condition panel lists the four items, the unmet environment check items as reasons, and DBX 待回收占用 grouped by run with an entry into 丢弃 (ADR-0021).
 29. The connection form lists engines only from `supportedPairs`, with TLS 模式 and 连接校验, no JDBC parameters. Stage 4's type choices are the draft contracts' mapping alternatives (#46 Q1, Q16; ADR-0008).
-30. 关于 shows the release version only, with the BOM collapsed. The manifest is shown before any package export (ADR-0035; ADR-0028).
-30a. 系统设置 · 通用 reads and writes the three General preferences through `web` (`web` obligation 26a): 时区 governs every rendered timestamp, 每页条数 is the default page size of the paginating tables (obligation 11), and 危险操作二次确认 defaults on. An edit applies to every browser. 危险操作二次确认 never removes a confirmation an ADR fixes by name — stage 5's restating confirmation (obligation 17) and 废弃's typed schema name (obligation 19) stand whatever its value; it governs only the confirmations no ADR fixes, such as 取消运行 and 丢弃 (ADR-0016 §State split as amended by [#99](https://github.com/liumingjian/dbx/issues/99); ADR-0020; ADR-0023).
+30. 关于 shows the release version only, BOM collapsed. The manifest is shown before any package export (ADR-0035; ADR-0028).
+30a. 系统设置 · 通用 reads and writes the three General preferences through `web` (`web` obligation 26a): 时区 governs every rendered timestamp, 每页条数 is the default page size of the paginating tables (obligation 11), 危险操作二次确认 defaults on. An edit applies to every browser. 危险操作二次确认 never removes a confirmation an ADR fixes by name — stage 5's restating confirmation (obligation 17) and 废弃's typed schema name (obligation 19) stand whatever its value; it governs only confirmations no ADR fixes, such as 取消运行 and 丢弃 (ADR-0016 §State split as amended by [#99](https://github.com/liumingjian/dbx/issues/99); ADR-0020; ADR-0023).
 
 **G. Recovery mode**
-31. When `web` serves 恢复态, the app renders `/recovery` and nothing else: one zh-CN line stating the control plane is unavailable, the backup list (time, size, checksum state), 关于, and 诊断包 export. Any other route redirects here rather than erroring, because every other page reads H2 (#97; `web` obligations 29–30).
-32. Choosing a backup requires one restating confirmation naming that backup's time; restore is destructive and unattended retry is refused. A restore that fails shows what failed — 主密钥不对或缺失 versus 该备份已不可用 — and those two lead to different actions, never one generic failure (#97; `connection` obligation 18).
+31. When `web` serves 恢复态, the app renders `/recovery` and nothing else: one zh-CN line stating the control plane is unavailable, the backup list (time, size, checksum state), 关于, and 诊断包 export. Any other route redirects here rather than erroring (#97; `web` obligations 29–30).
+32. Choosing a backup requires one restating confirmation naming that backup's time; restore is destructive and unattended retry is refused. A failed restore shows what failed — 主密钥不对或缺失 versus 该备份已不可用 — and those two lead to different actions, never one generic failure (#97; `connection` obligation 18).
 33. 恢复态 is never presented as 回滚, and obligation 7's ban still holds. The DBA meets 恢复 and, where the release script is involved, 回退窗口 (ADR-0030; CONTEXT 恢复态, 回退窗口).
 
 ## Verification
@@ -79,11 +79,7 @@ The operator console: renders `web`'s facts and sends commands; computes no esti
   - `selection.test.ts` (12);
   - `scale.test.tsx`: at 1,200 rows fewer than 100 mount, unchanged at 2,400 (11);
   - a unit test per form rule (13, 16).
-- **L2 `pnpm e2e`**:
-  - `smoke`: every route × zh light/dark × key scenarios;
-  - `overlap`: 1920×1080 and 1280×800 (10);
-  - scale L2 (11);
-  - `@gate`: the nine §15.4 journeys plus 14, 15, 17–19, 22, 23, each landing with its slice.
+- **L2 `pnpm e2e`**: `smoke` (every route × zh light/dark × key scenarios); `overlap` (1920×1080 and 1280×800) (10); scale L2 (11); `@gate`, the nine §15.4 journeys plus 14, 15, 17–19, 22, 23, each landing with its slice.
 - `pnpm verify` = L1 + L2, the merge gate, run on the mac via `rexec`; no frontend L3 (ADR-0022; #64 Testing).
 
 **Mock scenarios** (`?scenario=` floor): `success`, `partial-failure`, `stuck`, `cancelled`, `inconclusive`, `abandonment` (+ 部分废弃), `cross-window` (split, drift), `finishing-cancel`, `freeze-expiring`, `runtime-caution`/`-impeded`/`-inconclusive`, `env-check-unsatisfied` (startup; pre-admission 需要人工处理), `connect-restart` (1st 需留意, 2nd 准入已暂停), `admission-paused-stuck`, `memory-budget-binding`, `estimate-unavailable`, `preflight-stale`, `scale-1200` (ADR-0016; 0021; 0024; 0027; 0031; 0032; 0039).
@@ -95,8 +91,8 @@ Mock-backed; no cross-module blocker. Slice 3 blocks `web` slices 2–6. Real-ba
 2. **Scope cut** (←1): cuts per #46, the zh-CN-only switch, CONTEXT wording, `vocabulary.test.ts`.
 3. **Data layer** (←1): port `contract/`, `api/`, `mocks/` from `feature/30` replacing `types.ts`/`mock/`; add fields for ADR-0019–0039 and paths and payloads for the surfaces the port predates (status channel, 继续迁移, abandonment, downloads, package export, supported pairs); state split, both seams, scenario floor.
 4. **Conclusions and theme** (←1): port `conclusion.ts`/`ConclusionIndicator`, palette, lint bans, reroute `StatusTag`, typography.
-5. **Tables** (←1): `DataTable` bans, `selection.ts`, scale L1/L2, and the 1,200 fixture.
-6. **Shell and condition** (←2,3,4): indicator, panel, and banner; the routes of A5.
+5. **Tables** (←1): `DataTable` bans, `selection.ts`, scale L1/L2, the 1,200 fixture.
+6. **Shell and condition** (←2,3,4): indicator, panel, banner; the routes of A5.
 7. **Data sources and settings** (←3,4,5): obligations 29–30a, settings, package manifest.
 8. **Wizard 1–3** (←3,4,5): URL gating, scope tree, findings, estimate (13–15).
 9. **Stage 4 drawer** (←8): obligation 16.
@@ -108,15 +104,5 @@ Mock-backed; no cross-module blocker. Slice 3 blocks `web` slices 2–6. Real-ba
 
 ## Conflicts resolved
 
-- #64 zh-CN + en-US, key parity, en overlap/smoke → zh-CN only, switch hidden, keys kept (#89 item 6).
-- ADR-0017 two-locale layout; ADR-0020/#46 language in top bar and settings → v2; hidden (#89 item 6). Top bar gains 运行状况 (ADR-0021).
-- ADR-0016 "declines to choose the mechanism" and `feature/30`'s `DEFAULT_POLL_INTERVAL_MS = 2_000` → 10 s plus refetch after a command (#89 item 7).
-- #64 header set → #89 item 8's, drawer not a sixth tab (#89 item 8).
-- #64 estimate "on the draft" from scope → first at stage 3 after preflight, stale-aware; 可信 means per-source history (ADR-0038).
-- ADR-0020 re-migration "failed and undetermined" → adds never-run, 因运行取消而停止, and drifted tables (ADR-0024).
-- ADR-0036 "the run stays running" on paused admission → 需要人工处理 with 「继续迁移」 (ADR-0039).
-- ADR-0029 阻塞 including a structural-proof difference → structural proof is only the unit's 迁移失败 (#86; ADR-0026).
+See [`conflicts.md`](conflicts.md#frontend) — provenance only; every winning ruling is already an obligation above.
 
-- Endpoints for new surfaces → slice 3 declares them in `src/api/*.ts` (ADR-0016 §Contract).
-- The condition banner as the one global "something is wrong" surface vs an H2 that cannot answer → 恢复态 replaces the shell instead of banners inside it, because the shell itself reads H2 (#97).
-- Mid-run 写冻结 extension and declared break → `orchestration`'s `extendFreeze`, `declareFreezeBroken`.

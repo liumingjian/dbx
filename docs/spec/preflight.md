@@ -84,18 +84,7 @@ Slices 3, 4 and 5 are independent of one another.
 
 ## Conflicts resolved
 
-- ADR-0018 row `preflight` "row-count … and Kafka probes" → ADR-0036 row `preflight`: no row count, Kafka probes suspended.
-- ADR-0003 ¶5 external-cluster active capability check → suspended in v1 (ADR-0003 status note; ADR-0036).
-- ADR-0029 table 阻塞 "structural-proof difference" → a unit's 迁移失败, never a finding (ADR-0029 #86 note; ADR-0026).
-- TP §6.6 older `MAX(LENGTH(column))` → ADR-0003 byte formula (TP §6.6 ¶2).
-- ADR-0001 "usable monotonic incrementing column" → the keyset column (ADR-0037).
-- ADR-0019 estimate once scope is settled → estimate after preflight completes, carrying the preflight time (ADR-0038).
-- ADR-0007 stage "Per-table configuration and preflight" → stage 3 预检, before mapping rules (ADR-0020).
-
-- ADR-0006 ¶2 "connection and preflight checks verify … instance identity" → not a preflight probe: `gateway` reports the effective session facts and identity on every `execute` (`gateway` obligation 7), and `orchestration` binds the identity observed at preflight (ADR-0036 rows `preflight`, `gateway`).
-
-- ADR-0037 §64 MiB cap "baseline row count" and ADR-0002 ¶4 "exact frozen row count" → the 预估行数 before approval, the 源基线 at run start (#92; ADR-0037 and ADR-0002 as amended).
-- ADR-0029's unowned target-side rows → `contract.assemble` emits them through `preflight.api`'s code and impact (#92; ADR-0029 §Who emits a finding).
+See [`conflicts.md`](conflicts.md#preflight) — provenance only; every winning ruling is already an obligation above.
 
 ## Open items
 

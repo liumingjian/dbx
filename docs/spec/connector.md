@@ -89,21 +89,7 @@ No other module's side effects: `orchestration` decrypts through `connection.dec
 
 ## Conflicts resolved
 
-- TP §7.1's prune/rename projection had no named renderer → `dialect.source.queryProjection` renders it; `deriveBox` places and fingerprints it (#92; obligation 6a).
-
-- ADR-0018 `connector` row (Connect REST only) → ADR-0036 row adds AdminClient, SR, deletes, secrets, marker, derivation.
-- ADR-0008 "the core alone produces" / audit's `contract.routingSnapshot` → ADR-0036: one derivation in `connector`.
-- ADR-0003 large-record overrides on every connector → ADR-0031: large-record boxes only.
-- ADR-0001 "usable monotonic incrementing column" → ADR-0037 keyset column; ADR-0033 `LIMIT N`/100 ms for all → ADR-0037 bulk: empty suffix, `2147483647`, 64 MiB cap.
-- ADR-0021 ten-minute grace on any platform outage → ADR-0032: Connect restart fails boxes at once, grace for unreachable only; ADR-0039 adds SR.
-- ADR-0001 stuck deletes connectors only → ADR-0032/0039: zero-output flag feeds the admission pause.
-- ADR-0001 two-minute warning on the box → ADR-0021: shown on units only; `judge` only reports it.
-- #79 "every poll" and `describeClassicGroups` fallback → ADR-0032 as amended by #90: 5 s status poll, no fallback.
-- ADR-0010 "one tested mode" → #89 item 3: `BACKWARD`.
-- ADR-0035 "startup removes leftover topics and subjects" vs ADR-0001 orphans → only ownership-recorded resources are deleted; orphans stay.
-- ADR-0003 external-cluster probe, ADR-0006 shared-mount and ADR-0009 customer-deployment clauses → suspended in v1 (ADR-0009 status note).
-
-- ADR-0036 lists only `connector.judge` as pure → the derivation is pure too: the effectful-shell list names only the data-plane clients and the ConfigProvider file (ADR-0036).
+See [`conflicts.md`](conflicts.md#connector) — provenance only; every winning ruling is already an obligation above.
 
 ## Implementer decides
 

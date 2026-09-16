@@ -68,9 +68,7 @@ ADR-0036 names one entry point: **executes typed SQL plans**.
 
 ## Conflicts resolved
 
-1. ADR-0008 §Plans said the gateway "persists evidence and audit facts". ADR-0018 §Dependency direction wins, and ADR-0036 keeps it: deep modules return results, and only `orchestration` calls `workflow.api.command`. `gateway` returns the evidence and `orchestration` persists it.
-2. `corpus-audit.md` §5 proposed the entry points `probeIdentity` and `withAdvisoryLock`. ADR-0036's Interface column wins: its only entry point is "Executes typed SQL plans". The probe and the lock are expressed as plans and modes of `execute`.
-3. ADR-0008 had the "core database gateway" bind credential versions, which could mean it resolves them itself. ADR-0036 §Dependencies and purity wins: `gateway` receives decrypted material from `orchestration`.
+See [`conflicts.md`](conflicts.md#gateway) — provenance only; every winning ruling is already an obligation above.
 
 ## Implementer decides
 

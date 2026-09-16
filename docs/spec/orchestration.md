@@ -120,15 +120,8 @@ L1 on stubbed `api`s: `OrchestrationContractTest`, `ArchitectureTest` (A, B, E, 
 12. J; after 6. Needs `diagnosis` 8; `contract` 4.
 
 ## Conflicts resolved
-- ADR-0036 "run stays running", ADR-0004 precedence → ADR-0039.
-- ADR-0006 continue after infra restart → ADR-0032 for Connect.
-- ADR-0021 grace (Kafka, Connect) → ADR-0039 adds SR; databases per ADR-0006.
-- ADR-0006 run-scoped freeze → ADR-0024 task freeze; run expiry stays (#85).
-- ADR-0024's unowned closing trigger → the operator's `closeTask` (ADR-0040).
-- ADR-0006 "never drops" → ADR-0023 abandonment, ADR-0026 (#86) proof-failure drop.
-- ADR-0019 estimate at stage 2 → ADR-0038.
-- ADR-0001 orphans vs ADR-0035 leftover cleanup → ownership records only.
-- Unowned in ADR-0036 → here, the only side-effect sequencer (ADR-0018): the unreachable timer, the 90% / 10 GB stop, validation slots, credential destruction, the freeze-limit warning; no fixed pre-expiry lead time (ADR-0024).
+
+See [`conflicts.md`](conflicts.md#orchestration) — provenance only; every winning ruling is already an obligation above.
 
 ## Open items
 None. D-20 is settled in [#96](https://github.com/liumingjian/dbx/issues/96); D-17 and D-18 in [#95](https://github.com/liumingjian/dbx/issues/95) (obligations 28a–28c).

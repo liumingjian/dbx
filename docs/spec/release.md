@@ -11,14 +11,14 @@ Ships DBX as one offline package per platform under one release version (发行�
 - Release configuration: the expected-configuration snapshot E4 compares; `release.json` pins its version (#89 item 4).
 - `compose.yaml` + `.env`: the four services, every tier-dependent heap driven by `DBX_MEMORY_TIER` (ADR-0031 §Consequences).
 - `dbx install [--dir]`, `dbx upgrade <package>` (gated), `dbx rollback` (window only). Every command prints the release version; operator output is Chinese (ADR-0035).
-- Install directory (default `~/dbx/`): `releases/<version>/`, `current`, `secrets/`, `backups/`, `drivers/`, plus two script-readable state files outside `secrets/` — the rollback-window file and the restore request ([#97](https://github.com/liumingjian/dbx/issues/97)). Kafka, Schema Registry and H2 data sit in Docker named volumes (ADR-0035 §Install directory).
+- Install directory (default `~/dbx/`): `releases/<version>/`, `current`, `secrets/`, `backups/`, `drivers/`, plus two script-readable state files outside `secrets/` — the rollback-window file and the restore request (#97). Kafka, Schema Registry and H2 data sit in Docker named volumes (ADR-0035 §Install directory).
 
 ## Consumes
 
 Specified in those modules' sub-specs; slice numbers are theirs.
 
-- `web` slice 3: the nonterminal-run query upgrade calls (ADR-0036 `web` row, ADR-0035 §In-place upgrade step 2); the pre-upgrade-backup request; a local-API read of the installation record (#89 item 5).
-- `workflow` slices 3, 8, 9: the single installation record in H2 (release version, key fingerprint, rollback-window state: opened at upgrade end, closed at first admission with run id and time); the pre-Flyway startup backup (ADR-0004); hourly backups keeping the last 48; the labelled pre-upgrade backup, the restore-request consumption and the rollback-window file (`workflow` obligations 31b–31f; #89 items 5, 9; ADR-0036 `workflow` row).
+- `web` slice 3 (ADR-0036 `web` row): the nonterminal-run query upgrade calls (ADR-0035 §In-place upgrade); the pre-upgrade-backup request; a local-API read of the installation record (#89 item 5).
+- `workflow` slices 3, 8, 9: the single installation record in H2 (release version, key fingerprint, rollback-window state); the pre-Flyway startup backup (ADR-0004); hourly backups keeping the last 48; the labelled pre-upgrade backup, the restore-request consumption and the rollback-window file (`workflow` obligations 15, 31b–31f; #89 items 5, 9; ADR-0036 `workflow` row).
 - `environment` slices 3, 4, 5: E1 against the allowlist, E3/E4 against `release.json` and the release configuration, the memory-tier item against `DBX_MEMORY_TIER` and JMX heaps, E8 key present with matching fingerprint (ADR-0027, ADR-0031 §Observation, #89 items 4, 5).
 
 ## Obligations
@@ -26,7 +26,7 @@ Specified in those modules' sub-specs; slice numbers are theirs.
 **Package (P)**
 - P1. The package holds exactly ADR-0035's members; images arrive by `docker load`; every service sets `pull_policy: never`; install and operation make no network call (ADR-0035 §Package).
 - P2. v1 ships one `linux/arm64` package for macOS on Apple Silicon with Docker Desktop (ADR-0035 §v1 platform).
-- P3. No bundled MySQL Connector/J; the JDBC connector package is curated of unused drivers (technical plan §11.4).
+- P3. No bundled MySQL Connector/J; the JDBC connector package is curated of unused drivers (TP §11.4).
 - P4. `SHA256SUMS` covers every other member; install and upgrade verify it before any other step (ADR-0035 §In-place upgrade).
 
 **`release.json` and release configuration (R)**
@@ -66,12 +66,12 @@ Specified in those modules' sub-specs; slice numbers are theirs.
 
 ## Verification
 
-All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (ADR-0035 §Verification):
+All rungs run on the Mac via `rexec`. L4 `packageTest` scenarios, in order (ADR-0035 §Verification):
 
 - `build` (P1–P4, R1–R5): members, checksums, and image digests that match `release.json`.
-- `freshInstall` (C1–C5, I1–I4): offline install with no registry, a smoke migration, tier and effective heaps agree, key mode 0600, no key in `docker inspect`. Variants: MemTotal below 8 GiB refuses with a nonzero exit, no `.env` and no started stack; MemTotal at 15.6 GiB selects the 8 GiB tier and prints the 18 GiB guidance (#98).
+- `freshInstall` (C1–C5, I1–I4): offline install with no registry, a smoke migration, tier and effective heaps agree, key mode 0600, no key in `docker inspect`. Variants: MemTotal below 8 GiB refuses with a nonzero exit, leaving no `.env` and no started stack; 15.6 GiB selects the 8 GiB tier and prints the 18 GiB guidance (#98).
 - `upgrade` (U1–U4): install the previous release, upgrade; H2 migrated, key fingerprint matches, history survived, volumes and `secrets/` unchanged. Variant: one nonterminal run means refusal and no change.
-- `rollback` (B1–B3): the previous release returns with its pre-upgrade history, restored by the previous release itself from the labelled pre-upgrade backup, with the restore request gone afterwards. Variants: one admitted run first means refusal from the window file alone, with the local API stopped; a second start of the restored stack does not restore again.
+- `rollback` (B1–B3): the previous release returns with its pre-upgrade history, restoring itself from the labelled pre-upgrade backup, the restore request gone afterwards. Variants: one admitted run first means refusal from the window file alone, with the local API stopped; a second start of the restored stack does not restore again.
 - The first release runs only `build` and `freshInstall` (ADR-0035 §Verification).
 - R2 is checked by the per-entry L3 `e2eTest` bounded-read scenario; G2 by the restart-detection `e2eTest` on the release images.
 
@@ -86,25 +86,13 @@ All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (
 
 ## Conflicts resolved
 
-- ADR-0003's 4 GiB Connect heap on ≥ 8 GiB → tier heaps 3 / 6 GiB, thresholds read as container-visible memory (ADR-0031, ADR-0035 notes).
-- ADR-0027's E5 "host memory ≥ 8 GB" → the memory-tier item, read against `docker info` MemTotal (ADR-0031, ADR-0035).
-- ADR-0031's ≥16 GiB tier against ADR-0035's "at least 18 GiB" → thresholds are 16 and 8 GiB of MemTotal; 18 GiB (and 10 GiB at the floor) is Docker Desktop allocation guidance (#98).
-- Below the 8 GiB floor, install-refusal against install-plus-E5 → I1 refuses; E5 covers only memory that falls below its tier after install (#98).
-- ADR-0035's unnumbered master-key item → E8, never waivable (#89 item 5).
-- ADR-0035/0036's "rollback-window fact and key fingerprint" → one installation record that also holds the release version (#89 item 5).
-- ADR-0010's "one tested mode" → `BACKWARD` (#89 item 3).
-- ADR-0027's "release allowlisted checksum" → `{version, SHA-256}` entries, 8.x only (#89 item 4).
-- The corpus audit's proposed `release` home for OOM flags, UTC and key placement → a non-Java sub-spec, backend halves in `web`, `workflow`, `environment` (ADR-0036).
-
-- ADR-0035's rollback order (restore, then repoint, then start) → repoint and start first, and the previous release restores itself; shell must never hold the master key (#97).
-- Old-release nonterminal run at startup, ownerless here → `orchestration` recovery marks it not automatically recoverable (`orchestration` obligation 40; ADR-0035; ADR-0008).
-- Upgrade and rollback proof before a second release → the first release runs only `build` and `freshInstall` (ADR-0035 §Verification).
+See [`conflicts.md`](conflicts.md#release) — provenance only; every winning ruling is already an obligation above.
 
 ## Implementer decides
 
 - Schema Registry and DBX heap flags: within ADR-0031's RSS budgets (0.75 / 1 GiB), set from `DBX_MEMORY_TIER`.
-- R4 values (replication factor, `min.insync.replicas`, retention, converter settings): satisfiable by the single-node Kafka and observable via AdminClient or service REST (#89 item 4; ADR-0035).
+- R4 values (replication factor, `min.insync.replicas`, retention, converter settings): satisfiable by the single-node Kafka and observable via AdminClient or service REST (#89 item 4).
 
 ## Open items
 
-None. D-23 and D-24 are settled in [#97](https://github.com/liumingjian/dbx/issues/97). D-25 and D-26 are settled in [#98](https://github.com/liumingjian/dbx/issues/98): the tier thresholds are 16 and 8 GiB of MemTotal, and MemTotal below 8 GiB is refused by I1.
+None. D-23–D-24 settled in [#97](https://github.com/liumingjian/dbx/issues/97); D-25–D-26 in [#98](https://github.com/liumingjian/dbx/issues/98) (tiers at 16 and 8 GiB MemTotal; below 8 GiB refused by I1).

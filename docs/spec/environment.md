@@ -68,16 +68,7 @@ Runs the environment check (环境自检) E0–E8: it probes the host, evaluates
 
 ## Conflicts resolved
 
-- ADR-0027 E5 "host memory at least 8 GB" → the memory-tier check against container-visible memory and the effective heaps (ADR-0031 §Observation; ADR-0035 amendment note).
-- ADR-0031's ≥16 GiB tier against ADR-0035's "at least 18 GiB" → the threshold is 16 GiB of MemTotal; 18 GiB is guidance for the Docker Desktop allocation, which exceeds the MemTotal it exposes (#98).
-- ADR-0036's row "E0 to E7, the memory tier, and the master-key item" read as a separate tier item → the tier item *is* E5 (ADR-0031 §Observation), and the master-key item is E8 (#89 item 5).
-- ADR-0027's catalog E0–E7 has no key item, and ADR-0035 says "an environment check item" → E8 (#89 item 5; ADR-0027 status line).
-- ADR-0027 "JVM heap unobservable" → heap is read over JMX (ADR-0031), while worker/JVM flags stay out of E4 (ADR-0032 §Consequences).
-- ADR-0003's active capability check for external Kafka → suspended in v1 and replaced by this check (ADR-0003 status note; technical plan §4 step 2).
-- corpus-audit §5, where `environment` consumes `connector` → `kafkaFacts` is passed in, and there is no such call (ADR-0036 §Dependencies and purity).
-- ADR-0005, where the phase list lacks `ENVIRONMENT_CHECK` and there are "20" families → the phase is added (ADR-0027) and there are 21 families, with environment codes counted in none of them (#89 item 1).
-
-- Undecided list-or-evaluate of capability-check results → lists them (ADR-0027 §Catalog "lists"); `orchestration`'s connection check concludes them.
+See [`conflicts.md`](conflicts.md#environment) — provenance only; every winning ruling is already an obligation above.
 
 ## Implementer decides
 

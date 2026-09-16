@@ -8,7 +8,7 @@ The v1 spec compiles ADR-0001–0039 and `CONTEXT.md` into one sub-spec per modu
 2. One session implements one slice from one sub-spec's **Slices** section. Its blocking slices must be merged first.
 3. A slice is done when the obligations it covers are proved by the tests its **Verification** section names, at the ladder rung it names (ADR-0022), run on the mac through `rexec`.
 
-**Precedence.** ADRs hold every rationale and win over the spec: a sub-spec that disagrees with an ADR is a spec bug, fixed in the sub-spec. `docs/technical-plan.md` is background reading, not a source of obligations. A sub-spec's **Conflicts resolved** section records which text lost where the corpus disagreed.
+**Precedence.** ADRs hold every rationale and win over the spec: a sub-spec that disagrees with an ADR is a spec bug, fixed in the sub-spec. `docs/technical-plan.md` is background reading, not a source of obligations. [`conflicts.md`](conflicts.md) records which text lost where the corpus disagreed; every winning ruling is already an obligation, so it is provenance you need only when tracing one.
 
 **Implementation tickets** are generated one per slice, with blocking edges copied from the Slices sections. Nothing here is a ticket yet.
 
@@ -66,9 +66,10 @@ Compiling settled every obligation but 29 items, `D-1`–`D-29`. **All 29 are no
 | ~~D-25–D-26~~ **resolved** | [决策：安装时的内存档位](https://github.com/liumingjian/dbx/issues/98) |
 | ~~D-27–D-29~~ **resolved** | [决策：控制台的放置与措辞](https://github.com/liumingjian/dbx/issues/99) |
 
-A resolved ticket moves its rulings into the ADRs and the affected sub-specs' Obligations, and deletes its `D-n` items. Items marked **Implementer decides** in a sub-spec are within-module choices bounded by the constraint stated there; they need no ticket.
+A resolved ticket moves its rulings into the ADRs and the affected sub-specs' Obligations, deletes its `D-n` items, and runs `python3 scripts/check-doc-budget.py` before it closes — folding rulings in is what used to push these documents over budget (#100). Items marked **Implementer decides** in a sub-spec are within-module choices bounded by the constraint stated there; they need no ticket.
 
 ## Provenance
 
-- [`subspec-brief.md`](subspec-brief.md): the rules every sub-spec follows.
+- [`subspec-brief.md`](subspec-brief.md): the rules every sub-spec follows, including the character budget and its check.
+- [`conflicts.md`](conflicts.md): every sub-spec's resolved conflicts, losing text and winning pointer, per module.
 - [`corpus-audit.md`](corpus-audit.md): the pre-compile audit of the corpus, superseded by ADR-0036–0039 and the doc sync of #91; kept for its ownership matrix.
