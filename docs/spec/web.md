@@ -53,6 +53,7 @@ None. `web` is the top of the dependency graph, so no module may depend on it (A
 **F. Installation and upgrade**
 25. A local nonterminal-run query lists every migration run that is not terminal, with enough identity for the script to name each one in Chinese, and it answers without admission running (ADR-0035 §In-place upgrade step 2).
 26. A read of the installation record (release version, key fingerprint, rollback-window state) for the upgrade and rollback scripts (#89 item 5; ADR-0035 §Failed upgrade).
+26a. A read and a whole-object write of the General preferences on that same record — 时区, 危险操作二次确认, 每页条数 — serving 系统设置 · 通用. The write validates the timezone against the JVM's zone ids and the page size against the console's offered values, and refuses anything else; `web` interprets none of the three (`frontend` obligation 30a; `workflow` obligation 15; ADR-0016 §State split as amended by [#99](https://github.com/liumingjian/dbx/issues/99)).
 27. 关于 shows the release version only, with the bill of materials collapsed (ADR-0035 §Release version).
 28. A command that takes the labelled pre-upgrade backup, called by `dbx upgrade` while the release still runs, returning the backup's identity and checksum for the rollback-window file (`workflow` obligation 31b; ADR-0035 §In-place upgrade as amended by [#97](https://github.com/liumingjian/dbx/issues/97)).
 

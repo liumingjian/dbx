@@ -65,6 +65,8 @@ With these constants, the 8 GiB tier admits about five narrow ordinary boxes, or
 
 When this gate is the binding limit, the reason reads **平台内存预算** (platform memory budget), beside the connection and disk budgets. Its explanation says only that this machine's memory decides how many tables can migrate at once, and that more host memory raises it. The interface never mentions heap, Connect or boxes (ADR-0030).
 
+Amended in [#99](https://github.com/liumingjian/dbx/issues/99): 运行监控 shows this budget's **reserved** occupancy, worded 平台内存预算 · 已用 N%, and shows no live reading at all. Admission gates on reservations (ΣR), so a live figure is the one number that can contradict what the operator sees: a budget that binds while the live reading sits at 40% reads as a defect. The live reading stays in the 诊断包, which is the support channel (ADR-0028).
+
 ## Considered options
 
 - **A larger heap and a higher memory floor alone.** Rejected: in-flight records stay unbounded, so a more compressible table breaks the larger heap too.

@@ -23,7 +23,7 @@ The operator console: renders `web`'s facts and sends commands; computes no esti
 
 **A. Host and state**
 1. `frontend/` holds the `dbx-prototype@55507fb` snapshot, cut to #46. B/Cut items deleted: no flags or hidden routes (#46 Q8; #64 Engineering shape).
-2. Server state lives only in TanStack Query. zustand holds only theme and sidebar collapse (ADR-0016 §State split).
+2. Server state lives only in TanStack Query. zustand holds only theme and sidebar collapse. The General preferences of 系统设置 are installation-scoped server state, never zustand (ADR-0016 §State split as amended by [#99](https://github.com/liumingjian/dbx/issues/99)).
 3. MSW and scenarios run only in dev and in an explicit demo build. Production has no mocks or external URLs (ADR-0016 §Build; ADR-0017 §Fonts).
 4. `?scenario=` is the only scenario state. No component reads wall-clock time for domain facts. Views tolerate jumping or lagging progress (ADR-0016).
 5. Every stage, tab, and drawer restores from its URL on refresh (ADR-0020).
@@ -47,21 +47,23 @@ The operator console: renders `web`'s facts and sends commands; computes no esti
 17. Stage 5 shows counts per impact and contract class, each opening its tables' drawers. It carries the required two-part freeze block, 整库冻结承诺 plus this run's 写冻结. The block holds the split proposal when the upper bound exceeds the limit, which warns but never blocks. 执行 stays disabled until the block is complete, then opens a restating second confirmation (ADR-0020; ADR-0024; ADR-0026; #64 Gap 2).
 
 **E. Task console**
-18. The task header holds: task status (进行中/废弃中/已废弃/部分废弃); a 整库结论 summary that opens a per-table drawer, with drift shown as 「无法判定 · 源端数据已变化」; 下载补建 SQL; and 废弃 in a danger menu, enabled only when no run is nonterminal (#89 item 8; ADR-0024; ADR-0026).
+18. The task header holds every task-scoped fact and action, the five tabs staying purely run-scoped: task status (进行中/废弃中/已废弃/部分废弃); a 整库结论 summary that opens a per-table drawer, with drift shown as 「无法判定 · 源端数据已变化」; the 整库冻结承诺 as 「剩余 <时长>」, or 「已过期，重新确认后方可发起运行」 once it has lapsed; 下载补建 SQL; 重新迁移 as the primary action; and 复制为迁移草稿 beside 废弃 in a secondary menu, where only 废弃 is styled danger. 废弃 is enabled only when no run is nonterminal (#89 item 8; ADR-0024; ADR-0026; ADR-0023).
+18a. 重新迁移 is enabled only when no run is nonterminal, the task is neither 废弃中 nor 已废弃, and obligation 27's scope is non-empty; otherwise it is disabled and states which of those it fails. 复制为迁移草稿 stays enabled on an abandoned task, being the only forward path from one (ADR-0023). The 整库冻结承诺 remaining time arrives from `web` with each 10 s poll and is never a client-side countdown (obligation 4).
 19. 废弃 shows the exportable 废弃清单 with a read tick, a separate tick for red rows, and the schema name typed in. An approved draft can export 预估废弃清单, labelled projected (ADR-0023).
-20. 运行监控 shows the phase strip, 预计剩余 or 无法预估 with its reason, throughput, and live heap usage (wording: D-29). The binding limit reads 平台内存预算. Suspected-stuck marks sit on units only (ADR-0019; ADR-0031; ADR-0021).
+20. 运行监控 shows the phase strip, 预计剩余 or 无法预估 with its reason, throughput, and 「平台内存预算 · 已用 N%」, which is the **reserved** share of the budget, never a live reading and never a MiB figure. The binding limit reads 平台内存预算, the same term. Suspected-stuck marks sit on units only (ADR-0019; ADR-0031 §Operator wording as amended by [#99](https://github.com/liumingjian/dbx/issues/99); ADR-0021).
 21. A unit whose validation is `INCONCLUSIVE` shows phase 校验中 and a separate 校验 column with 重新校验 and 校验处置 (#64 Gap 1).
 22. An open 准入已暂停 shows the run as 需要人工处理, with its reason and 「继续迁移」 beside 「取消运行」 (ADR-0039).
 23. 取消 offers 收尾取消. When units will not finish before the freeze expires, the console states the choice: extend the freeze, or those units fail at expiry (ADR-0024).
 24. 校验报告 keeps technical results, preflight exclusions, and dispositions in separate panes. After a disposition, the original 无法判定/未通过 stays visible beside 完成，已接受风险 (ADR-0029; #64 Gap 1).
 25. 日志 and the evidence drawer show error cards in the order what / where / affected / one action. The 阶段 on a card is the unit 阶段 `workflow` recorded on the occurrence, read as a fact; the diagnosis classification phase is never shown or translated, a box- or run-scoped diagnosis (准入已暂停) shows at its own scope with no 阶段, and an `ENVIRONMENT_CHECK` diagnosis shows as its 环境自检 item (ADR-0030, [#96](https://github.com/liumingjian/dbx/issues/96)). Raw detail collapsed; an unknown diagnosis offers export. 结构证明 appears only on the unit (ADR-0005 §Operator presentation; ADR-0026; ADR-0028).
 26. 运行快照 holds the frozen DDL per table, the environment check conclusions, and run package export (ADR-0026; ADR-0027; ADR-0028).
-27. 重新迁移 creates a draft pre-scoped to failed, undetermined, cancelled-stopped, never-run, and drifted tables. The draft enters stage 3 (ADR-0024; ADR-0020).
+27. 重新迁移 creates a draft pre-scoped to failed, undetermined, cancelled-stopped, never-run, and drifted tables. The draft enters stage 3. It is entered from the task header only (obligation 18) (ADR-0024; ADR-0020).
 
 **F. Shell, data sources, settings**
 28. The condition panel lists the four items, the unmet environment check items as reasons, and DBX 待回收占用 grouped by run with an entry into 丢弃 (ADR-0021).
 29. The connection form lists engines only from `supportedPairs`, with TLS 模式 and 连接校验, no JDBC parameters. Stage 4's type choices are the draft contracts' mapping alternatives (#46 Q1, Q16; ADR-0008).
 30. 关于 shows the release version only, with the BOM collapsed. The manifest is shown before any package export (ADR-0035; ADR-0028).
+30a. 系统设置 · 通用 reads and writes the three General preferences through `web` (`web` obligation 26a): 时区 governs every rendered timestamp, 每页条数 is the default page size of the paginating tables (obligation 11), and 危险操作二次确认 defaults on. An edit applies to every browser. 危险操作二次确认 never removes a confirmation an ADR fixes by name — stage 5's restating confirmation (obligation 17) and 废弃's typed schema name (obligation 19) stand whatever its value; it governs only the confirmations no ADR fixes, such as 取消运行 and 丢弃 (ADR-0016 §State split as amended by [#99](https://github.com/liumingjian/dbx/issues/99); ADR-0020; ADR-0023).
 
 **G. Recovery mode**
 31. When `web` serves 恢复态, the app renders `/recovery` and nothing else: one zh-CN line stating the control plane is unavailable, the backup list (time, size, checksum state), 关于, and 诊断包 export. Any other route redirects here rather than erroring, because every other page reads H2 (#97; `web` obligations 29–30).
@@ -95,13 +97,13 @@ Mock-backed; no cross-module blocker. Slice 3 blocks `web` slices 2–6. Real-ba
 4. **Conclusions and theme** (←1): port `conclusion.ts`/`ConclusionIndicator`, palette, lint bans, reroute `StatusTag`, typography.
 5. **Tables** (←1): `DataTable` bans, `selection.ts`, scale L1/L2, and the 1,200 fixture.
 6. **Shell and condition** (←2,3,4): indicator, panel, and banner; the routes of A5.
-7. **Data sources and settings** (←3,4,5; D-27): obligations 29–30, settings, package manifest.
+7. **Data sources and settings** (←3,4,5): obligations 29–30a, settings, package manifest.
 8. **Wizard 1–3** (←3,4,5): URL gating, scope tree, findings, estimate (13–15).
 9. **Stage 4 drawer** (←8): obligation 16.
 10. **Stage 5** (←9): obligation 17.
-11. **Task list and 运行监控** (←3,4,5; D-28, D-29): run switcher, obligations 20–23.
+11. **Task list and 运行监控** (←3,4,5): run switcher, obligations 20–23.
 12. **Run tabs and evidence** (←11): obligations 21, 24–26.
-13. **Task header** (←11,10; D-28): obligations 18–19, 27.
+13. **Task header** (←11,10): obligations 18–19, 18a, 27.
 14. **Recovery mode** (←3,4): obligations 31–33, the `/recovery` route and its mock scenario.
 
 ## Conflicts resolved
@@ -118,9 +120,3 @@ Mock-backed; no cross-module blocker. Slice 3 blocks `web` slices 2–6. Real-ba
 - Endpoints for new surfaces → slice 3 declares them in `src/api/*.ts` (ADR-0016 §Contract).
 - The condition banner as the one global "something is wrong" surface vs an H2 that cannot answer → 恢复态 replaces the shell instead of banners inside it, because the shell itself reads H2 (#97).
 - Mid-run 写冻结 extension and declared break → `orchestration`'s `extendFreeze`, `declareFreezeBroken`.
-
-## Open items
-
-- **D-27** (T8): where General preferences (timezone, confirm-dangerous, page size) are stored (ADR-0016). Blocks slice 7.
-- **D-28** (T8): where 重新迁移, 复制为迁移草稿, and the remaining 整库冻结承诺 time sit (#89 item 8). Blocks slices 11, 13.
-- **D-29** (T8): wording for live heap usage in 运行监控 (ADR-0031 §Operator wording). Blocks slice 11.
