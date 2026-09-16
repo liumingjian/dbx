@@ -11,6 +11,7 @@ The operator console: renders `web`'s facts and sends commands; computes no esti
 - `/tasks/:taskId/runs/:runNo/:tab`: a task header, a run switcher (「第 N 次迁移运行」), and five run-scoped tabs 运行监控 / 校验报告 / 预检发现 / 日志 / 运行快照. The header's 整库结论 opens a per-table drawer. Table evidence opens as the drawer `…/:tab/tables/:unitId` (ADR-0020; #89 item 8).
 - `/datasources`: connection list, form, and 连接校验 (#46 per-page).
 - `/settings/general` and `/settings/about`: preferences; the release version (发行版本); installation 诊断包 (diagnostic package) export (#46; ADR-0035; ADR-0028).
+- `/recovery`: the 恢复态 (recovery mode) surface, reachable only when `web` serves recovery mode. It replaces the shell entirely — no sidebar, no 运行状况 indicator, because both read H2 ([#97](https://github.com/liumingjian/dbx/issues/97); ADR-0006 §Recovery).
 
 ## Consumes
 
@@ -62,6 +63,11 @@ The operator console: renders `web`'s facts and sends commands; computes no esti
 29. The connection form lists engines only from `supportedPairs`, with TLS 模式 and 连接校验, no JDBC parameters. Stage 4's type choices are the draft contracts' mapping alternatives (#46 Q1, Q16; ADR-0008).
 30. 关于 shows the release version only, with the BOM collapsed. The manifest is shown before any package export (ADR-0035; ADR-0028).
 
+**G. Recovery mode**
+31. When `web` serves 恢复态, the app renders `/recovery` and nothing else: one zh-CN line stating the control plane is unavailable, the backup list (time, size, checksum state), 关于, and 诊断包 export. Any other route redirects here rather than erroring, because every other page reads H2 (#97; `web` obligations 29–30).
+32. Choosing a backup requires one restating confirmation naming that backup's time; restore is destructive and unattended retry is refused. A restore that fails shows what failed — 主密钥不对或缺失 versus 该备份已不可用 — and those two lead to different actions, never one generic failure (#97; `connection` obligation 18).
+33. 恢复态 is never presented as 回滚, and obligation 7's ban still holds. The DBA meets 恢复 and, where the release script is involved, 回退窗口 (ADR-0030; CONTEXT 恢复态, 回退窗口).
+
 ## Verification
 
 - **L1 `pnpm check`**: typecheck, ESLint (covers 9), `format:check`, and these Vitest tests:
@@ -96,6 +102,7 @@ Mock-backed; no cross-module blocker. Slice 3 blocks `web` slices 2–6. Real-ba
 11. **Task list and 运行监控** (←3,4,5; D-28, D-29): run switcher, obligations 20–23.
 12. **Run tabs and evidence** (←11): obligations 21, 24–26.
 13. **Task header** (←11,10; D-28): obligations 18–19, 27.
+14. **Recovery mode** (←3,4): obligations 31–33, the `/recovery` route and its mock scenario.
 
 ## Conflicts resolved
 
@@ -109,6 +116,7 @@ Mock-backed; no cross-module blocker. Slice 3 blocks `web` slices 2–6. Real-ba
 - ADR-0029 阻塞 including a structural-proof difference → structural proof is only the unit's 迁移失败 (#86; ADR-0026).
 
 - Endpoints for new surfaces → slice 3 declares them in `src/api/*.ts` (ADR-0016 §Contract).
+- The condition banner as the one global "something is wrong" surface vs an H2 that cannot answer → 恢复态 replaces the shell instead of banners inside it, because the shell itself reads H2 (#97).
 - Mid-run 写冻结 extension and declared break → `orchestration`'s `extendFreeze`, `declareFreezeBroken`.
 
 ## Open items

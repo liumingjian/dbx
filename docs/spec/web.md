@@ -77,7 +77,7 @@ None. `web` is the top of the dependency graph, so no module may depend on it (A
 4. **Draft and run commands** (14–18, 22). Blocked by `orchestration` slice 1, `frontend` slice 3.
 5. **Destructive commands**: discard, abandonment, retry, abandonment lists (19–21). Blocked by `orchestration` slice 1, `frontend` slice 3.
 6. **Downloads**: supplemental SQL and diagnostic package (23–24). Blocked by `orchestration` slice 1, `frontend` slice 3.
-7. **Recovery mode**: the restore page, the narrowed route set, the restore command (29–31). Blocked by `workflow` slice 8, `orchestration` slice 1, `frontend` slice 3.
+7. **Recovery mode**: the restore page, the narrowed route set, the restore command (29–31). Blocked by `workflow` slice 8, `orchestration` slice 1, `frontend` slices 3 and 14.
 
 Each slice depends on slice 1; slices 2–6 are otherwise independent. Provider slice 1s suffice because every L1 test runs against stubbed `orchestration.api` and `workflow.api.query`; `frontend` depends on no `web` slice, so no cycle forms.
 
