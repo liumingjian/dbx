@@ -2,13 +2,15 @@
 
 Plans the exact preflight (预检) probes for a table and evaluates their facts into one conclusion, preflight findings (预检发现), and the envelope and byte-estimate evidence later modules read.
 
-**Read first**: ADR-0036 (row `preflight`, §Dependencies and purity), ADR-0018 (§Enforcement, §Session rule), ADR-0003, ADR-0029, ADR-0037, TP §6.6, ADR-0002 ¶4, ADR-0038 §When the estimate exists, ADR-0022. CONTEXT.md terms: Preflight, Preflight finding, Preflight finding impact, Preflight finding code, Preflight conclusion, Preflight inconclusive reason, Large record table, Large-record envelope, Keyset column, Source baseline, Table write contract, Mapping rule.
+**Read first**: ADR-0036 (row `preflight`, §Dependencies and purity), ADR-0018 (§Enforcement, §Session rule), ADR-0003, ADR-0029, ADR-0037, TP §6.6, ADR-0002 ¶4, ADR-0038 §When the estimate exists, ADR-0022. CONTEXT.md terms: Preflight, Preflight finding, Preflight finding impact, Preflight finding code, Preflight conclusion, Preflight inconclusive reason, Large record table, Large-record envelope, Keyset column, Source baseline, Planned row count, Table write contract, Mapping rule.
 
 ## Interface (`preflight.api`)
 
 ADR-0036's Interface column reads "Plans and evaluates probes → evidence"; the names `plan`/`evaluate` are final (reconciliation). Pure: ADR-0036's effectful-shell list is exhaustive and omits `preflight`.
 
 - `plan` — in: one table's approved selected columns with their extraction expressions (query-mode aliases included) and the pair's mapping decisions with their required preflights; out: a preflight plan made of typed SQL plans from `dialect`; no I/O.
+`preflight.api` also hosts the 预检发现 type, its 预检发现码 enum, and ADR-0029's impact table, which `contract` emits through (ADR-0029 §Who emits a finding).
+
 - `evaluate` — in: the preflight plan plus the executed facts, or the failure of each fact to arrive; out: preflight evidence, which holds the conclusion (`SUPPORTED`/`UNSUPPORTED`/`INCONCLUSIVE`), the findings (a code, one impact, and the observed values), the large-record flag, M (the largest exact row byte length), the per-value maxima, the keyset-column choice, and the planned transfer bytes; no I/O.
 
 ## Consumes
@@ -37,12 +39,14 @@ ADR-0036's Interface column reads "Plans and evaluates probes → evidence"; the
 12. Out-of-domain values produce a 阻塞 finding coded 值域超出目标类型, and zero dates without the approved conversion produce one coded 零日期值将被拒绝 (ADR-0029 table; CONTEXT Preflight finding code).
 13. A source `auto_increment` above 2^63−1 is 阻塞; a primary key too wide to build is 数据有损 (ADR-0029 table; TP §7.3).
 14. When zero-date-to-NULL is approved and the scan observes affected rows, the evidence records them so the per-column `NOT NULL` relaxation (数据有损) can be decided (TP §7.3; ADR-0029 table).
-15. Findings stay within ADR-0029's table; an ungraded code fails the contract test (ADR-0029 §Impact).
+15. Findings stay within ADR-0029's table, and every emitted code is a 预检发现码 defined in `CONTEXT.md`; an ungraded or unnamed code fails the contract test (ADR-0029 §Impact, §Who emits a finding).
+15a. `preflight` emits every finding established from source-side facts **and** every finding derived from a mapping decision without a probe: 亚毫秒精度将被截断, 默认值未建（B 档）, 序列上限收窄, 无主键且无唯一候选, 非空约束按列放宽, 主键过宽无法建立. `pair.map`'s notices and contract effects are already `plan` inputs, so no probe is required to grade them (ADR-0029 §Who emits a finding).
+15b. `preflight` never emits the two target-side findings, 目标端已存在同名表 and 目标表结构与契约不一致; `contract.assemble` emits them, because only it holds the draft contract and the target catalog facts. No probe here reads the target (ADR-0029 §Who emits a finding; ADR-0036 §Amended by #92).
 
 ### Keyset column and bulk cap
 16. Evaluates the keyset column (键集列) conditions: integer type, `NOT NULL`, unique through the primary key or a unique index, minimum ≥ 0, maximum ≤ 2^63−1 (ADR-0037 §The keyset column).
 17. When several columns qualify, it chooses the primary key, and otherwise the unique index with the lowest name in the source collation (ADR-0037 §Choice).
-18. A table without a keyset column whose row count × M exceeds 64 MiB gets a 阻塞 finding. Its explanation names neither Kafka, Connect, cursors, nor temporary tables (ADR-0037 §64 MiB cap; ADR-0030; TP §6.6 item 8).
+18. A table without a keyset column gets a 阻塞 finding, coded 大表缺少唯一整数键, when `1.5 × 预估行数 × M` exceeds 64 MiB. The 预估行数 comes from `source.metadataPlan`'s statistics (bounded sampling when they are unusable) and is an input, never a probe of this module; the exact check against the 源基线 happens at run start, where a violation is the unit's 迁移失败 (ADR-0037 §64 MiB cap; ADR-0036 row `preflight`). Its explanation names neither Kafka, Connect, cursors, nor temporary tables (ADR-0037 §64 MiB cap; ADR-0030; TP §6.6 item 8).
 
 ### Conclusion
 19. `INCONCLUSIVE` carries exactly one reason: 查询超时, 权限不足, or 连接中断. Timeout, cancellation, permission failure, and a lost connection all map here, and no input overrides it (ADR-0003 ¶2; ADR-0029 §INCONCLUSIVE; CONTEXT Preflight inconclusive reason).
@@ -52,7 +56,7 @@ ADR-0036's Interface column reads "Plans and evaluates probes → evidence"; the
 22. Evidence is a pure function of its inputs, and the preflight time is an input (ADR-0038 §When the estimate exists; ADR-0018 §Pure core).
 
 ### Byte estimate
-23. Planned transfer bytes = `1.5 × max(DATA_LENGTH, row count × average row length)`, using bounded sampling when statistics are unusable (ADR-0002 ¶4; TP §8).
+23. Planned transfer bytes = `1.5 × max(DATA_LENGTH, 预估行数 × average row length)`, using bounded sampling when statistics are unusable. The 预估行数 is the same statistics-derived input as obligation 18, not the 源基线 (ADR-0002 ¶4 as amended by #92; TP §8).
 24. The byte estimate never feeds the conclusion or any finding (TP §8 "capacity planning, not correctness evidence").
 
 ## Verification
@@ -63,8 +67,8 @@ All at L1 `check` (ADR-0022). `preflight` is not a side-effect shell, so L2 is n
 |---|---|
 | 1–4 | ArchUnit pure-module and api-only rules (ADR-0018, ADR-0036) plus `PreflightContractTest#dependsOnlyOnDialectApi`, `#planHasNoRowCountOrKafkaProbe` |
 | 5–10 | `PreflightContractTest#envelope*`: one aggregate per table, pruned-column rerun, boundary cases at exactly 20,971,520 bytes and one byte above, 1 MiB flag, M |
-| 11–15 | `PreflightContractTest#typeDomain*`: one case per TP §6.6 check 2–7, and an assertion that every emitted code is present in the impact table |
-| 16–18 | `PreflightContractTest#keyset*`: choice order, min −1 / 0, max 2^63−1 / 2^63, bulk exactly at 64 MiB and one byte above |
+| 11–15b | `PreflightContractTest#typeDomain*`: one case per TP §6.6 check 2–7, an assertion that every emitted code is present in both the impact table and `CONTEXT.md`, one case per mapping-derived finding, and `#emitsNoTargetSideFinding` |
+| 16–18 | `PreflightContractTest#keyset*`: choice order, min −1 / 0, max 2^63−1 / 2^63, `1.5 × 预估行数 × M` exactly at 64 MiB and one byte above |
 | 19–22 | `PreflightContractTest#conclusion*`: each inconclusive reason, no override path, determinism |
 | 23–24 | `PreflightContractTest#byteEstimate*`: stats vs row-length branch; estimate absent from the conclusion inputs |
 
@@ -72,9 +76,9 @@ All at L1 `check` (ADR-0022). `preflight` is not a side-effect shell, so L2 is n
 
 1. **API and contract-test skeleton.** Adds `preflight.api` types (plan, evidence, conclusion, finding code, impact, inconclusive reason) and `plan`/`evaluate` stubs; `PreflightContractTest` lists every obligation as a disabled case; README. Blocked by: `dialect` slice 1.
 2. **Envelope scan, obligations 5–10, 19–20a.** Blocked by: slice 1; `dialect` slice 6 (`source.preflightScanPlan`).
-3. **Type-domain checks, obligations 11–15.** Blocked by: slice 2; `dialect` slice 3 (`pair.map` required preflights); D-1, D-2.
-4. **Keyset column and bulk cap, obligations 16–18.** Blocked by: slice 2; `dialect` slice 5 (`source.keysetCandidates`); D-2, D-3.
-5. **Byte estimate and preflight time, obligations 22–24.** Blocked by: slice 1; `dialect` slice 5 (`source.metadataPlan` statistics); D-3.
+3. **Type-domain checks and mapping-derived findings, obligations 11–15b.** Blocked by: slice 2; `dialect` slice 3 (`pair.map` required preflights).
+4. **Keyset column and bulk cap, obligations 16–18.** Blocked by: slice 2; `dialect` slice 5 (`source.keysetCandidates`).
+5. **Byte estimate and preflight time, obligations 22–24.** Blocked by: slice 1; `dialect` slice 5 (`source.metadataPlan` statistics).
 
 Slices 3, 4 and 5 are independent of one another.
 
@@ -90,8 +94,9 @@ Slices 3, 4 and 5 are independent of one another.
 
 - ADR-0006 ¶2 "connection and preflight checks verify … instance identity" → not a preflight probe: `gateway` reports the effective session facts and identity on every `execute` (`gateway` obligation 7), and `orchestration` binds the identity observed at preflight (ADR-0036 rows `preflight`, `gateway`).
 
+- ADR-0037 §64 MiB cap "baseline row count" and ADR-0002 ¶4 "exact frozen row count" → the 预估行数 before approval, the 源基线 at run start (#92; ADR-0037 and ADR-0002 as amended).
+- ADR-0029's unowned target-side rows → `contract.assemble` emits them through `preflight.api`'s code and impact (#92; ADR-0029 §Who emits a finding).
+
 ## Open items
 
-- **D-1** (T1): who grades the target-side 阻塞 findings (same-name target table exists; a rerun's target differs) and the mapping-derived findings (ADR-0029 table). Blocks slice 3.
-- **D-2** (T1): CONTEXT.md codes for auto-increment overflow, primary key too wide, and the bulk-cap finding. Blocks slices 3, 4.
-- **D-3** (T1): which row count feeds the bulk cap (ADR-0037 "baseline") and the byte estimate (ADR-0002 "frozen") before any baseline exists. Blocks slices 4, 5.
+_None._

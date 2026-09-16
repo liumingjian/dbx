@@ -8,7 +8,7 @@ Pure module: turns a run's preflighted units into an immutable scheduling plan (
 
 All pure: no `JdbcTemplate`, HTTP client, or clock; time and facts arrive as arguments (ADR-0018, ADR-0036).
 
-- `plan`: in: the run's units (execution signature with its frozen connector settings, planned transfer bytes, baseline row count, M, large-record flag, exact-empty flag), connection budgets, Connect task count, effective Connect heap, Kafka disk budget → out: scheduling plan (boxes, order, R per box). Pure.
+- `plan`: in: the run's units (execution signature with its frozen connector settings, planned transfer bytes, baseline row count, M, large-record flag, exact-empty flag — the two counts are distinct: planned transfer bytes was computed at preflight from the **预估行数**, while the baseline row count is the exact 源基线 available by plan time; #92), connection budgets, Connect task count, effective Connect heap, Kafka disk budget → out: scheduling plan (boxes, order, R per box). Pure.
 - `admit`: in: plan, running boxes, current occupancy on every gate, effective heap, the condition's admission stop signal, the run's open admission pause → out: next box, or a wait naming the binding gate. Pure.
 - `proposeSplit`: remaining tables' plan inputs, rate source, write-freeze limit → table sets each fitting the limit, plus tables whose 窗口下限 exceeds it. Pure (ADR-0024 §Planning; added at reconciliation).
 - `predict(run-history rates)`: in: plan (whole, or only its unfinished part), the admission inputs, a rate source (the reference table, per-source history samples, or observed in-run rates), preflight staleness, elapsed time → out: range (low, high), 窗口下限, confidence, source; or no number with a reason. Pure.
@@ -45,7 +45,7 @@ None. `orchestration` fills `scheduling.api`'s own records: the signature as an 
 
 ### Predict: shape and replay
 
-19. A large-record table streams at the large-record band. Every other table streams at `L ÷ (a + b × L)`, where L = planned bytes ÷ row count. L is clamped to the narrow and wide anchors and never reaches the large-record rate. a and b are fitted separately for the band's low and high ends (ADR-0034 §Shape rate per table).
+19. A large-record table streams at the large-record band. Every other table streams at `L ÷ (a + b × L)`, where L = planned bytes ÷ baseline row count (the exact count, not the 预估行数 that produced planned bytes; #92). L is clamped to the narrow and wide anchors and never reaches the large-record rate. a and b are fitted separately for the band's low and high ends (ADR-0034 §Shape rate per table).
 20. The replay runs the plan through `admit` itself, largest first, with every gate including memory. Each box advances at the rate of the table it is transferring (ADR-0034 §Combination).
 21. While the running rates sum above the shared ceiling (reference 145–151 MiB/s), scale them all down in proportion. The same ceiling serves every tier (ADR-0034 §Combination, §Memory tiers).
 22. The low end is one replay with every parameter fast. The high end is one replay with every parameter slow. Ends are never mixed. There is no sampling, no jitter allowance, and no safety factor (ADR-0034 §Range ends, ADR-0038).
@@ -82,7 +82,7 @@ All rungs are L1 (`check`). The module has no shell, so it needs no L2 (ADR-0022
 ## Slices
 
 1. **api skeleton**: `plan`, `admit`, and `predict` signatures, input and output records, the constant table, `SchedulingContractTest` with pending cases, and the README. Blockers: none.
-2. **plan** (1–10) with the box-plan golden set. Blocked by slice 1; D-3, D-5, D-6, D-8.
+2. **plan** (1–10) with the box-plan golden set. Blocked by slice 1; D-5, D-6, D-8.
 3. **admit** (11–18). Blocked by slice 2; D-5, D-7.
 4. **predict, reference rates, and `proposeSplit`** (19–26), with the reference-dataset acceptance fixture. Blocked by slice 3.
 5. **predict, history** (27–31). Blocked by slice 4.
@@ -92,6 +92,7 @@ All rungs are L1 (`check`). The module has no shell, so it needs no L2 (ADR-0022
 ## Conflicts resolved
 
 - ADR-0018 module row "`plan`, `admit`" → ADR-0036 adds `predict(run-history rates)` and the estimate.
+- ADR-0002 ¶4 "exact frozen row count" behind planned transfer bytes → the 预估行数 at preflight; the exact 源基线 count is a separate `plan` input (#92; ADR-0002 as amended).
 - ADR-0002 "five gates" → ADR-0031: a sixth, cumulative memory gate.
 - ADR-0002 "computed maximum concurrency" (undefined) → #89 item 2's formula.
 - ADR-0002 "no first-run estimate" → ADR-0019: an estimate before every run. ADR-0002's gate governs only the handover to the remaining-time estimate.
@@ -114,4 +115,3 @@ All rungs are L1 (`check`). The module has no shell, so it needs no L2 (ADR-0022
 - **D-7** (T2): the large-box starvation protection rule (ADR-0002, ADR-0031). Blocks slice 3.
 - **D-8** (T2): whether DBX's own JDBC connections count against the budgets (ADR-0002 "two reserved"). Blocks slice 2.
 - **D-9** (T2): the "unstable across consecutive samples" criterion (ADR-0019). Blocks slice 6.
-- **D-3** (T1): pre-baseline row count behind planned bytes. Blocks slice 2.

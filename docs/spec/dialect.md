@@ -17,6 +17,7 @@ ADR-0036/0018 describe this interface without naming entry points; the names bel
 - `source.metadataPlan(scope) → SqlPlan`; `source.normalizeMetadata(rows) → SourceTableMetadata`
 - `source.capabilityPlans(scope)`, `source.preflightScanPlan(table, obligations)`, `source.baselinePlan(table, keysetColumn?)`, `source.validationFactPlans(items)`, `source.samplingPlan(key, n) → SqlPlan(s)`
 - `source.keysetCandidates(SourceTableMetadata) → ordered candidates`
+- `source.queryProjection(approvedColumns, mappingRules) → ProjectionSql` (the prune/rename `SELECT … AS …` projection; #92)
 - `source.connectionSemantics(MappingOptions) → ConnectionSemantics`
 - `target.ddlPlan(TargetTable)`, `target.catalogReadPlan(coordinates)`, `target.capabilityProbePlans(schema, probeName)`, `target.maintenancePlans(...)`, `target.validationFactPlans(items)`, `target.samplingLookupPlan(keys) → SqlPlan(s)` (TP §9.3; lookup added at reconciliation for `validation`)
 - `target.normalizeCatalog(rows) → TargetTableFacts`
@@ -57,6 +58,8 @@ None: `dialect` is the bottom of the dependency graph (ADR-0018 §Dependency dir
 17. That scan also yields each keyset candidate's min and max plus the row-length facts for check 8 (ADR-0037; TP §6.6).
 18. Keyset candidates are single integer, `NOT NULL`, unique columns: the primary key first, then the unique index with the lowest name in the source collation (ADR-0037 §Choice).
 19. The baseline plan reads the exact `COUNT(*)` and the keyset column's min and max (ADR-0037; TP §4 step 8).
+19a. `queryProjection` renders the prune and rename projection, `SELECT <expr> AS <alias>, …`, from approved typed identifiers under obligation 5's quoting rules. It is the **only** renderer of that projection: `preflight`'s envelope scan measures these expressions (`preflight` `plan`) and `connector.deriveBox` places the same text into the Source `query` and `query.mode` properties and fingerprints it. It renders no `FROM`-clause filter, no `WHERE`, and no value transform (TP §7.1; ADR-0036 §Amended by #92).
+19b. The metadata plan's statistics carry the 预估行数 and `DATA_LENGTH` that `preflight` uses for the bulk cap and the byte estimate; the projection and the envelope scan both cover exactly the approved selected columns (ADR-0002 ¶4, ADR-0037 as amended by #92).
 20. Capability plans need only ADR-0006's read-only privileges (ADR-0006 §Capability checks).
 21. Connection semantics are the fingerprinted TP §6.5 Connector/J settings, including `useCursorFetch=true` and no `defaultFetchSize` (TP §6.5; ADR-0033).
 22. The bounded-read requirement declares cursor fetch, byte-derived fetch sizing, `LIMIT` keyset chunks, and bulk reads only within the 64 MiB cap (ADR-0033 §Settings; ADR-0037 §Bulk path).
@@ -86,7 +89,7 @@ None: `dialect` is the bottom of the dependency graph (ADR-0018 §Dependency dir
 - **6–9**: L1 `DialectCatalogContractTest`.
 - **10–13**: L1 golden set 1 (type-mapping matrix; ADR-0022), exhaustive type-list test, widening and determinism property tests (TP §15.1).
 - **14**: L1 `IdentifierMappingContractTest`.
-- **15–23**: L1 `SourceDialectContractTest`. The bounded-read effect is proven at L3 in the bounded-read scenario (ADR-0033 §Proof; ADR-0037).
+- **15–23**: L1 `SourceDialectContractTest`, including `#queryProjection*`: pruned column absent, renamed column aliased, hostile identifiers quoted, byte-identical to the text `deriveBox` places. The bounded-read effect is proven at L3 in the bounded-read scenario (ADR-0033 §Proof; ADR-0037).
 - **24–29**: L1 `TargetDialectContractTest`. PostgreSQL 15 execution of TP §15.2 runs at L2 in `contract` slice 8 through `gateway`; `dialect` is pure and has no L2 (ADR-0022).
 - **30**: L1 `PairContractTest`.
 - **Pair certification**: L3 `e2eTest`, required on merge into `main` when `dialect` changes (ADR-0022; ADR-0008 §Certification).
@@ -97,7 +100,7 @@ None: `dialect` is the bottom of the dependency graph (ADR-0018 §Dependency dir
 2. **Catalog, versions, codecs, `catalog.list`** (6–9). After 1.
 3. **TypeMapper** with golden set 1 (10–13). After 1.
 4. **Quoting and identifiers** (5, 14). After 1.
-5. **Source metadata, capability plans, connection semantics, keyset candidates, bounded read** (15, 18, 20–22). After 3.
+5. **Source metadata, capability plans, connection semantics, keyset candidates, query projection, bounded read** (15, 18, 19a–19b, 20–22). After 3, 4.
 6. **Preflight scan, baseline, validation and sampling plans** (16–17, 19, 23). After 3, 5.
 7. **Target DDL, supplemental statements, Sink settings** (24–25, 29). After 3, 4.
 8. **Target catalog, probe, maintenance, validation plans** (26–28). After 7.
@@ -118,6 +121,8 @@ No slice is blocked by another module.
 - Supplemental statements as a dialect entry (ADR-0026 "the same pure function … as the contract") → `target.supplementalStatements` renders; `contract.assemble` calls it from the same snapshot (ADR-0036 `contract` row).
 - `batch.max.rows` and N (ADR-0033 "the core injects") → computed from M in `connector.deriveBox`, the one normalized-configuration derivation; the dialect declares only the requirement (ADR-0036 `connector` row; obligation 22).
 
+- TP §7.1 leaves the prune/rename projection's renderer unnamed → `source.queryProjection` renders it, `connector.deriveBox` only places and fingerprints it, because the projection has two consumers and `preflight` reaches only `dialect.api` (#92; ADR-0036 §Amended by #92).
+
 ## Open items
 
-- **D-4** (T1): who renders the Source query projection for prune and rename (`SELECT … AS …`): a `source` entry here, or `connector.deriveBox` (TP §7.1; ADR-0008; ADR-0036). Blocks slice 5 and `connector` slice 2.
+_None._

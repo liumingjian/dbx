@@ -4,17 +4,31 @@
 
 > Amended by [#86](https://github.com/liumingjian/dbx/issues/86): the 阻塞 row no longer lists "structural-proof difference". Structural proof (结构证明) runs inside the run after DDL, so its failure is the table migration unit's 迁移失败 (ADR-0026), never a finding. The pre-approval target-side case is a rerun whose existing target table differs from the contract (ADR-0006), and that is the row's finding.
 
+> Amended by [#92](https://github.com/liumingjian/dbx/issues/92): the impact table below gains the 64 MiB bulk-cap finding (ADR-0037), every row now has a 预检发现码 in `CONTEXT.md`, and §Who emits a finding names the module that grades each row.
+
 ## Impact, not severity
 
 Every preflight finding (预检发现) carries one 预检发现影响 (preflight finding impact):
 
 | Impact | Colour | Findings |
 |---|---|---|
-| 阻塞 (blocking) | red | large record value or row over the 大记录包络; value domain out of range; zero date value rejected; source `auto_increment` already above 2^63-1; a same-name target table exists; an existing target table on a rerun differs from the contract |
+| 阻塞 (blocking) | red | large record value or row over the 大记录包络; value domain out of range; zero date value rejected; source `auto_increment` already above 2^63-1; a large table without a keyset column, over the 64 MiB bulk cap (ADR-0037); a same-name target table exists; an existing target table on a rerun differs from the contract |
 | 数据有损 (data loss) | orange | `NOT NULL` relaxed per column; primary key not built because it is too wide; sub-millisecond precision truncated to milliseconds |
 | 仅行为差异 (behaviour change only) | yellow | B-tier `DEFAULT` not built; sequence ceiling narrowed (`BIGINT UNSIGNED`); no primary key and no single candidate |
 
 A new finding code is added to this table when it is introduced, never left ungraded.
+
+## Who emits a finding
+
+The 预检发现码 enum and this impact table live in **one** place, `preflight.api`, so grading has a single authority and a single contract test ("every emitted code appears in the impact table"). Emission follows the facts instead:
+
+| Emitter | Rows |
+|---|---|
+| `preflight` | Everything established from source-side facts (large record, value domain, zero date, `auto_increment` ceiling, bulk cap) **and** everything derived from a mapping decision without a probe (sub-millisecond truncation, B-tier `DEFAULT`, sequence ceiling narrowed, no primary key and no single candidate, `NOT NULL` relaxed, primary key too wide). `pair.map`'s notices and contract effects are already `preflight.plan` inputs, so no probe is needed to grade them |
+| `contract.assemble` | The two target-side rows: a same-name target table exists, and a rerun's existing target table differs from the contract. Only `contract` holds both the draft contract and `target.normalizeCatalog` facts |
+
+`contract` already consumes `preflight.api` value types, so emitting one adds no dependency, and `preflight` never needs a fact it cannot see. The rerun comparison reuses `prove`: the same invariants and the same difference type, folded into **one** finding rather than one per invariant. `contract.assemble` still rejects a draft carrying any 阻塞 finding, whatever emitted it.
+
 
 Only 阻塞 gates, and it gates **per table**, not per task. A blocked table is corrected, pruned, or excluded (预检判定不可迁移), and the other tables continue. The prototype's task-level block is removed.
 
@@ -55,3 +69,6 @@ Accepted risk shares the yellow hue and is told apart by shape and label. ADR-00
 - **Task-level blocking**: rejected; one bad table would stop 199 good ones, against ADR-0020.
 - **Per-finding 我已知晓, or one bulk tick for orange**: rejected as a duplicate of contract approval.
 - **A separate hue for accepted risk**: rejected; one more colour to learn, when shape and label already separate it.
+- **`preflight` grades every row, with target catalog facts passed into `evaluate`** (#92): rejected for the rerun row. Comparing a table against a contract needs the contract, and `contract` consumes `preflight`, so this inverts the dependency; routing the `prove` verdict back into a second `evaluate` pass buys one emitter at the cost of evaluating preflight twice.
+- **`contract` grades every row, with `preflight` returning raw facts only** (#92): rejected; the term is 预检发现 and the preflight conclusion gates on it, so the module named `preflight` would own neither.
+- **Dropping the rerun row the way [#86](https://github.com/liumingjian/dbx/issues/86) dropped structural-proof difference** (#92): rejected; #86 removed it because structural proof runs *inside the run*, while this comparison happens before approval, where a finding is exactly the right shape.

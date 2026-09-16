@@ -10,13 +10,14 @@ Assembles, renders, and proves the table write contract (表写入契约), gener
 - `renderDdl`: approved contract → read-only DDL; pure (ADR-0036; ADR-0011).
 - `prove`: contract plus target catalog facts → `PROVEN`, `INCONCLUSIVE`, or `REJECTED` with structured differences; pure (ADR-0036; ADR-0008 §Ownership).
 - `projectedList`: approved draft contracts plus target schema facts → projected abandonment list; pure (ADR-0036; ADR-0023).
+- `review`: the previous run's contract snapshot (absent on a first run) plus this run's draft → `ZeroDifference` or the changed fields; pure. Fingerprint equality is its fast path (ADR-0006 §Rerun semantics as amended by #92).
 - `load`: a stored contract snapshot → the contract at its original version identity, or not-interpretable; pure (ADR-0008 §Registration; ADR-0018 §Dependency direction; added at reconciliation for recovery).
 - `renderTaskSupplementalSql`: each table's supplemental SQL from its latest successful run plus the tables not yet 迁移完成 → one task-level script whose header lists them; pure (ADR-0026 §Task-level; #89 item 8; added at reconciliation under ADR-0036's "read-only rendering (ADR-0026)").
 
 ## Consumes
 
 - `dialect.api` (names per the `dialect` sub-spec): `pair.map`, `pair.mapIdentifier`, `pair.descriptorCodec`, `target.ddlPlan`, `target.supplementalStatements`, and `target.normalizeCatalog` output as `prove` input.
-- `preflight.api`: evidence values only, as inputs to `assemble`. No entry point is called.
+- `preflight.api`: evidence values, plus the 预检发现 type, its 预检发现码 enum, and the impact table that `assemble` emits the two target-side findings through, as inputs and output types. No entry point is called (ADR-0029 §Who emits a finding).
 - No other module. `orchestration` executes DDL and catalog reads through `gateway.execute` and passes the facts in (ADR-0036 §Dependencies; ADR-0018 §Dependency direction).
 
 ## Obligations
@@ -29,13 +30,15 @@ Assembles, renders, and proves the table write contract (表写入契约), gener
 **Assembly**
 4. One contract per table migration unit, including an exactly empty table; it belongs to the table, not its box (ADR-0013; ADR-0011 §Contract assembly).
 5. The contract records the fields listed in ADR-0011 §Contract assembly and the skeleton fields in ADR-0008 §Contract and mapping boundary, including ordered columns, exact names, Connect/Avro types, JDBC binder families, nullability, defaults, primary-key order, identity or sequence intent, routing, notices, version identities, and approval revision.
-6. `assemble` is the only producer of a contract. It verifies completeness and evidence/version linkage, and rejects conflicts, blocking findings, and unsupported mapping decisions (ADR-0008 §Contract and mapping boundary).
+6. `assemble` is the only producer of a contract. It verifies completeness and evidence/version linkage, and rejects conflicts, blocking findings, and unsupported mapping decisions. A draft is never approvable while it carries a 阻塞 finding, whether that finding arrived in the preflight evidence or was emitted here by obligation 12a (ADR-0008 §Contract and mapping boundary; ADR-0029 §Who emits a finding).
 7. A draft is approvable only when its preflight conclusion is `SUPPORTED`. A mapping change yields a new draft revision (ADR-0011 §Contract assembly; ADR-0004 `AWAITING_APPROVAL`).
 8. A `USER` mapping rule overrides an `AUTO` rule. Column prune and rename take effect in the Source query projection, never DDL-only (technical plan §7.1; ADR-0011 §Contract assembly).
 9. Approved coordinates, including a dialect-decided rename (`<prefix>_<hash12>`) with its rule, full coordinate, and algorithm version, are frozen in the contract. No later phase re-derives them (ADR-0008 §Contract and mapping boundary; technical plan §7.1).
 10. The frozen `TypeMapper` decision is stored, never recomputed from defaults (ADR-0008 §Contract and mapping boundary; ADR-0010 §Schema contract).
 11. The writable-table boundary is only: columns with exact types; `NOT NULL` except the approved per-column zero-date relaxation; primary key, or an operator-approved single candidate; identity or an owned sequence for `numeric(20,0)`; and whitelisted defaults obtained from the target dialect (ADR-0011 §DDL and structural proof; ADR-0026 §The switches are cut; technical plan §7.3).
 12. Non-blocking preflight findings are carried in the contract, so approval is their acceptance (ADR-0029 §Approval is the acceptance).
+12a. `assemble` emits the two target-side findings itself, because only it holds both the draft contract and `target.normalizeCatalog` facts: 目标端已存在同名表 on a first run, and 目标表结构与契约不一致 on a rerun. Both are 阻塞, both use `preflight.api`'s code and impact, and neither is graded here (ADR-0029 §Who emits a finding; TP §7.1 "A first-run target name collision is blocking").
+12b. The rerun finding is computed by reusing `prove` against the existing table, and the whole difference set folds into **one** finding, never one per invariant. The `STRUCTURED` per-invariant differences stay available for the review drawer (obligation 21; ADR-0029 §Who emits a finding).
 13. Contract, DDL, and fingerprint are deterministic for equal inputs (technical plan §15.1).
 14. The contract exposes enough to count, per table, whether it has a primary key, which columns have relaxed `NOT NULL`, and which objects were deferred to supplemental SQL (ADR-0026 §Where the contract rendering appears, item 2).
 
@@ -66,6 +69,7 @@ Assembles, renders, and proves the table write contract (表写入契约), gener
 
 ## Verification
 
+- `review`: L1 `ContractContractTest#review*`: equal fingerprint → `ZeroDifference`, one changed field per contract field, absent previous snapshot, and a previous snapshot at an older descriptor version.
 - 1–3: L1 `check`. ArchUnit pure-module rule, `api`-only rule, README-limit test.
 - 4–14: L1 `ContractContractTest`, plus property tests for determinism (13) and fixtures for completeness, rejection, and rule precedence (technical plan §15.1).
 - 15–16: L1 golden set 2, "Table write contract → DDL rendering" (ADR-0022 §Golden files), updated only with `-Pgolden.update=<name>` plus a `Golden-Update` trailer.
@@ -80,7 +84,7 @@ Assembles, renders, and proves the table write contract (表写入契约), gener
 2. **`assemble` and fingerprint**: obligations 4–13. Blocked by slice 1; `dialect` slices 3 and 4.
 3. **`renderDdl` and golden set 2**: obligations 14–16. Blocked by slice 2; `dialect` slice 7.
 4. **Supplemental SQL inside `assemble`, and `renderTaskSupplementalSql`**: obligations 17–19. Blocked by slice 2; `dialect` slice 7.
-5. **`prove`**: obligations 20–24 at L1. Blocked by slice 2; `dialect` slice 8; D-1 for the rerun case.
+5. **`prove`, the target-side findings, and `review`**: obligations 12a–12b, 20–24 at L1. Blocked by slice 2; `dialect` slice 8; slice 7 for `review`'s snapshot codec.
 6. **`projectedList`**: obligations 25–26. Blocked by slice 2.
 7. **Versioned snapshot codec and `load`**: obligations 27–29. Blocked by slice 2; `dialect` slice 2.
 8. **L2 §15.2 seam test**, hosting TP §15.2 for `dialect` and `contract`. Blocked by slices 3 and 5; `gateway` slice 4.
@@ -100,6 +104,8 @@ Assembles, renders, and proves the table write contract (表写入契约), gener
 - When `prove` returns `INCONCLUSIVE`: only when a required catalog fact is absent from its input, never on a difference; any non-`PROVEN` fails the unit (ADR-0008 §Ownership; ADR-0026 §Structural proof).
 - The golden-set name for "contract → DDL": one stable name per set, used with `-Pgolden.update=<name>` (ADR-0022).
 
+- ADR-0029's unowned target-side rows and ADR-0006's zero-difference review had no owner → `assemble` emits both findings, reusing `prove` for the rerun comparison, and `review` computes the zero-difference review (#92; ADR-0029 §Who emits a finding; ADR-0036 §Amended by #92).
+
 ## Open items
 
-- **D-1** (T1): whether the rerun check "existing target table differs from the contract" reuses `prove`, and who computes ADR-0006's rerun zero-difference review. Blocks slice 5's rerun case.
+_None._

@@ -244,8 +244,13 @@ _中文_: 大记录包络
 
 **Source baseline**:
 A run's immutable boundary under write freeze: exact row counts and keyset column terminal values.
-_Avoid_: Estimated row count, snapshot
+_Avoid_: 预估行数 as a synonym for it, snapshot
 _中文_: 源基线
+
+**Planned row count**:
+A table's row count estimated from source statistics before any baseline exists; it sizes the bulk read and the transfer-byte estimate, and is never evidence (ADR-0002, ADR-0037).
+_Avoid_: 行数 alone, baseline row count, 实际行数
+_中文_: 预估行数
 
 **Keyset column**:
 A table's single integer, non-null, unique, non-negative column for chunked reads; tables without one are read in bulk (ADR-0037).
@@ -586,6 +591,26 @@ Only blocking stops a table; the others are accepted with the contract (ADR-0029
 **Zero date value rejected**: _中文_: 零日期值将被拒绝
 
 **Envelope scan inconclusive**: _中文_: 包络扫描无法判定
+
+**Auto-increment value beyond target ceiling**: _中文_: 自增当前值超出目标上限
+
+**Large table without a unique integer key**: the bulk read of a table with no keyset column would exceed the source bound. _Avoid_: naming Kafka, Connect, cursors, or temporary tables _中文_: 大表缺少唯一整数键
+
+**Same-name target table exists**: _中文_: 目标端已存在同名表
+
+**Existing target table differs from the contract**: a rerun's target table does not match the approved 表写入契约. _中文_: 目标表结构与契约不一致
+
+**Primary key too wide to build**: _中文_: 主键过宽无法建立
+
+**`NOT NULL` relaxed per column**: _中文_: 非空约束按列放宽
+
+**Sub-millisecond precision truncated**: _中文_: 亚毫秒精度将被截断
+
+**B-tier `DEFAULT` not built**: _中文_: 默认值未建（B 档）
+
+**Sequence ceiling narrowed**: _中文_: 序列上限收窄
+
+**No primary key and no single candidate**: _中文_: 无主键且无唯一候选
 
 ### Environment check item conclusion
 

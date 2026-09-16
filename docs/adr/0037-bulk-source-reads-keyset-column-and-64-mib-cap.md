@@ -33,13 +33,20 @@ Mode is a connector-level setting, so bulk tables already form their own executi
 
 ## 64 MiB cap
 
-A bulk read is one cursor, so its source temporary table holds the whole table. The bulk path is admitted only while the table's baseline row count × its exact largest row byte length (ADR-0003) is at most 64 MiB, which is the same per-connection bound as one ADR-0033 chunk. ADR-0033's source-side proof and its L3 bounded-read scenario therefore hold for every read without a second budget.
+A bulk read is one cursor, so its source temporary table holds the whole table. The bulk path is admitted only while the table's row count × its exact largest row byte length M (ADR-0003) is at most 64 MiB, which is the same per-connection bound as one ADR-0033 chunk. ADR-0033's source-side proof and its L3 bounded-read scenario therefore hold for every read without a second budget.
+
+Preflight grades this cap before any 源基线 exists, and it may not probe row counts (ADR-0036). Amended by [#92](https://github.com/liumingjian/dbx/issues/92): the pre-approval check uses the **预估行数** (planned row count) — the row count `source.metadataPlan` already reads from source statistics for the transfer-byte estimate, with ADR-0002 ¶4's bounded sampling when the statistics are unusable. It is multiplied by the same conservative 1.5 factor as the byte estimate, so `1.5 × 预估行数 × M > 64 MiB` is the 阻塞 finding: a statistics error errs toward blocking a table at stage three rather than exhausting the source mid-run.
+
+The exact check runs once more at the start of the run, against the 源基线, where the row count is exact. A table that passes on the estimate and fails on the baseline is the unit's **迁移失败** with the same explanation, not a late finding — the same rule [#86](https://github.com/liumingjian/dbx/issues/86) set for facts that only the run can establish.
 
 A larger table without a keyset column is a **阻塞** (blocking) preflight finding (ADR-0029). The explanation says that the table is too large to read safely without a single integer unique key and suggests adding one, such as an auto-increment column. It never mentions Kafka, Connect, cursors, or temporary tables (ADR-0030). ADR-0005's rule for an invalid or unusable incrementing column remains as the runtime fallback.
 
 ## Considered options
 
 - **Bulk without a cap, disclosing the table-sized temporary table per table.** Rejected for ADR-0033's reason: DBX could warn but never prove the source has room.
+- **`COUNT(*)` inside preflight so the cap is exact before approval** (#92). Rejected: ADR-0036 rejected putting the source baseline in `preflight`, and a pre-freeze count is not a boundary anyway.
+- **Move the cap out of preflight into `scheduling.admit`, where the baseline exists** (#92). Rejected: it turns a stage-three 阻塞 finding into a mid-run stop, the worst place to tell a DBA a table needs a key.
+- **Use the 预估行数 with no safety factor** (#92). Rejected: InnoDB's `TABLE_ROWS` can be off by a large fraction, and an under-estimate is the expensive direction.
 - **A separate larger bulk budget, such as 1 GiB, counted against the source connection budget.** Rejected: it adds a second source-side bound to certify and still blocks tables above it.
 - **Keeping "monotonic" in the definition.** Rejected: under the write freeze it only sends more tables through bulk, where they meet the cap.
 - **Synthesizing a key in `query` mode, e.g. `ROW_NUMBER() OVER (ORDER BY pk)`.** Rejected: the window sort materializes the whole table on the source anyway.

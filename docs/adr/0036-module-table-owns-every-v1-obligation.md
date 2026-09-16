@@ -4,6 +4,13 @@ Supersedes the module table and the pure-core list of ADR-0018. Decided in #83. 
 
 ADR-0018's eleven modules predate ADR-0019 to ADR-0035, so several obligations had no owner. v1 has fourteen Java packages, three more than ADR-0018. `connection`, `environment`, and `condition` each have their own side-effect shell or pure fold, and none of them fits an existing row without making that module the widest one. Release is a sub-spec, not a package.
 
+> Amended by [#92](https://github.com/liumingjian/dbx/issues/92), which places four obligations the module table left unowned:
+>
+> - **Preflight findings**: the 预检发现码 enum and impact table live in `preflight.api`; `preflight` emits the source-side and mapping-derived rows, `contract.assemble` emits the two target-side rows (ADR-0029 §Who emits a finding).
+> - **The rerun target comparison** reuses `contract.prove`, folded into one finding.
+> - **The rerun zero-difference review** is `contract.review(previousSnapshot?, draft)`, pure: only `contract` can interpret two versioned contract revisions.
+> - **The prune/rename Source projection** is rendered by `dialect.source.queryProjection` and only *placed* into the Source configuration by `connector.deriveBox`, because `preflight` needs the same expressions for the envelope scan and reaches only `dialect.api`.
+
 ## Modules
 
 | Package | Owns | Interface |
@@ -48,3 +55,5 @@ Release and upgrade (ADR-0035) are a non-Java `release` sub-spec: the script, Co
 - **Put the runtime condition fold in `orchestration`.** Rejected because it would be a second concern in an already-wide module, and the fold is pure.
 - **Split the routing, fingerprint, and signature derivation across three owners.** Rejected because three derivation paths drift.
 - **Put the source baseline in `preflight`.** Rejected because ADR-0003 says preflight is not the baseline.
+- **Render the prune/rename Source projection in `connector.deriveBox`** (#92). Rejected because the projection has two consumers: `connector`'s Source `query` property and `preflight`'s envelope scan, which must measure the same expressions. `preflight` reaches only `dialect.api`, so `deriveBox` as the renderer means rendering it twice and holding identifier quoting in two places. `dialect` renders; `deriveBox` places it and folds it into the configuration fingerprint, so obligation "one derivation" is untouched.
+- **Decide the rerun zero-difference review by contract fingerprint equality alone** (#92). Rejected: equal fingerprints do prove zero difference, but ADR-0006's review must show *what* changed when they differ, and a fingerprint cannot say. `contract.review` compares fingerprints first as its fast path.

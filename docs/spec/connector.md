@@ -16,7 +16,7 @@ ADR-0036 categories: box start/stop, deletes, data-plane facts, `judge`. Effectf
 
 ## Consumes
 
-- `dialect.api`: `pair.executionRequirements` (incl. bounded read) and `source.connectionSemantics`.
+- `dialect.api`: `pair.executionRequirements` (incl. bounded read), `source.connectionSemantics`, and `source.queryProjection` (the prune/rename projection text).
 - `contract.api`: the approved table write contract as an input type; no call.
 - `scheduling.api`: the box membership from `plan` as an input type; no call.
 
@@ -31,6 +31,7 @@ No other module's side effects: `orchestration` decrypts through `connection.dec
 4. Names: connectors carry run and box ID; topics carry run ID and resolve to exactly one unit; a subject is `<topic>-value` under `TopicNameStrategy`, no key subject (ADR-0001, ADR-0010 §Subjects).
 5. Topic legality (Kafka characters, 249 bytes, dot/underscore collision, run-local uniqueness); a table failing it gets a safe alias and a fixed `table.name.format`; the Sink `RegexRouter` strips the run prefix (TP §7.2).
 6. Source fixed settings and Connector/J semantics per TP §6.5; Sink fixed settings per ADR-0011 and TP §7.4; Avro converter, same SR, `schemas.enable=true`; a converter override is a conflict (ADR-0010 §Schema contract).
+6a. The prune/rename Source projection is **not** rendered here: `deriveBox` takes `dialect.source.queryProjection`'s text verbatim, places it in the Source `query` and `query.mode` properties, and folds it into the configuration fingerprint. It never composes SQL, quotes an identifier, or re-derives an alias (TP §7.1; ADR-0036 §Amended by #92; `dialect` obligation 19a).
 7. Keyset read: ADR-0033 §Settings table, with `batch.max.rows` and N computed here from M ("the core injects"); bulk read (table without a keyset column): ADR-0037 §Bulk path; keyset-column choice (primary key, else lowest-named unique index) is in the signature (ADR-0037 §Choice).
 8. Ordinary producer/consumer settings per ADR-0031 §Per-box bounds; large-record settings per ADR-0003 (Kafka settings paragraph) and ADR-0033 large-record column; topics get `max.message.bytes=26214400` (ADR-0003).
 9. Every setting above, plus provider and mount identity and secret-reference semantics, enters the fingerprint and signature (ADR-0031, ADR-0033 §Settings, ADR-0006 secret paragraph).
@@ -79,7 +80,7 @@ No other module's side effects: `orchestration` decrypts through `connection.dec
 ## Slices
 
 1. `api` types and entry-point signatures + `ConnectorContractTest` skeleton, ArchUnit purity for `judge` and derivation. Blocked by `dialect` slice 1, `contract` slice 1, `scheduling` slice 1 (input types).
-2. Derivation (1–10), L1. Needs 1; blocked by `dialect` slices 5 and 9; D-4 (query projection).
+2. Derivation (1–10), L1. Needs 1; blocked by `dialect` slices 5 and 9.
 3. `judge` (25–31), L1. Needs 1.
 4. Connect REST client: start/stop, reconcile, status poll, trace capture (11–14, 21), L2. Needs 2.
 5. Kafka AdminClient + SR client: topics, offsets, lag, subject read-back, deletes, orphans, `kafkaFacts` (15–18, 24), L2. Needs 2.
@@ -87,6 +88,8 @@ No other module's side effects: `orchestration` decrypts through `connection.dec
 7. Restart marker (22–23), L1 + L2; L3 certification on merge to `main`. Needs 4.
 
 ## Conflicts resolved
+
+- TP §7.1's prune/rename projection had no named renderer → `dialect.source.queryProjection` renders it; `deriveBox` places and fingerprints it (#92; obligation 6a).
 
 - ADR-0018 `connector` row (Connect REST only) → ADR-0036 row adds AdminClient, SR, deletes, secrets, marker, derivation.
 - ADR-0008 "the core alone produces" / audit's `contract.routingSnapshot` → ADR-0036: one derivation in `connector`.
@@ -108,5 +111,4 @@ No other module's side effects: `orchestration` decrypts through `connection.dec
 
 ## Open items
 
-- **D-4** (T1): whether `deriveBox` or a `dialect` entry renders the prune/rename Source query (TP §7.1). Blocks slice 2.
 - **D-20** (T5): the diagnosis code for `OVER_TIME_LIMIT` (ADR-0001) is `diagnosis`'s; `judge` only reports it.
