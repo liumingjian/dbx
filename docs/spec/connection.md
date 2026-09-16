@@ -1,24 +1,25 @@
 # connection — v1 sub-spec
 
-Credential crypto for DBX: AES-256-GCM encryption of credential material, per-backup DEK wrapping and erasure, the master key, and TLS material; it persists nothing.
+Credential crypto for DBX: AES-256-GCM encryption of credential material, per-backup DEK wrapping, unwrapping and erasure, the master key, and TLS material; it persists nothing.
 
 **Read first**: ADR-0036 (§Modules row `connection`, §Dependencies and purity), ADR-0006 (§Connection and credential model, backup paragraph of §Recovery of the same execution), ADR-0035 §Master key, ADR-0018 (§Enforcement, §Module context, §Session rule), ADR-0022; CONTEXT.md terms: database connection (数据库连接), credential version (凭据版本), connection check (连接校验), TLS mode (TLS 模式), run snapshot (运行快照).
 
 ## Interface (`connection.api`)
 
-Names follow ADR-0036's Interface column ("Encrypt, decrypt, wrap, erase"), plus `fingerprint`. Parameter shapes are fixed by slice 1's `ConnectionContractTest`, within the bounds below.
+Names follow ADR-0036's Interface column ("Encrypt, decrypt, wrap, erase"), plus `fingerprint` and `unwrap`. Parameter shapes are fixed by slice 1's `ConnectionContractTest`, within the bounds below.
 
 - `encrypt(secret material) → ciphertext`: AES-256-GCM under the master key. Effectful, because it reads the master-key file.
 - `decrypt(ciphertext) → secret material | typed failure`: the inverse of `encrypt`. Effectful for the same reason.
 - `wrap(backup) → fresh per-backup DEK plus its wrapped form`: generates a distinct data-encryption key and wraps it under the master key. Effectful.
-- `erase(wrapped DEK) → erasure result`: makes that per-backup DEK unrecoverable. Effectful. What `erase` can do without persistence is D-22.
+- `unwrap(wrapped DEK) → DEK | typed failure`: the inverse of `wrap`, needed to read an encrypted backup. Effectful. Added by [#97](https://github.com/liumingjian/dbx/issues/97): unwrapping is the only way back into a backup, and the master key must not leave this module to do it (ADR-0006 §Connection).
+- `erase(wrapped DEK) → erasure instruction`: validates that the wrapped form belongs to the present master key and returns the instruction that makes the DEK unrecoverable. It performs no erasure itself, because `connection` persists nothing; `workflow` carries the instruction out (#97; ADR-0006 §Connection).
 - `fingerprint() → key fingerprint`: the present master key's fingerprint. Effectful (reads the key file). Added at reconciliation: `connection` alone reads the key, while `workflow` stores the fingerprint and E8 and upgrade compare it (ADR-0035 §Master key; #89 item 5).
 
 ## Consumes
 
 None. `connection` is a leaf: it calls no other module's `api` (ADR-0036 §Dependencies and purity).
 
-Known callers: `workflow` calls `wrap`/`erase` for backups; `orchestration` calls `encrypt` when saving a credential version, `decrypt` for `gateway` bindings and `connector.projectSecret`, and `fingerprint` for E8 and the installation record (ADR-0036 rows `workflow`, `orchestration`).
+Known callers: `workflow` calls `wrap`/`erase` for backups and `unwrap` when restoring one; `orchestration` calls `encrypt` when saving a credential version, `decrypt` for `gateway` bindings and `connector.projectSecret`, and `fingerprint` for E8 and the installation record (ADR-0036 rows `workflow`, `orchestration`).
 
 ## Obligations
 
@@ -29,7 +30,7 @@ Known callers: `workflow` calls `wrap`/`erase` for backups; `orchestration` call
 3. `gateway` and `connector` never reference `connection`. `gateway` receives decrypted material from `orchestration` (ADR-0036 §Dependencies and purity).
 4. `connection` calls no other module's side effects, and it opens no database, HTTP or Kafka connection. Its only side effect is reading the master-key file (ADR-0036 §Dependencies and purity, "Effectful shell").
 5. Only `connection.api` is referenced from outside the package (ADR-0018 §Enforcement).
-6. The module ships a `README.md` of at most 40 lines. It lists the five entry points, the contract test location, "depends on: none", and the ADRs named under **Read first** (ADR-0018 §Module context).
+6. The module ships a `README.md` of at most 40 lines. It lists the six entry points, the contract test location, "depends on: none", and the ADRs named under **Read first** (ADR-0018 §Module context).
 
 ### B. Master key
 
@@ -48,10 +49,12 @@ Known callers: `workflow` calls `wrap`/`erase` for backups; `orchestration` call
 
 ### D. Per-backup DEKs
 
-16. Each `wrap` returns a DEK that differs from every DEK issued before it. It returns the wrapped form for `workflow` to record in the destruction ledger (ADR-0006 §Recovery of the same execution: "a distinct data-encryption key whose wrapped form is tracked by the destruction ledger").
-17. Unwrapping a DEK needs the master key. A wrapped DEK under a different master key does not unwrap (ADR-0006 §Connection and credential model).
-18. Once a DEK is erased, no path through `connection.api` recovers it, even with the master key or its backup (ADR-0006: "The separately protected master-key backup cannot recover an erased per-backup key").
-19. `erase` is idempotent. Erasing an already-erased DEK succeeds without error, because cleanup is retried (ADR-0006 §Recovery: "cleanup is idempotent").
+16. Each `wrap` returns a DEK that differs from every DEK issued before it. It returns the wrapped form for `workflow` to store beside the backup artifact, not in the ledger; the ledger tracks the key by identity and fingerprint only (ADR-0006 §Connection, as amended by #97).
+17. `unwrap(wrap(k)) = k` under the same master key.
+18. `unwrap` has exactly two typed failures, and they are distinct: **master key wrong or missing**, and **wrapped form corrupt or erased**. They lead the DBA to different actions — restore `secrets/` from the copy kept off the machine, versus abandon this backup and choose another — so an erased key must never surface as a key problem (ADR-0006; obligation 14's precedent).
+19. `erase` returns an instruction and writes nothing. `connection` holds no state between calls and never touches `backups/` or the ledger (ADR-0036: "never persists").
+19a. Applying an erasure instruction makes the DEK unrecoverable: afterwards no path through `connection.api` returns it, even with the master key or its separately protected backup (ADR-0006).
+19b. `erase` is idempotent. Producing an erasure instruction for an already-erased DEK succeeds without error, because cleanup is retried (ADR-0006 §Recovery: "cleanup is idempotent").
 
 ### E. TLS material
 
@@ -67,16 +70,16 @@ All obligations are verified at L1 (`check`). `connection` has no container seam
 | A (6) | L1 | README-limit test (ADR-0018) |
 | B (7–11) | L1 | `ConnectionContractTest` master-key cases over a temporary `secrets/` directory: missing file, wrong length, environment variable ignored, directory unchanged after every call, redacted `toString` and exception text |
 | C (12–15) | L1 | `ConnectionContractTest` credential cases: round trip; bit flip, truncation and foreign key each give their typed failure; two distinct failure types; no instance state |
-| D (16–19) | L1 | `ConnectionContractTest` DEK cases: distinct DEKs across wraps, foreign-key unwrap fails, erased DEK unrecoverable, erase twice |
-| E (20) | L1 | `ConnectionContractTest` TLS case, plus an ArchUnit check that `connection.api` exposes exactly five entry points |
+| D (16–19b) | L1 | `ConnectionContractTest` DEK cases: distinct DEKs across wraps, unwrap round trip, foreign-key unwrap and corrupt-wrap give the two distinct failures, erased DEK unrecoverable, erase writes nothing, erase twice |
+| E (20) | L1 | `ConnectionContractTest` TLS case, plus an ArchUnit check that `connection.api` exposes exactly six entry points |
 
 No golden files.
 
 ## Slices
 
-1. **`api` + `ConnectionContractTest` skeleton**: the five entry-point signatures, the typed failure types (8, 9, 13, 14), the README (6), and boundary tests A1–A5. Contract cases are present but disabled per slice. Blocked by: none.
+1. **`api` + `ConnectionContractTest` skeleton**: the six entry-point signatures, the typed failure types (8, 9, 13, 14), the README (6), and boundary tests A1–A5. Contract cases are present but disabled per slice. Blocked by: none.
 2. **Master key and credential encryption**: the key-file loader (B7–B11), `encrypt`, `decrypt` and `fingerprint` (C12–C15), and their contract cases enabled. Blocked by: slice 1.
-3. **Per-backup DEKs**: `wrap` and `erase` (D16–D19) and their contract cases enabled. Blocked by: slice 2; D-22, D-23.
+3. **Per-backup DEKs**: `wrap`, `unwrap` and `erase` (D16–D19b) and their contract cases enabled. Blocked by: slice 2.
 4. **TLS material**: E20 and its contract case. Blocked by: slice 2.
 
 Consumers: `workflow` slice 8 waits on slice 3; `orchestration` slice 2 waits on slice 2.
@@ -90,6 +93,8 @@ Consumers: `workflow` slice 8 waits on slice 3; `orchestration` slice 2 waits on
 - Who calls `encrypt` on a new credential version → `orchestration` before its `workflow.api.command` (it is the only command caller; ADR-0036 names only backups as `workflow`'s crypto use).
 - How `connector` gets plaintext → from `orchestration`, like `gateway`; `connector` never references `connection` (ADR-0036 §Dependencies and purity).
 - `decrypt` gated on tombstone reapply (ADR-0006) → the caller sequences it; `connection` holds no state to know (ADR-0036 "never persists").
+- ADR-0006's ledger "tracks wrapped backup keys" vs obligation 19a's unrecoverability → the ledger tracks identity and fingerprint; the wrapped bytes live with the backup artifact, because an append-only file can never unsay what it holds (ADR-0006 as amended by #97).
+- ADR-0036's four-name Interface column vs a `wrap` with no inverse → `unwrap` is a sixth entry point (#97).
 
 ## Implementer decides
 
@@ -98,5 +103,4 @@ Consumers: `workflow` slice 8 waits on slice 3; `orchestration` slice 2 waits on
 
 ## Open items
 
-- **D-22** (T6): what `erase` does when `connection` persists nothing (clear in-memory material, or return an instruction `workflow` executes on the wrapped form). Blocks slice 3.
-- **D-23** (T6): the restore path: an unwrap entry, who restores after H2 corruption, and who decrypts backups for `dbx rollback` (ADR-0006, ADR-0035). Blocks slice 3.
+None.

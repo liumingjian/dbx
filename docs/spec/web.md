@@ -54,22 +54,30 @@ None. `web` is the top of the dependency graph, so no module may depend on it (A
 25. A local nonterminal-run query lists every migration run that is not terminal, with enough identity for the script to name each one in Chinese, and it answers without admission running (ADR-0035 §In-place upgrade step 2).
 26. A read of the installation record (release version, key fingerprint, rollback-window state) for the upgrade and rollback scripts (#89 item 5; ADR-0035 §Failed upgrade).
 27. 关于 shows the release version only, with the bill of materials collapsed (ADR-0035 §Release version).
+28. A command that takes the labelled pre-upgrade backup, called by `dbx upgrade` while the release still runs, returning the backup's identity and checksum for the rollback-window file (`workflow` obligation 31b; ADR-0035 §In-place upgrade as amended by [#97](https://github.com/liumingjian/dbx/issues/97)).
+
+**G. Recovery mode**
+29. When `workflow` concludes H2 is unreachable or corrupt, `web` serves **recovery mode** and nothing else: a restore page listing the available backups with their time and checksum state, 关于, and the diagnostic-package export. Every other route answers a non-2xx with one zh-CN message saying the control plane is unavailable (ADR-0006 §Recovery as amended by #97; `workflow` obligation 31d).
+30. Recovery mode is narrower than obligation 13's 不满足 posture. That posture assumes a healthy H2 and keeps the ordinary pages; recovery mode cannot, because the task, run and history pages all read H2. The two are distinct states and never share a route set (ADR-0027; ADR-0006).
+31. Restore is an operator command from that page. `web` holds no restore logic: it calls one `orchestration` use case, which drives `workflow`'s restore path (obligation 2; `workflow` obligation 31c).
 
 ## Verification
 
 - A (1–3): L1 `check`, ArchUnit rules (ADR-0018) and the README-limit test.
 - B, D, E (4–8, 14–24): L1 `WebContractTest`. It covers one case per `frontend/src/api/*.ts` path against a stubbed `orchestration.api` and `workflow.api.query`, round-trips a JSON fixture of each contract type, and asserts that each write calls exactly one use case. `WebDownloadContractTest` covers the streamed SQL, the 50 MB bound, and the order in which the manifest comes before the package.
 - C (9–13): L1 `WebProgressContractTest`, which covers stateless reads, no external calls, and serving while the environment check is unsatisfied. L3 `e2eTest`: a run whose progress advances while polled at 10 s.
-- F (25–27): L1 `WebInstallationContractTest`. L4 `packageTest`: the upgrade is refused with one nonterminal run and proceeds with none (ADR-0035 §Verification).
+- F (25–28): L1 `WebInstallationContractTest`. L4 `packageTest`: the upgrade is refused with one nonterminal run and proceeds with none, and takes the pre-upgrade backup when it proceeds (ADR-0035 §Verification).
+- G (29–31): L1 `WebRecoveryContractTest`, which asserts the recovery route set, that every other route refuses in zh-CN, and that restore calls exactly one use case. L4 `packageTest` `rollback`: the previous release comes back with its pre-upgrade history without recovery mode being reached.
 
 ## Slices
 
 1. **Skeleton**: the `web.api` placeholder package, the README, `WebContractTest` with all contract paths marked pending, the `/api` prefix and error body, ArchUnit green. No blockers.
 2. **Read endpoints**: task list and drafts, task detail with task header, run projection, units, timelines, validation report, preflight findings, run snapshot, task conclusion (4, 9–10, 14 read). Blocked by `workflow` slice 1, `frontend` slice 3.
-3. **Status channel and installation**: condition status, installation record, nonterminal-run query, 关于 (11–13, 25–27). Blocked by `workflow` slice 1, `frontend` slice 3; D-18.
+3. **Status channel and installation**: condition status, installation record, nonterminal-run query, 关于, the pre-upgrade backup command (11–13, 25–28). Blocked by `workflow` slice 1, `frontend` slice 3; D-18.
 4. **Draft and run commands** (14–18, 22). Blocked by `orchestration` slice 1, `frontend` slice 3.
 5. **Destructive commands**: discard, abandonment, retry, abandonment lists (19–21). Blocked by `orchestration` slice 1, `frontend` slice 3.
 6. **Downloads**: supplemental SQL and diagnostic package (23–24). Blocked by `orchestration` slice 1, `frontend` slice 3.
+7. **Recovery mode**: the restore page, the narrowed route set, the restore command (29–31). Blocked by `workflow` slice 8, `orchestration` slice 1, `frontend` slice 3.
 
 Each slice depends on slice 1; slices 2–6 are otherwise independent. Provider slice 1s suffice because every L1 test runs against stubbed `orchestration.api` and `workflow.api.query`; `frontend` depends on no `web` slice, so no cycle forms.
 

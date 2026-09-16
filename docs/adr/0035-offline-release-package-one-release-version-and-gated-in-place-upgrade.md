@@ -1,5 +1,5 @@
 ---
-status: accepted (amends ADR-0022's ladder with L4 and ADR-0031's tier reading; specifies ADR-0006's deployment secret for the built-in deployment; per [#89](https://github.com/liumingjian/dbx/issues/89): the master-key item is ADR-0027's E8, and one installation record in H2 holds release version, key fingerprint, and rollback-window state; leftover cleanup never touches orphans (ADR-0001))
+status: accepted (amends ADR-0022's ladder with L4 and ADR-0031's tier reading; specifies ADR-0006's deployment secret for the built-in deployment; per [#89](https://github.com/liumingjian/dbx/issues/89): the master-key item is ADR-0027's E8, and one installation record in H2 holds release version, key fingerprint, and rollback-window state; leftover cleanup never touches orphans (ADR-0001); per [#97](https://github.com/liumingjian/dbx/issues/97): rollback repoints and starts first and the previous release restores itself, the rollback window is mirrored to a script-readable file, and `dbx upgrade` pins a labelled pre-upgrade backup)
 ---
 
 # Offline release package, one release version, and in-place upgrade gated on no nonterminal run
@@ -58,7 +58,9 @@ DBX can never phone home, so everything it runs must arrive in one package and i
 - **Refused while any migration run is nonterminal.** `dbx upgrade <package>` does the following in order:
   1. Verifies checksums and loads the images.
   2. Asks DBX's local API whether any migration run is nonterminal. If any is, it lists those runs in Chinese and exits without draining them or waiting for them.
-  3. Stops the stack, repoints `current`, and starts the new release. DBX's startup then takes the pre-Flyway H2 backup and migrates (ADR-0004).
+  3. Asks the same API, while the old release is still running, for a **pre-upgrade backup**: one labelled backup taken at this moment. This is the backup rollback restores. The hourly backup is not enough, because it may be nearly an hour stale, and the new release's pre-Flyway backup may never be taken at all if the new release never starts.
+  4. Stops the stack, repoints `current`, and starts the new release. DBX's startup then takes the pre-Flyway H2 backup and migrates (ADR-0004).
+  5. Writes the rollback-window file (below), naming the pre-upgrade backup from step 3.
 
   The same refusal is enforced a second time at startup: a new DBX that finds a nonterminal run from an older release applies ADR-0008. That run becomes non-automatically recoverable, with its evidence preserved.
 - **Allowed while a task write freeze is open, between runs.** The freeze is a commitment about the source database, not about the platform. Its next run gets a new execution signature under the new release. Signatures are frozen per run anyway (ADR-0002), and drift checks compare against baselines held in H2 (ADR-0024).
@@ -66,13 +68,15 @@ DBX can never phone home, so everything it runs must arrive in one package and i
 
 ## Failed upgrade and the rollback window
 
-- `dbx rollback` is one command, run by whoever ran the upgrade. It:
-  1. restores the pre-upgrade H2 backup, after proving tombstone-ledger continuity as ADR-0006 requires;
-  2. repoints `current` to the previous release;
-  3. starts the previous release's images.
+- `dbx rollback` is one command, run by whoever ran the upgrade. **The script performs no cryptography and restores nothing.** Restoring means proving tombstone-ledger continuity, unwrapping a per-backup key under the master key, and reapplying the destruction ledger (ADR-0006); putting that in shell would move the master key out of the one module allowed to read it. So the script only does what needs no key, and the previous release restores itself:
+  1. reads the rollback-window file and refuses if the window is closed;
+  2. writes a **restore request** naming the pre-upgrade backup and its checksum;
+  3. stops the stack, repoints `current` to the previous release, and starts its images.
 
-  It never reverses a Flyway migration (ADR-0004, ADR-0012).
+  The previous release's DBX finds the restore request at startup and, before Flyway and before the queue or workers start, verifies the named backup against the recorded checksum, proves tombstone-ledger continuity, and restores. On success it deletes the request, so a container restarted by `restart: unless-stopped` never restores twice. On failure it renames the request aside, never retries it, and stops in ADR-0006's recovery mode. The restored backup predates the upgrade, so the previous release's Flyway sees its own schema version and migrates nothing. Rollback never reverses a Flyway migration (ADR-0004, ADR-0012).
 - **The rollback window** runs from the end of an upgrade until the first migration run is admitted under the new release. After that, rollback refuses, and the way out is a fixed forward release. Restoring the pre-upgrade backup at that point would silently discard post-upgrade runs, their outcomes, and which target tables DBX owns.
+- **The window is mirrored to a file the script can read**, in the install directory and outside `secrets/`. H2's installation record stays the authority for DBX and the UI; the file is the authority for the script, which must decide whether rollback is allowed precisely when the new release will not start and its local API answers nothing. "The API is silent, so assume the window is open" is unsafe: the API can also be down long after runs were admitted. DBX therefore writes the file closed **before** admitting the first run under the new release. That write order makes only the harmless divergence possible — a file that says closed while H2 says open costs one over-refused rollback; the dangerous inverse cannot occur.
+- **When the previous release will not start either**, v1 stops rather than improvises. The script waits for the previous release's healthcheck and, on timeout, says in Chinese that neither release will start, points at the diagnostic package as the only support channel (ADR-0028), and leaves `current` on the previous release. It never swings `current` back. A third state change on a control plane whose H2 volume is already unjudgeable cannot be reasoned about, and the diagnostic package is worth more than another guess.
 
 ## Master key
 
@@ -103,4 +107,7 @@ The first release has no previous release, so it runs only the fresh-install ste
 - **Refusing upgrades for the whole life of a task write freeze.** Rejected: that could block security fixes for weeks over a commitment that concerns the source database, not the platform.
 - **Choosing the tier by the Mac's physical memory.** Rejected: containers see only the Docker VM's memory, so the script could pick a tier whose containers the kernel then kills.
 - **Rollback at any time.** Rejected: it would silently drop post-upgrade runs.
+- **Restoring H2 from the `dbx` script, before repointing `current`.** Rejected: it needs the master key, AES-GCM, and the tombstone ledger in shell. Letting the previous release restore itself keeps one restore path for both triggers, the failed upgrade and ordinary H2 corruption.
+- **Treating an unreachable local API as an open rollback window.** Rejected: the API can be down for reasons unrelated to the upgrade, and the mistake destroys admitted runs.
+- **Swinging `current` back to the new release when the previous release will not start.** Rejected: at that point neither release is known good and H2's content is unjudgeable.
 - **arm64 and x86_64 both in v1.** Rejected: it doubles certification and calibration, and the machine v1 runs on is arm64.

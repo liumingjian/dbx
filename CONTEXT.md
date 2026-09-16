@@ -194,6 +194,16 @@ From an upgrade's end until the first run admitted under the new release; the on
 _Avoid_: 降级, 回滚
 _中文_: 回退窗口
 
+**Recovery mode**:
+The posture DBX takes when H2 is unreachable or corrupt: it starts, offers only restore, 关于 and the diagnostic package, and refuses everything else (ADR-0006).
+_Avoid_: 只读模式, 安全模式, 降级运行, 维护模式
+_中文_: 恢复态
+
+**Pre-upgrade backup**:
+The one labelled backup an upgrade takes before stopping the stack; the only backup a rollback restores (ADR-0035).
+_Avoid_: 快照, 最近备份, 自动备份
+_中文_: 升级前备份
+
 ### Scheduling and completion
 
 **Box**:

@@ -12,7 +12,8 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 ## Consumes
 
 - `connection.wrap`: wrap each backup's data-encryption key (ADR-0036 §Dependencies, ADR-0006 §Connection).
-- `connection.erase`: erase wrapped backup keys when a credential version is destroyed (ADR-0006 §Connection).
+- `connection.unwrap`: unwrap a backup's data-encryption key when restoring it (ADR-0006 §Connection, as amended by [#97](https://github.com/liumingjian/dbx/issues/97)).
+- `connection.erase`: obtain the erasure instruction for wrapped backup keys when a credential version is destroyed; `workflow` applies it (ADR-0006 §Connection).
 
 ## Obligations
 
@@ -41,7 +42,7 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 16. `database_connection`: structured endpoint, TLS mode and material (ciphertext), username, semantic/operational settings; archived, never deleted, while referenced (ADR-0006 §Connection).
 17. `credential_version`: immutable AES-256-GCM ciphertext. Destruction nulls ciphertext, keeps version, actor, usage, destruction metadata (ADR-0006 §Connection).
 18. `connection_check`: connection, credential version, time, result, and observed identity facts (ADR-0006 §Capability; CONTEXT connection check).
-19. Tombstone ledger: an append-only file in `secrets/`, outside H2 and its backups, that also tracks wrapped backup keys (ADR-0006 §Connection; ADR-0035 §Master key).
+19. Tombstone ledger: an append-only file in `secrets/`, outside H2 and its backups. It tracks each wrapped backup key by **identity and fingerprint only**, never by its bytes: an append-only file cannot unsay what it holds, so a wrapped key written there could never be erased (ADR-0006 §Connection as amended by #97; ADR-0035 §Master key).
 20. `migration_draft`: server-side wizard selections per stage, stage-gate state, per-table preflight staleness, and the estimate with its preflight time. It is never audit evidence (ADR-0020 §URLs; ADR-0038 §When; CONTEXT).
 21. `migration_task`: endpoints, schema, conversion switches, user mapping rules, and latest approved contracts (ADR-0004 §Aggregate). Plus task status, the confirmed abandonment list with per-table drop evidence and refusals (ADR-0023), and the write-once schema-created fact (creating run ID, time, `pg_namespace` OID) (#89 item 10).
 22. `task_write_freeze` plus append-only confirmations: accountable operator, deadline, extension, and gap attestation. A run freeze cannot pass the task deadline unless the task freeze is extended in the same command (ADR-0024 §Task write freeze).
@@ -61,7 +62,15 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 
 **Backups**
 30. Consistent, checksummed backups to `backups/`: hourly, before a nonempty Flyway set, a run's first destructive target action, discard, and abandonment. Keep the last 48 hourly (ADR-0006 §Recovery; ADR-0023; #89 item 9).
-31. Each backup has a distinct data-encryption key, wrapped with `connection.wrap`. Destroying a credential version erases, with `connection.erase`, the wrapped keys of every retained backup that could expose that version (ADR-0006 §Connection).
+31. Each backup has a distinct data-encryption key, wrapped with `connection.wrap`. The wrapped form is stored **with its backup artifact** in `backups/`; only its identity and fingerprint reach the ledger (obligation 19).
+31a. Destroying a credential version erases the backup keys of every retained backup that could expose that version: `workflow` takes the instruction from `connection.erase`, shreds the wrapped bytes beside the artifact, and appends the erasure tombstone. Erasing an already-erased key succeeds (ADR-0006 §Connection; `connection` obligations 19–19b).
+31b. A **pre-upgrade backup** is a labelled backup taken on request through the local API while the release is still running. `dbx upgrade` takes one before stopping the stack, and rollback restores exactly that one; it is exempt from the 48-hourly retention until the rollback window closes (ADR-0035 §In-place upgrade, as amended by #97).
+
+**Restore and recovery mode**
+31c. Restore is `workflow`'s, never a script's: prove tombstone-ledger continuity, `connection.unwrap` the backup's key, restore, erase any backup keys revoked after that backup, and reapply credential destruction — in that order, before the queue, workers, or reconciler start. Any step failing stops in recovery mode and mutates no external resource (ADR-0006 §Recovery).
+31d. An unreachable or corrupt H2 is an explicit startup conclusion, not a crash. It puts DBX in **recovery mode**, which `web` renders (ADR-0006 §Recovery; `web` obligation for the restore page).
+31e. A **restore request** file left by `dbx rollback` is consumed at startup, before Flyway: `workflow` verifies the named backup against the checksum in the request, restores per 31c, and deletes the request on success. On failure it renames the request aside and never retries. A request whose checksum does not match is refused, so a stale request cannot take effect later (ADR-0035 §Failed upgrade).
+31f. The rollback-window state in `installation` (obligation 15) is mirrored to a script-readable file outside `secrets/`. `workflow` writes that file **closed before** it admits the first run under the new release, so the file may only ever be more conservative than H2, never less (ADR-0035 §Failed upgrade).
 
 **Queries for other modules**
 32. Any-nonterminal-run: lists every nonterminal run with its release version, for `web`'s upgrade query and the startup refusal (ADR-0035 §In-place upgrade; ADR-0036 `web` row).
@@ -70,7 +79,7 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 ## Verification
 
 - Obligations 1, 9–14 and the ArchUnit rules: L1 `check`, through `WorkflowContractTest`, `UnitTransitionTest`, `RunStatusProjectionTest` (ADR-0039 cases), `TaskStatusTest`, and `TaskConclusionProjectionTest`.
-- Obligations 2–8 and 15–33: L2 `seamTest` (workflow filter), through `CommandQueueSeamTest` (ordering, coalescing, stale rejection, rollback), `FlywaySeamTest`, `WorkflowRepositorySeamTest` (one case per aggregate), and `BackupSeamTest` (triggers, 48 kept, wrap/erase).
+- Obligations 2–8 and 15–33: L2 `seamTest` (workflow filter), through `CommandQueueSeamTest` (ordering, coalescing, stale rejection, rollback), `FlywaySeamTest`, `WorkflowRepositorySeamTest` (one case per aggregate), `BackupSeamTest` (triggers, 48 kept, wrap/unwrap/erase, the pre-upgrade backup's retention exemption, erased bytes gone from `backups/` while the ledger keeps the tombstone), and `RestoreSeamTest` (31c–31f: continuity proof before unwrap, restore-request consumed once and deleted, checksum mismatch refused, failed request renamed and not retried, window file written closed before the first admission).
 - The upgrade step of L4 `packageTest` asserts that H2 migrated, the key fingerprint matches, and history survived (ADR-0035 §Verification).
 
 ## Slices
@@ -82,7 +91,7 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 5. **Drafts and tasks**: draft, task, task write freeze, split snapshot, schema-created fact, abandonment records. Obligations 20–23b. Needs 2, 3.
 6. **Runs and execution records**: run snapshot, units, boxes, timeline, stage attempts, occurrences, validation, admission pause. Obligations 24, 25, 29b–29d, 33. Needs 2, 5.
 7. **Target safety, cleanup, condition**: leases, generations, cleanup requests, `condition_change`, export audit, progress coalescing. Obligations 5, 26–28, 29a. Needs 6; D-18.
-8. **Backups**: obligations 30–31. Needs 3; blocked by `connection` slice 3; D-22, D-23.
+8. **Backups and restore**: obligations 30–31f. Needs 3; blocked by `connection` slice 3.
 9. **Release facts**: rollback-window open/close, any-nonterminal-run query, release version on the run. Obligations 15 (window), 32. Needs 6.
 
 ## Conflicts resolved
@@ -94,6 +103,8 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 - ADR-0004's "later retention policy" and progress compaction → no evidence retention in v1, thinning deferred (#89 item 9).
 - ADR-0006's "retention removes backup artifacts on schedule" → keep the last 48 hourly backups (#89 item 9).
 - ADR-0036 ledger as `workflow` aggregate vs outside H2 (ADR-0006) → a `workflow`-owned file in `secrets/` (ADR-0035 §Master key).
+- ADR-0006's append-only ledger "tracks wrapped backup keys" vs erasure being final → the ledger tracks identity and fingerprint; the bytes live with the artifact (#97).
+- ADR-0035's rollback restoring H2 before starting the previous release → the script starts the previous release, which restores itself; `workflow` owns the only restore path (#97).
 - Change record in both `condition` and `workflow` rows → `condition` derives (pure), `workflow` persists (ADR-0036 §Dependencies).
 
 - Counters, startup-check conclusions, estimate history (unowned) → here, the sole H2 writer (ADR-0036 §Considered options).
@@ -106,4 +117,4 @@ Owns DBX's H2 control-plane state: state machine, single-writer queue, Flyway sc
 ## Open items
 
 - **D-18** (T4): is the latest condition outcome persisted for `web`? Blocks slice 7.
-- **D-22**, **D-23** (T6): backup-key erasure and the restore path. Block slice 8.
+

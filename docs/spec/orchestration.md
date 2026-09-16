@@ -84,7 +84,9 @@ Internal: recovery, pollers, condition loop, cleanup-retry loop.
 **H. Recovery**
 38. Startup: lease, pause admission, load nonterminal state, check the marker, reread facts, apply `RECONCILER` corrections, rebuild occupancy, resume (ADR-0004 §Box, ADR-0032).
 39. Continue only on proven continuity, reloading contracts with `load`; never repeat DDL, `TRUNCATE`, baseline capture, or a user decision blindly; retry read-only observations within 10 min, backoff and jitter (ADR-0006 §Recovery, ADR-0008).
-40. Interrupted cancellation keeps stopping; unreadable H2 → fail closed; an older release's nonterminal run → not automatically recoverable (ADR-0006, 0035, 0008).
+40. Interrupted cancellation keeps stopping; unreadable H2 → fail closed in recovery mode, mutating no external resource; an older release's nonterminal run → not automatically recoverable (ADR-0006, 0035, 0008).
+40a. `restore`: the operator's restore command from `web`'s recovery page, and the only entry to `workflow`'s restore path. It never restores automatically and never picks the backup itself; the operator does. It closes no window and admits nothing afterwards — the restored release starts from `38` (ADR-0006 §Recovery as amended by [#97](https://github.com/liumingjian/dbx/issues/97); `workflow` obligation 31c; `web` obligation 31).
+40b. `takePreUpgradeBackup`: the labelled backup `dbx upgrade` requests through `web` while the release still runs, returning its identity and checksum. Refused if a run is nonterminal, because upgrade is refused then anyway (`workflow` obligation 31b; ADR-0035 §In-place upgrade).
 41. `adoptCredential`: secret-only, audited, then prove continuity (ADR-0006).
 
 **I. Cleanup, discard, abandonment**
@@ -98,7 +100,7 @@ Internal: recovery, pollers, condition loop, cleanup-retry loop.
 47. `downloadSupplementalSql`: each table's latest successful run → `renderTaskSupplementalSql`; streamed, never on disk (ADR-0026).
 
 ## Verification
-L1 on stubbed `api`s: `OrchestrationContractTest`, `ArchitectureTest` (A, B, E, G, J); `RunDriverContractTest`, `StoppingContractTest` (C, F); `AdmissionPauseContractTest` (D); `RecoveryContractTest` (H); `CleanupContractTest`, `AbandonmentContractTest` (I). L3: success, stuck, cancel, 收尾取消, expiry, crash, DBX restart, abandonment.
+L1 on stubbed `api`s: `OrchestrationContractTest`, `ArchitectureTest` (A, B, E, G, J); `RunDriverContractTest`, `StoppingContractTest` (C, F); `AdmissionPauseContractTest` (D); `RecoveryContractTest` (H, including 40a's operator-driven restore and 40b's refusal on a nonterminal run); `CleanupContractTest`, `AbandonmentContractTest` (I). L3: success, stuck, cancel, 收尾取消, expiry, crash, DBX restart, abandonment.
 
 ## Slices
 1. `api` + contract-test skeleton, every use-case signature, README (3). Needs slice 1 of each consumed module.
@@ -108,7 +110,7 @@ L1 on stubbed `api`s: `OrchestrationContractTest`, `ArchitectureTest` (A, B, E, 
 5. 17–24; after 4. Needs `scheduling` 3, 6; `connector` 3–7; `diagnosis` 3, 4; `validation` 3, 5; `workflow` 9.
 6. D, E; after 5. Needs `condition` 2, 3; `environment` 3; D-17, D-18.
 7. F; after 5.
-8. H; after 6, 7. Needs `contract` 7.
+8. H; after 6, 7. Needs `contract` 7; 40a and 40b need `workflow` 8.
 9. 42–44; after 5.
 10. 45, `projectedAbandonmentList`; after 9. Needs `contract` 6.
 11. G; after 7. Needs `validation` 4; `scheduling` 4, 5; `workflow` 5.

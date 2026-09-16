@@ -11,14 +11,14 @@ Ships DBX as one offline package per platform under one release version (发行�
 - Release configuration: the expected-configuration snapshot E4 compares; `release.json` pins its version (#89 item 4).
 - `compose.yaml` + `.env`: the four services, every tier-dependent heap driven by `DBX_MEMORY_TIER` (ADR-0031 §Consequences).
 - `dbx install [--dir]`, `dbx upgrade <package>` (gated), `dbx rollback` (window only). Every command prints the release version; operator output is Chinese (ADR-0035).
-- Install directory (default `~/dbx/`): `releases/<version>/`, `current`, `secrets/`, `backups/`, `drivers/`. Kafka, Schema Registry and H2 data sit in Docker named volumes (ADR-0035 §Install directory).
+- Install directory (default `~/dbx/`): `releases/<version>/`, `current`, `secrets/`, `backups/`, `drivers/`, plus two script-readable state files outside `secrets/` — the rollback-window file and the restore request ([#97](https://github.com/liumingjian/dbx/issues/97)). Kafka, Schema Registry and H2 data sit in Docker named volumes (ADR-0035 §Install directory).
 
 ## Consumes
 
 Specified in those modules' sub-specs; slice numbers are theirs.
 
-- `web` slice 3: the nonterminal-run query upgrade calls (ADR-0036 `web` row, ADR-0035 §In-place upgrade step 2); a local-API read of the installation record (#89 item 5).
-- `workflow` slices 3, 8, 9: the single installation record in H2 (release version, key fingerprint, rollback-window state: opened at upgrade end, closed at first admission with run id and time); the pre-Flyway startup backup (ADR-0004); hourly backups keeping the last 48 (#89 items 5, 9; ADR-0036 `workflow` row).
+- `web` slice 3: the nonterminal-run query upgrade calls (ADR-0036 `web` row, ADR-0035 §In-place upgrade step 2); the pre-upgrade-backup request; a local-API read of the installation record (#89 item 5).
+- `workflow` slices 3, 8, 9: the single installation record in H2 (release version, key fingerprint, rollback-window state: opened at upgrade end, closed at first admission with run id and time); the pre-Flyway startup backup (ADR-0004); hourly backups keeping the last 48; the labelled pre-upgrade backup, the restore-request consumption and the rollback-window file (`workflow` obligations 31b–31f; #89 items 5, 9; ADR-0036 `workflow` row).
 - `environment` slices 3, 4, 5: E1 against the allowlist, E3/E4 against `release.json` and the release configuration, the memory-tier item against `DBX_MEMORY_TIER` and JMX heaps, E8 key present with matching fingerprint (ADR-0027, ADR-0031 §Observation, #89 items 4, 5).
 
 ## Obligations
@@ -50,14 +50,15 @@ Specified in those modules' sub-specs; slice numbers are theirs.
 - I4. Install creates the directory layout, points `current` at the unpacked release, and starts the stack (ADR-0035 §Install directory).
 
 **Upgrade (U)**
-- U1. Upgrade runs ADR-0035's steps in order: verify and load; query nonterminal runs; stop, repoint `current`, start.
+- U1. Upgrade runs ADR-0035's steps in order: verify and load; query nonterminal runs; **request the labelled pre-upgrade backup from the local API while the old release still runs**; stop, repoint `current`, start; write the rollback-window file open, naming that backup and its checksum (ADR-0035 §In-place upgrade as amended by #97). The hourly backup is not a substitute: it may be an hour stale, and the new release's pre-Flyway backup never exists if the new release does not start.
 - U2. Any nonterminal migration run: upgrade lists them in Chinese and exits without draining or waiting, with `current` and the stack unchanged. An open task write freeze with no nonterminal run does not block (ADR-0035 §In-place upgrade).
 - U3. After upgrade `releases/` holds only the new and the previous release (ADR-0035 §Install directory).
 - U4. Upgrade and rollback never delete the Kafka, Registry or H2 volume, never write `secrets/`, never reverse a Flyway migration (ADR-0035, ADR-0004).
 
 **Rollback (B)**
-- B1. Rollback reads the rollback-window state and, once the window is closed, refuses and names the fixed-forward-release path (ADR-0035 §Failed upgrade, #89 item 5).
-- B2. Inside the window, in order: prove tombstone-ledger continuity, restore the pre-upgrade H2 backup, repoint `current` to the previous release, start its images (ADR-0035 §Failed upgrade, ADR-0006).
+- B1. Rollback reads the rollback-window **file**, not the local API, and refuses once the window is closed, naming the fixed-forward-release path. The file is the script's authority precisely because a new release that will not start answers no API call; `workflow` writes it closed before the first admission, so it can only over-refuse (ADR-0035 §Failed upgrade as amended by #97, #89 item 5).
+- B2. The script performs no cryptography and restores nothing. Inside the window, in order: write the restore request naming the pre-upgrade backup and its checksum; stop the stack; repoint `current` to the previous release; start its images. The previous release's DBX consumes the request and restores at startup, proving tombstone-ledger continuity first (`workflow` obligations 31c, 31e; ADR-0006; ADR-0035 §Failed upgrade).
+- B3. After starting the previous release the script waits for its healthcheck. On timeout it reports in Chinese that neither release will start, points at the diagnostic package as the only support channel, exits nonzero, and leaves `current` on the previous release. It never swings `current` back (ADR-0035 §Failed upgrade; ADR-0028).
 
 **Release gate (G)**
 - G1. A release tag is pushed only with a green L4 `packageTest` receipt from the Mac via `rexec`, in addition to L3 (ADR-0022).
@@ -70,7 +71,7 @@ All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (
 - `build` (P1–P4, R1–R5): members, checksums, and image digests that match `release.json`.
 - `freshInstall` (C1–C5, I1–I4): offline install with no registry, a smoke migration, tier and effective heaps agree, key mode 0600, no key in `docker inspect`.
 - `upgrade` (U1–U4): install the previous release, upgrade; H2 migrated, key fingerprint matches, history survived, volumes and `secrets/` unchanged. Variant: one nonterminal run means refusal and no change.
-- `rollback` (B1–B2): the previous release returns with its pre-upgrade history. Variant: one admitted run first means refusal.
+- `rollback` (B1–B3): the previous release returns with its pre-upgrade history, restored by the previous release itself from the labelled pre-upgrade backup, with the restore request gone afterwards. Variants: one admitted run first means refusal from the window file alone, with the local API stopped; a second start of the restored stack does not restore again.
 - The first release runs only `build` and `freshInstall` (ADR-0035 §Verification).
 - R2 is checked by the per-entry L3 `e2eTest` bounded-read scenario; G2 by the restart-detection `e2eTest` on the release images.
 
@@ -80,7 +81,7 @@ All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (
 2. **Compose, `.env` template, release configuration**: C1–C5, R4, R5. Blocked by slice 1.
 3. **`dbx install`**: I1–I4, the L4 harness, `freshInstall`. Blocked by slice 2; `environment` slices 3 (E1), 4 (tier), 5 (E8); `workflow` slice 3 (installation record); `orchestration` slice 5 and `web` slice 4 (smoke migration); D-25, D-26.
 4. **`dbx upgrade`**: U1–U4, L4 `upgrade`. Blocked by slice 3; `web` slice 3 (nonterminal-run query, installation read); `workflow` slice 9 (window opens).
-5. **`dbx rollback`**: B1–B2, L4 `rollback`. Blocked by slice 4; `workflow` slices 8 (backups) and 9; `orchestration` slice 5 (closes the window at first admission); D-23, D-24.
+5. **`dbx rollback`**: B1–B3, L4 `rollback`. Blocked by slice 4; `workflow` slices 8 (backups, restore, window file) and 9; `orchestration` slice 5 (closes the window at first admission).
 6. **Release gate**: G1–G2, the tag-push check for an L4 receipt, certification on the release images. Blocked by slice 3; `connector` slice 7 (marker).
 
 ## Conflicts resolved
@@ -93,6 +94,7 @@ All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (
 - ADR-0027's "release allowlisted checksum" → `{version, SHA-256}` entries, 8.x only (#89 item 4).
 - The corpus audit's proposed `release` home for OOM flags, UTC and key placement → a non-Java sub-spec, backend halves in `web`, `workflow`, `environment` (ADR-0036).
 
+- ADR-0035's rollback order (restore, then repoint, then start) → repoint and start first, and the previous release restores itself; shell must never hold the master key (#97).
 - Old-release nonterminal run at startup, ownerless here → `orchestration` recovery marks it not automatically recoverable (`orchestration` obligation 40; ADR-0035; ADR-0008).
 - Upgrade and rollback proof before a second release → the first release runs only `build` and `freshInstall` (ADR-0035 §Verification).
 
@@ -103,7 +105,5 @@ All rungs run on the Mac through `rexec`. L4 `packageTest` scenarios, in order (
 
 ## Open items
 
-- **D-23** (T6): who decrypts the per-backup DEK and proves ledger continuity when `dbx rollback` restores H2 outside a running DBX. Blocks slice 5.
-- **D-24** (T6): rollback when the new release never starts, so the local API cannot report the window. Blocks slice 5.
 - **D-25** (T7): the MemTotal threshold of the ≥16 GiB tier (ADR-0031 16 GiB vs ADR-0035's 18 GiB advice). Blocks slice 3.
 - **D-26** (T7): below the 8 GiB tier, install refuses, or installs and E5 concludes 不满足. Blocks slice 3.
