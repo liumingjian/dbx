@@ -106,3 +106,6 @@ apply(from = "gradle/docbudget.gradle.kts")
 // L2, L3 and L4 of ADR-0022's ladder. Kept in their own script so that the tickets landing the
 // other L1 gates do not all edit the same file.
 apply(from = "gradle/rungs.gradle.kts")
+
+// ADR-0022 §Explicit updates. Kept in its own script so one initiative at a time touches this file.
+apply(from = "gradle/golden.gradle.kts")
