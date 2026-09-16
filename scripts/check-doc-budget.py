@@ -38,11 +38,8 @@ SUBSPEC_BUDGET = 15_000
 # limited, so the file is deliberately unchecked rather than checked against a
 # large number.
 #
-# NOTE for whoever reads this next: ADR-0018 §Module context still says "Root
-# `CONTEXT.md` is capped at about 20K characters. The cap stands." That sentence
-# and this script now disagree, and the repository's precedence rule is that the
-# ADR wins — so amend ADR-0018 rather than "restoring" a cap here on the strength
-# of it. Changing an ADR was out of scope for the ticket that made this change.
+# ADR-0018 §Module context now records the same ruling, so the ADR and this script
+# agree: do not "restore" a cap here on the strength of a remembered figure.
 
 # Provenance and navigation, not directional material an implementing agent reads
 # to build a module, so no budget applies; `docs/spec/README.md` §Provenance draws
