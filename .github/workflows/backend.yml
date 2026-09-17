@@ -151,19 +151,10 @@ jobs:
           echo "bed=$bed" >> "$GITHUB_OUTPUT"
           echo "::notice::L3 plan — run rung: $rung; start #9 test bed: $bed (tests present: $has_tests)."
 
-      # The bed is ~6.3 GB of images plus ~2.2 GB of volumes (#9 §Resolution) against a runner that
-      # ships with roughly 14 GB free. Reclaiming the preinstalled toolchains this repository never
-      # uses buys about 20 GB, which is the difference between a rung that fits and one that dies
-      # halfway through a pull for reasons that look nothing like the real cause.
-      - name: Reclaim runner disk
-        if: steps.plan.outputs.bed == 'true'
-        working-directory: .
-        run: |
-          set -o pipefail
-          echo "before:"; df -h / | tail -1
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
-          echo "after:"; df -h / | tail -1
-
+      # No disk-reclaim step. One stood here, on the belief that the bed's ~8.5 GB had to fit in a
+      # runner with ~14 GB free. The first dispatched run measured the runner instead: 145 GB total,
+      # 86 GB free before anything is deleted, and 98 GB still free with all five services up. The
+      # step bought nothing, and a step that states a reason which is not true is worse than no step.
       - name: Start the #9 test bed
         if: steps.plan.outputs.bed == 'true'
         working-directory: local-env
@@ -177,6 +168,8 @@ jobs:
           docker compose ps
 
       # The measurement #9 recorded on a mac, taken again on the runner that now has to host it.
+      # First reading, 2026-09-17: bed healthy in 91s; images 7.12 GB, volumes 2.15 GB; 4.1 GiB of
+      # the runner's 15 GiB in use; 98 GB of disk still free.
       - name: Record what the bed costs here
         if: steps.plan.outputs.bed == 'true'
         working-directory: .
