@@ -1,0 +1,2 @@
+# fetch-plugins.sh 下载的第三方 JAR，不入库（体积大，且 MySQL Connector/J 是 GPLv2）
+connect/plugins/
