@@ -55,7 +55,6 @@ class DialectContractTest {
             new Stub("source.baselinePlan", 6, () -> PAIR.source().baselinePlan(null, null)),
             new Stub("source.validationFactPlans", 6, () -> PAIR.source().validationFactPlans(null)),
             new Stub("source.samplingPlan", 6, () -> PAIR.source().samplingPlan(null, 1)),
-            new Stub("target.supplementalStatements", 7, () -> PAIR.target().supplementalStatements(null)),
             new Stub("target.catalogReadPlan", 8, () -> PAIR.target().catalogReadPlan(null)),
             new Stub("target.capabilityProbePlans", 8, () -> PAIR.target().capabilityProbePlans(null, null)),
             new Stub("target.maintenancePlans", 8, () -> PAIR.target().maintenancePlans(null)),
@@ -82,7 +81,8 @@ class DialectContractTest {
             "source.normalizeMetadata",
             "source.queryProjection",
             "target.ddlPlan",
-            "target.sinkSettings");
+            "target.sinkSettings",
+            "target.supplementalStatements");
 
     /** Composition, not capability: they hand out the dialects whose entry points are listed above. */
     private static final Set<String> COMPOSITION = Set.of("pair.source", "pair.target");
