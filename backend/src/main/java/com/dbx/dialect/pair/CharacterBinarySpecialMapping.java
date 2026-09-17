@@ -1,5 +1,7 @@
 package com.dbx.dialect.pair;
 
+import static com.dbx.dialect.pair.SourceFacts.inconsistent;
+
 import com.dbx.dialect.api.ConnectRepresentation;
 import com.dbx.dialect.api.ConnectRepresentation.SchemaType;
 import com.dbx.dialect.api.ContractEffect;
@@ -46,42 +48,32 @@ final class CharacterBinarySpecialMapping {
     private CharacterBinarySpecialMapping() {
     }
 
-    static MappingDecision map(MySqlDataType type, SourceColumn column, MappingOptions options) {
-        switch (type) {
-            case GEOMETRY, POINT, LINESTRING, POLYGON, MULTIPOINT, MULTILINESTRING, MULTIPOLYGON, GEOMCOLLECTION -> {
-                return new Unsupported(MappingUnsupportedReason.GEOMETRY, column);
-            }
-            case VECTOR -> {
-                return new Unsupported(MappingUnsupportedReason.VECTOR, column);
-            }
-            default -> {
-            }
-        }
+    static MappingDecision map(CharacterBinarySpecialType type, SourceColumn column, MappingOptions options) {
         String dataType = type.name().toLowerCase(Locale.ROOT);
         String columnType = column.columnType().toLowerCase(Locale.ROOT);
-        if (column.unsigned() || column.numericPrecision().isPresent() || column.numericScale().isPresent()
-                || column.datetimePrecision().isPresent()) {
-            return inconsistent(column);
-        }
+        boolean plain = !column.unsigned() && column.numericPrecision().isEmpty() && column.numericScale().isEmpty()
+                && column.datetimePrecision().isEmpty();
         return switch (type) {
-            case CHAR -> declaredLength(column, dataType, columnType, CHAR_MAX_LENGTH)
+            case GEOMETRY, POINT, LINESTRING, POLYGON, MULTIPOINT, MULTILINESTRING, MULTIPOLYGON, GEOMCOLLECTION ->
+                    new Unsupported(MappingUnsupportedReason.GEOMETRY, column);
+            case VECTOR -> new Unsupported(MappingUnsupportedReason.VECTOR, column);
+            case CHAR -> plain && declaredLength(column, dataType, columnType, CHAR_MAX_LENGTH)
                     ? character(column, TargetTypeName.CHAR, ValueSemantics.TRAILING_SPACE_PADDED)
                     : inconsistent(column);
-            case VARCHAR -> declaredLength(column, dataType, columnType, VARCHAR_MAX_LENGTH)
+            case VARCHAR -> plain && declaredLength(column, dataType, columnType, VARCHAR_MAX_LENGTH)
                     ? character(column, TargetTypeName.VARCHAR, ValueSemantics.EXACT_TEXT)
                     : inconsistent(column);
-            case TINYTEXT, TEXT, MEDIUMTEXT, LONGTEXT -> columnType.equals(dataType) ? largeText(column)
+            case TINYTEXT, TEXT, MEDIUMTEXT, LONGTEXT -> plain && columnType.equals(dataType) ? largeText(column)
                     : inconsistent(column);
-            case BINARY -> declaredLength(column, dataType, columnType, CHAR_MAX_LENGTH) && byteString(column)
+            case BINARY -> plain && declaredLength(column, dataType, columnType, CHAR_MAX_LENGTH) && byteString(column)
                     ? bytes(List.of()) : inconsistent(column);
-            case VARBINARY -> declaredLength(column, dataType, columnType, VARCHAR_MAX_LENGTH) && byteString(column)
-                    ? bytes(List.of()) : inconsistent(column);
-            case TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB -> columnType.equals(dataType) && byteString(column)
+            case VARBINARY -> plain && declaredLength(column, dataType, columnType, VARCHAR_MAX_LENGTH)
+                    && byteString(column) ? bytes(List.of()) : inconsistent(column);
+            case TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB -> plain && columnType.equals(dataType) && byteString(column)
                     ? bytes(List.of(RequiredPreflight.LARGE_RECORD_ENVELOPE)) : inconsistent(column);
-            case ENUM -> members(dataType, columnType) ? enumeration(column) : inconsistent(column);
-            case SET -> members(dataType, columnType) ? set(column) : inconsistent(column);
-            case JSON -> columnType.equals(dataType) ? json() : inconsistent(column);
-            default -> throw new IllegalArgumentException("TypeMapper routed a type outside TP §6.3 here: " + type);
+            case ENUM -> plain && members(dataType, columnType) ? enumeration(column) : inconsistent(column);
+            case SET -> plain && members(dataType, columnType) ? set(column) : inconsistent(column);
+            case JSON -> plain && columnType.equals(dataType) ? json() : inconsistent(column);
         };
     }
 
@@ -267,9 +259,5 @@ final class CharacterBinarySpecialMapping {
             at++;
         }
         return false;
-    }
-
-    private static Unsupported inconsistent(SourceColumn column) {
-        return new Unsupported(MappingUnsupportedReason.SOURCE_FACTS_INCONSISTENT, column);
     }
 }

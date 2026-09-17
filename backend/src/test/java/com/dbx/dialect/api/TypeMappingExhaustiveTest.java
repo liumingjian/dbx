@@ -1,5 +1,7 @@
 package com.dbx.dialect.api;
 
+import static com.dbx.dialect.api.MappingCase.ALL_OPTIONS;
+import static com.dbx.dialect.api.MappingCase.PAIR;
 import static com.dbx.dialect.api.SourceColumns.column;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -27,16 +29,11 @@ import org.junit.jupiter.api.Test;
  */
 class TypeMappingExhaustiveTest {
 
-    private static final DatabasePair PAIR = (DatabasePair) DialectCatalog.compileTime()
-            .select(new ProductVersion("MySQL", "8.0.36"), new ProductVersion("PostgreSQL", "15.4"));
 
     private static final List<String> DATA_TYPES = fixture("/dialect/mysql80-data-types.txt");
 
     private static final String GOLDEN_INPUT = "input: data_type=";
 
-    private static final List<MappingOptions> ALL_OPTIONS = List.of(
-            new MappingOptions(false, false), new MappingOptions(true, false),
-            new MappingOptions(false, true), new MappingOptions(true, true));
 
     @Test
     void everyMySql80DataTypeYieldsAClosedDecision() {

@@ -51,17 +51,23 @@ public final class CompileTimeCatalog implements DialectCatalog {
     @Override
     public PairSelection select(ProductVersion sourceProductVersion, ProductVersion targetProductVersion) {
         CatalogRequest request = new CatalogRequest(sourceProductVersion, targetProductVersion);
-        Resolution source = resolve(sourceProductVersion);
-        if (source.refusal() != null) {
-            return new Unsupported(source.refusal(), request);
+        DialectId source;
+        DialectId target;
+        switch (resolve(sourceProductVersion)) {
+            case Resolution.Refused refused -> {
+                return new Unsupported(refused.reason(), request);
+            }
+            case Resolution.Identified identified -> source = identified.id();
         }
-        Resolution target = resolve(targetProductVersion);
-        if (target.refusal() != null) {
-            return new Unsupported(target.refusal(), request);
+        switch (resolve(targetProductVersion)) {
+            case Resolution.Refused refused -> {
+                return new Unsupported(refused.reason(), request);
+            }
+            case Resolution.Identified identified -> target = identified.id();
         }
         List<DatabasePair> matches = PAIRS.stream()
-                .filter(pair -> pair.descriptor().sourceDialect().equals(source.id())
-                        && pair.descriptor().targetDialect().equals(target.id()))
+                .filter(pair -> pair.descriptor().sourceDialect().equals(source)
+                        && pair.descriptor().targetDialect().equals(target))
                 .toList();
         return switch (matches.size()) {
             case 0 -> new Unsupported(CatalogUnsupportedReason.UNCERTIFIED, request);
@@ -80,17 +86,17 @@ public final class CompileTimeCatalog implements DialectCatalog {
                 .filter(endpoint -> endpoint.product().equals(probed.product()))
                 .toList();
         if (sameProduct.isEmpty()) {
-            return Resolution.refused(CatalogUnsupportedReason.MISSING);
+            return new Resolution.Refused(CatalogUnsupportedReason.MISSING);
         }
         List<ReleaseSeries> releases = sameProduct.stream()
                 .filter(endpoint -> endpoint.match(probed.version()) == ReleaseSeries.Match.MATCHES)
                 .toList();
         if (releases.size() == 1) {
-            return new Resolution(releases.get(0).id(), null);
+            return new Resolution.Identified(releases.get(0).id());
         }
         boolean ambiguous = releases.size() > 1 || sameProduct.stream()
                 .anyMatch(endpoint -> endpoint.match(probed.version()) == ReleaseSeries.Match.AMBIGUOUS);
-        return Resolution.refused(ambiguous
+        return new Resolution.Refused(ambiguous
                 ? CatalogUnsupportedReason.AMBIGUOUS
                 : CatalogUnsupportedReason.VERSION_INCOMPATIBLE);
     }
@@ -101,17 +107,19 @@ public final class CompileTimeCatalog implements DialectCatalog {
         }
     }
 
-    /** Exactly one of an endpoint id or the reason it could not be identified. */
-    private record Resolution(DialectId id, CatalogUnsupportedReason refusal) {
+    /** An endpoint id, or the reason the probed product and version could not be identified. */
+    private sealed interface Resolution {
 
-        Resolution {
-            if ((id == null) == (refusal == null)) {
-                throw new IllegalArgumentException("a resolution is an id or a refusal");
+        record Identified(DialectId id) implements Resolution {
+            public Identified {
+                Objects.requireNonNull(id);
             }
         }
 
-        static Resolution refused(CatalogUnsupportedReason reason) {
-            return new Resolution(null, Objects.requireNonNull(reason));
+        record Refused(CatalogUnsupportedReason reason) implements Resolution {
+            public Refused {
+                Objects.requireNonNull(reason);
+            }
         }
     }
 }

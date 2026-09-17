@@ -1,5 +1,7 @@
 package com.dbx.dialect.pair;
 
+import static com.dbx.dialect.pair.SourceFacts.inconsistent;
+
 import com.dbx.dialect.api.ConnectRepresentation;
 import com.dbx.dialect.api.ConnectRepresentation.LogicalType;
 import com.dbx.dialect.api.ConnectRepresentation.SchemaType;
@@ -39,7 +41,7 @@ final class NumericMapping {
     private NumericMapping() {
     }
 
-    static MappingDecision map(MySqlDataType type, SourceColumn column, MappingOptions options) {
+    static MappingDecision map(NumericType type, SourceColumn column, MappingOptions options) {
         String columnType = column.columnType().toLowerCase(Locale.ROOT);
         if (UNSIGNED_WORD.matcher(columnType).find() != column.unsigned()) {
             return inconsistent(column);
@@ -59,7 +61,6 @@ final class NumericMapping {
             case DOUBLE -> floating(SchemaType.FLOAT64, TargetTypeName.DOUBLE_PRECISION, JdbcBinder.DOUBLE);
             case DECIMAL -> decimal(column);
             case BIT -> bit(column, columnType);
-            default -> throw new IllegalArgumentException("TypeMapper routed a non-numeric type here: " + type);
         };
     }
 
@@ -179,9 +180,5 @@ final class NumericMapping {
             return OptionalInt.empty();
         }
         return OptionalInt.of(Integer.parseInt(matcher.group(1)));
-    }
-
-    private static Unsupported inconsistent(SourceColumn column) {
-        return new Unsupported(MappingUnsupportedReason.SOURCE_FACTS_INCONSISTENT, column);
     }
 }

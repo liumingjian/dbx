@@ -1,5 +1,8 @@
 package com.dbx.dialect.api;
 
+import static com.dbx.dialect.api.MappingCase.ALL_OPTIONS;
+import static com.dbx.dialect.api.MappingCase.PAIR;
+import static com.dbx.dialect.api.MappingCase.supported;
 import static com.dbx.dialect.api.SourceColumns.column;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -25,12 +28,7 @@ import org.junit.jupiter.api.Test;
  */
 class CharacterBinarySpecialMappingContractTest {
 
-    private static final DatabasePair PAIR = (DatabasePair) DialectCatalog.compileTime()
-            .select(new ProductVersion("MySQL", "8.0.36"), new ProductVersion("PostgreSQL", "15.4"));
     private static final MappingOptions OFF = MappingOptions.DEFAULTS;
-    private static final List<MappingOptions> ALL_OPTIONS = List.of(
-            new MappingOptions(false, false), new MappingOptions(true, false),
-            new MappingOptions(false, true), new MappingOptions(true, true));
 
     private static final String UTF8MB4 = "utf8mb4";
     private static final String UTF8MB4_CI = "utf8mb4_0900_ai_ci";
@@ -38,13 +36,13 @@ class CharacterBinarySpecialMappingContractTest {
 
     @Test
     void charAndVarcharKeepTheCharacterLengthAndNeedNoPreflight() {
-        Supported fixed = supported(column("char", "char(10)").characterLength(10, 40).charset(UTF8MB4, UTF8MB4_CI));
+        Supported fixed = supported(column("char", "char(10)").characterLength(10, 40).charset(UTF8MB4, UTF8MB4_CI), OFF);
         assertEquals(new TargetType(TargetTypeName.CHAR, List.of(10)), fixed.targetType(), "TP §6.3: CHAR(M) → char(M)");
         assertEquals(ValueSemantics.TRAILING_SPACE_PADDED, fixed.valueSemantics(),
                 "TP §6.3: CHAR sampling comparison removes trailing U+0020 only");
 
         Supported varying = supported(column("varchar", "varchar(255)").characterLength(255, 1020)
-                .charset(UTF8MB4, UTF8MB4_CI));
+                .charset(UTF8MB4, UTF8MB4_CI), OFF);
         assertEquals(new TargetType(TargetTypeName.VARCHAR, List.of(255)), varying.targetType(),
                 "TP §6.3: VARCHAR(M) → varchar(M), M in characters, not the 1020 octets");
         for (Supported decision : List.of(fixed, varying)) {
@@ -67,7 +65,7 @@ class CharacterBinarySpecialMappingContractTest {
             rows.add(new Row(blob, TargetTypeName.BYTEA, SchemaType.BYTES, column(blob, blob).characterLength(255, 255)));
         }
         for (Row row : rows) {
-            Supported decision = supported(row.column());
+            Supported decision = supported(row.column(), OFF);
             assertEquals(new TargetType(row.target(), List.of()), decision.targetType(), "TP §6.3: " + row.type());
             assertEquals(row.schema(), decision.connectRepresentation().schemaType(), "TP §6.3: " + row.type());
             assertTrue(decision.requiredPreflights().contains(RequiredPreflight.LARGE_RECORD_ENVELOPE),
@@ -82,7 +80,7 @@ class CharacterBinarySpecialMappingContractTest {
         for (SourceColumns bytes : List.of(
                 column("binary", "binary(16)").characterLength(16, 16),
                 column("varbinary", "varbinary(255)").characterLength(255, 255))) {
-            Supported decision = supported(bytes);
+            Supported decision = supported(bytes, OFF);
             assertEquals(new TargetType(TargetTypeName.BYTEA, List.of()), decision.targetType(), "TP §6.3");
             assertEquals(new ConnectRepresentation(SchemaType.BYTES, Optional.empty()),
                     decision.connectRepresentation(), "TP §6.3: BYTES");
@@ -145,7 +143,7 @@ class CharacterBinarySpecialMappingContractTest {
         for (SourceColumns enumeration : List.of(
                 column("enum", "enum('small','medium','large')").characterLength(6, 24).charset(UTF8MB4, UTF8MB4_CI),
                 column("enum", "enum('it''s','')").characterLength(4, 16).charset(UTF8MB4, UTF8MB4_CI).notNull())) {
-            Supported decision = supported(enumeration);
+            Supported decision = supported(enumeration, OFF);
             assertEquals(new TargetType(TargetTypeName.TEXT, List.of()), decision.targetType(), "TP §6.3: ENUM → text");
             assertEquals(List.of(ContractEffect.ENUM_CHECK_CONSTRAINT), decision.contractEffects(),
                     "TP §6.3: ENUM → text + CHECK");
@@ -158,7 +156,7 @@ class CharacterBinarySpecialMappingContractTest {
     @Test
     void setIsTextWithNoCombinatorialCheck() {
         Supported decision = supported(column("set", "set('read','write','admin')").characterLength(16, 64)
-                .charset(UTF8MB4, UTF8MB4_CI));
+                .charset(UTF8MB4, UTF8MB4_CI), OFF);
         assertEquals(new TargetType(TargetTypeName.TEXT, List.of()), decision.targetType(), "TP §6.3: SET → text");
         assertEquals(List.of(), decision.contractEffects(),
                 "TP §6.3: no combinatorial CHECK; enumerating the power set is a denial of service on the target");
@@ -376,14 +374,5 @@ class CharacterBinarySpecialMappingContractTest {
         Unsupported refused = assertInstanceOf(Unsupported.class, PAIR.map(facts, OFF), message + ": " + facts.columnType());
         assertSame(reason, refused.reason(), message + ": " + facts.columnType());
         assertEquals(facts, refused.evidence(), "the refusal carries the facts it was decided from");
-    }
-
-    private static Supported supported(SourceColumns column) {
-        return supported(column, OFF);
-    }
-
-    private static Supported supported(SourceColumns column, MappingOptions options) {
-        return assertInstanceOf(Supported.class, PAIR.map(column.build(), options),
-                "expected a supported decision for " + column.build().columnType());
     }
 }

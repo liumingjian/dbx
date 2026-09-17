@@ -1,5 +1,7 @@
 package com.dbx.dialect.pair;
 
+import static com.dbx.dialect.pair.SourceFacts.inconsistent;
+
 import com.dbx.dialect.api.ConnectRepresentation;
 import com.dbx.dialect.api.ConnectRepresentation.LogicalType;
 import com.dbx.dialect.api.ConnectRepresentation.SchemaType;
@@ -9,19 +11,18 @@ import com.dbx.dialect.api.JdbcBinder;
 import com.dbx.dialect.api.MappingDecision;
 import com.dbx.dialect.api.MappingNotice;
 import com.dbx.dialect.api.MappingOptions;
-import com.dbx.dialect.api.MappingUnsupportedReason;
 import com.dbx.dialect.api.RequiredPreflight;
 import com.dbx.dialect.api.SourceColumn;
 import com.dbx.dialect.api.Supported;
 import com.dbx.dialect.api.TargetType;
 import com.dbx.dialect.api.TargetTypeName;
-import com.dbx.dialect.api.Unsupported;
 import com.dbx.dialect.api.ValueSemantics;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.IntFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -45,24 +46,33 @@ final class TemporalMapping {
     private TemporalMapping() {
     }
 
-    static MappingDecision map(MySqlDataType type, SourceColumn column, MappingOptions options) {
+    static MappingDecision map(TemporalType type, SourceColumn column, MappingOptions options) {
         if (!onlyTemporalFacts(column)) {
             return inconsistent(column);
         }
         String columnType = column.columnType().toLowerCase(Locale.ROOT);
-        if (type == MySqlDataType.DATE || type == MySqlDataType.YEAR) {
-            boolean declared = type == MySqlDataType.DATE ? columnType.equals("date")
-                    : YEAR_TYPE.matcher(columnType).matches();
-            if (!declared || !noFraction(column)) {
-                return inconsistent(column);
-            }
-            return type == MySqlDataType.DATE ? date(options) : year();
-        }
-        OptionalInt fraction = fraction(type, column, columnType);
-        if (fraction.isEmpty()) {
-            return inconsistent(column);
-        }
-        return fractional(type, fraction.getAsInt(), options);
+        return switch (type) {
+            case DATE -> columnType.equals("date") && noFraction(column) ? date(options) : inconsistent(column);
+            case YEAR -> YEAR_TYPE.matcher(columnType).matches() && noFraction(column) ? year() : inconsistent(column);
+            case DATETIME -> fractional(type, column, columnType, options, sourceFraction -> {
+                Decision datetime = new Decision(new TargetType(TargetTypeName.TIMESTAMP, kept(sourceFraction)),
+                        LogicalType.TIMESTAMP, JdbcBinder.TIMESTAMP, ValueSemantics.WALL_CLOCK_MILLISECONDS);
+                datetime.effects.add(ContractEffect.ORIGINAL_SOURCE_TYPE_DATETIME);
+                return datetime;
+            });
+            case TIMESTAMP -> fractional(type, column, columnType, options, sourceFraction -> {
+                Decision timestamp = new Decision(new TargetType(TargetTypeName.TIMESTAMPTZ, kept(sourceFraction)),
+                        LogicalType.TIMESTAMP, JdbcBinder.TIMESTAMP, ValueSemantics.UTC_INSTANT_MILLISECONDS);
+                timestamp.effects.add(ContractEffect.ORIGINAL_SOURCE_TYPE_TIMESTAMP);
+                return timestamp;
+            });
+            case TIME -> fractional(type, column, columnType, options, sourceFraction -> {
+                Decision time = new Decision(new TargetType(TargetTypeName.TIME, kept(sourceFraction)),
+                        LogicalType.TIME, JdbcBinder.TIME, ValueSemantics.TIME_OF_DAY_MILLISECONDS);
+                time.preflights.add(RequiredPreflight.TIME_WITHIN_DAY);
+                return time;
+            });
+        };
     }
 
     /** {@code DATE} → {@code date}; the zero-date policy applies. */
@@ -85,29 +95,24 @@ final class TemporalMapping {
      * {@code DATETIME(n)}, {@code TIMESTAMP(n)} and {@code TIME(n)} keep {@code min(n,3)}. The first two
      * also retain their original type: Connect cannot tell them apart once converted.
      */
-    private static Supported fractional(MySqlDataType type, int sourceFraction, MappingOptions options) {
-        List<Integer> kept = List.of(Math.min(sourceFraction, CONNECT_FRACTION));
-        Decision decision = switch (type) {
-            case DATETIME -> new Decision(new TargetType(TargetTypeName.TIMESTAMP, kept), LogicalType.TIMESTAMP,
-                    JdbcBinder.TIMESTAMP, ValueSemantics.WALL_CLOCK_MILLISECONDS);
-            case TIMESTAMP -> new Decision(new TargetType(TargetTypeName.TIMESTAMPTZ, kept), LogicalType.TIMESTAMP,
-                    JdbcBinder.TIMESTAMP, ValueSemantics.UTC_INSTANT_MILLISECONDS);
-            case TIME -> new Decision(new TargetType(TargetTypeName.TIME, kept), LogicalType.TIME,
-                    JdbcBinder.TIME, ValueSemantics.TIME_OF_DAY_MILLISECONDS);
-            default -> throw new IllegalArgumentException("TypeMapper routed a non-temporal type here: " + type);
-        };
-        if (sourceFraction > CONNECT_FRACTION) {
+    private static MappingDecision fractional(TemporalType type, SourceColumn column, String columnType,
+            MappingOptions options, IntFunction<Decision> row) {
+        OptionalInt fraction = fraction(type, column, columnType);
+        if (fraction.isEmpty()) {
+            return inconsistent(column);
+        }
+        Decision decision = row.apply(fraction.getAsInt());
+        if (fraction.getAsInt() > CONNECT_FRACTION) {
             decision.notices.add(MappingNotice.MICROSECONDS_TRUNCATED_TO_MILLISECONDS);
         }
-        switch (type) {
-            case DATETIME -> decision.effects.add(ContractEffect.ORIGINAL_SOURCE_TYPE_DATETIME);
-            case TIMESTAMP -> decision.effects.add(ContractEffect.ORIGINAL_SOURCE_TYPE_TIMESTAMP);
-            default -> decision.preflights.add(RequiredPreflight.TIME_WITHIN_DAY);
-        }
-        if (type != MySqlDataType.TIME) {
+        if (type != TemporalType.TIME) {
             decision.zeroDatePolicy(options);
         }
         return decision.build();
+    }
+
+    private static List<Integer> kept(int sourceFraction) {
+        return List.of(Math.min(sourceFraction, CONNECT_FRACTION));
     }
 
     /** The fields every temporal row sets, plus the lists a row appends to before building. */
@@ -152,7 +157,7 @@ final class TemporalMapping {
      * The fractional-seconds precision when {@code datetime_precision} and {@code column_type} agree: a
      * bare {@code datetime} is precision 0 and {@code datetime(n)} is {@code n}.
      */
-    private static OptionalInt fraction(MySqlDataType type, SourceColumn column, String columnType) {
+    private static OptionalInt fraction(TemporalType type, SourceColumn column, String columnType) {
         Matcher matcher = FRACTIONAL_TYPE.matcher(columnType);
         OptionalInt reported = column.datetimePrecision();
         if (!matcher.matches() || !matcher.group(1).equals(type.name().toLowerCase(Locale.ROOT))
@@ -181,9 +186,5 @@ final class TemporalMapping {
                 && column.characterOctetLength().isEmpty()
                 && column.characterSetName().isEmpty()
                 && column.collationName().isEmpty();
-    }
-
-    private static Unsupported inconsistent(SourceColumn column) {
-        return new Unsupported(MappingUnsupportedReason.SOURCE_FACTS_INCONSISTENT, column);
     }
 }

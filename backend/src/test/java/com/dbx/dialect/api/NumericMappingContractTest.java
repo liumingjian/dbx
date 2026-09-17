@@ -1,5 +1,7 @@
 package com.dbx.dialect.api;
 
+import static com.dbx.dialect.api.MappingCase.PAIR;
+import static com.dbx.dialect.api.MappingCase.supported;
 import static com.dbx.dialect.api.SourceColumns.column;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -18,8 +20,6 @@ import org.junit.jupiter.api.Test;
  */
 class NumericMappingContractTest {
 
-    private static final DatabasePair PAIR = (DatabasePair) DialectCatalog.compileTime()
-            .select(new ProductVersion("MySQL", "8.0.36"), new ProductVersion("PostgreSQL", "15.4"));
     private static final MappingOptions OFF = MappingOptions.DEFAULTS;
     private static final MappingOptions BOOLEAN_ON = new MappingOptions(true, false);
 
@@ -147,10 +147,5 @@ class NumericMappingContractTest {
                     "TP §6.1: the decision is a function of the facts; contradictory facts are refused");
             assertSame(MappingUnsupportedReason.SOURCE_FACTS_INCONSISTENT, refused.reason());
         }
-    }
-
-    private static Supported supported(SourceColumns column, MappingOptions options) {
-        return assertInstanceOf(Supported.class, PAIR.map(column.build(), options),
-                "expected a supported decision for " + column.build().columnType());
     }
 }

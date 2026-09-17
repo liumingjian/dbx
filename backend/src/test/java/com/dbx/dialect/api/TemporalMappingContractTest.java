@@ -1,5 +1,7 @@
 package com.dbx.dialect.api;
 
+import static com.dbx.dialect.api.MappingCase.PAIR;
+import static com.dbx.dialect.api.MappingCase.supported;
 import static com.dbx.dialect.api.SourceColumns.column;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,8 +24,6 @@ import org.junit.jupiter.api.Test;
  */
 class TemporalMappingContractTest {
 
-    private static final DatabasePair PAIR = (DatabasePair) DialectCatalog.compileTime()
-            .select(new ProductVersion("MySQL", "8.0.36"), new ProductVersion("PostgreSQL", "15.4"));
     private static final MappingOptions OFF = MappingOptions.DEFAULTS;
     private static final MappingOptions ZERO_DATE_ON = new MappingOptions(false, true);
 
@@ -181,10 +181,5 @@ class TemporalMappingContractTest {
 
     private static SourceColumns fractional(String type, int precision) {
         return column(type, precision == 0 ? type : type + "(" + precision + ")").datetimePrecision(precision);
-    }
-
-    private static Supported supported(SourceColumns column, MappingOptions options) {
-        return assertInstanceOf(Supported.class, PAIR.map(column.build(), options),
-                "expected a supported decision for " + column.build().columnType());
     }
 }

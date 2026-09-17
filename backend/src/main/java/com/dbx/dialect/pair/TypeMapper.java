@@ -27,14 +27,10 @@ final class TypeMapper {
 
     private static MappingDecision family(MySqlDataType type, SourceColumn column, MappingOptions options) {
         return switch (type) {
-            case TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT, DECIMAL, FLOAT, DOUBLE, BIT ->
-                    NumericMapping.map(type, column, options);
-            case CHAR, VARCHAR, TINYTEXT, TEXT, MEDIUMTEXT, LONGTEXT, BINARY, VARBINARY, TINYBLOB, BLOB, MEDIUMBLOB,
-                    LONGBLOB, ENUM, SET, JSON, GEOMETRY, POINT, LINESTRING, POLYGON, MULTIPOINT, MULTILINESTRING,
-                    MULTIPOLYGON, GEOMCOLLECTION, VECTOR ->
-                    CharacterBinarySpecialMapping.map(type, column, options);
-            case DATE, DATETIME, TIMESTAMP, TIME, YEAR ->
-                    TemporalMapping.map(type, column, options);
+            case NumericType numeric -> NumericMapping.map(numeric, column, options);
+            case CharacterBinarySpecialType characterBinarySpecial ->
+                    CharacterBinarySpecialMapping.map(characterBinarySpecial, column, options);
+            case TemporalType temporal -> TemporalMapping.map(temporal, column, options);
         };
     }
 }
