@@ -10,6 +10,7 @@ import com.dbx.dialect.api.SourceCoordinate;
 import com.dbx.dialect.api.TableCoordinate;
 import com.dbx.dialect.api.TargetIdentifier;
 import com.dbx.dialect.api.Unsupported;
+import com.dbx.dialect.postgres.PostgresIdentifier;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -28,16 +29,13 @@ import java.util.Optional;
  */
 final class IdentifierMapper {
 
-    /** PostgreSQL's identifier limit, {@code NAMEDATALEN - 1}, in UTF-8 bytes. */
-    private static final int MAX_IDENTIFIER_BYTES = 63;
-
     /** Version 1 of {@code <utf8-prefix>_<hash12>}. Any change to the output needs a new version. */
     private static final RenameAlgorithmVersion RENAME_V1 = new RenameAlgorithmVersion(1);
 
     private static final int HASH_HEX_CHARACTERS = 12;
 
     /** Room left for the prefix once {@code _<hash12>} is appended. */
-    private static final int MAX_PREFIX_BYTES = MAX_IDENTIFIER_BYTES - 1 - HASH_HEX_CHARACTERS;
+    private static final int MAX_PREFIX_BYTES = PostgresIdentifier.MAX_BYTES - 1 - HASH_HEX_CHARACTERS;
 
     private IdentifierMapper() {
     }
@@ -54,7 +52,7 @@ final class IdentifierMapper {
             case TableCoordinate table -> table.table();
             case ColumnCoordinate column -> column.column();
         };
-        if (utf8Length(name) <= MAX_IDENTIFIER_BYTES) {
+        if (PostgresIdentifier.utf8Bytes(name) <= PostgresIdentifier.MAX_BYTES) {
             return new IdentifierMapping.Exact(sourceCoordinate, new TargetIdentifier(name));
         }
         if (sourceCoordinate instanceof ColumnCoordinate) {
@@ -71,7 +69,7 @@ final class IdentifierMapper {
         int end = 0;
         while (end < name.length()) {
             int codePoint = name.codePointAt(end);
-            bytes += utf8Length(codePoint);
+            bytes += PostgresIdentifier.utf8Bytes(codePoint);
             if (bytes > maxBytes) {
                 break;
             }
@@ -80,19 +78,6 @@ final class IdentifierMapper {
         return name.substring(0, end);
     }
 
-    private static int utf8Length(String name) {
-        return name.codePoints().map(IdentifierMapper::utf8Length).sum();
-    }
-
-    private static int utf8Length(int codePoint) {
-        if (codePoint < 0x80) {
-            return 1;
-        }
-        if (codePoint < 0x800) {
-            return 2;
-        }
-        return codePoint < 0x10000 ? 3 : 4;
-    }
 
     /**
      * First 12 lowercase hex characters of SHA-256 over the coordinate's names, database first, each

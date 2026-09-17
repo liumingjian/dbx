@@ -20,15 +20,20 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-/** The PostgreSQL 15 target dialect. Slices 7 and 8 implement it; a capability not yet landed fails. */
+/**
+ * The PostgreSQL 15 target dialect. Slices 7 and 8 implement it; a capability not yet landed fails. A directed pair
+ * constructs it with its source side's {@link SourceDefinitions}, the only source text supplemental SQL quotes.
+ */
 public final class Postgres15TargetDialect implements TargetDialect {
 
     /** Stable across releases: a contract snapshot records it (ADR-0008 §Registration). */
     public static final DialectId ID = new DialectId("postgresql-15");
 
-    public static final Postgres15TargetDialect INSTANCE = new Postgres15TargetDialect();
+    private final PostgresSupplemental supplemental;
 
-    private Postgres15TargetDialect() {
+    public Postgres15TargetDialect(SourceDefinitions sourceDefinitions) {
+        this.supplemental = new PostgresSupplemental(
+                Objects.requireNonNull(sourceDefinitions, "sourceDefinitions is required"));
     }
 
     @Override
@@ -68,7 +73,7 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public List<Statement> supplementalStatements(List<DeferredStructure> deferredStructures) {
-        return PostgresSupplemental.statements(Objects.requireNonNull(deferredStructures, "deferredStructures is required"));
+        return supplemental.statements(Objects.requireNonNull(deferredStructures, "deferredStructures is required"));
     }
 
     @Override

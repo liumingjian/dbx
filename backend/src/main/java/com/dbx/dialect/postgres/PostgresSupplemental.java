@@ -1,20 +1,15 @@
 package com.dbx.dialect.postgres;
 
-import com.dbx.dialect.api.ColumnCoordinate;
 import com.dbx.dialect.api.DeferredStructure;
 import com.dbx.dialect.api.DeferredStructure.MappedColumn;
 import com.dbx.dialect.api.SourceForeignKey;
 import com.dbx.dialect.api.SourceIndex;
-import com.dbx.dialect.api.SqlValue;
 import com.dbx.dialect.api.Statement;
 import com.dbx.dialect.api.SupplementalCommentReason;
-import com.dbx.dialect.api.TableCoordinate;
 import com.dbx.dialect.api.TargetTableCoordinate;
-import com.dbx.dialect.mysql.MySqlIdentifier;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -23,7 +18,7 @@ import java.util.stream.Collectors;
  * executable and unnamed, so no copied MySQL name collides in a schema; what it cannot is a comment giving the
  * source definition, "requires manual handling" and one stable {@link SupplementalCommentReason}.
  *
- * <p>Source definitions quote names with {@link MySqlIdentifier#quoted}, which keeps a newline literal. Every line
+ * <p>Source definitions come from {@link SourceDefinitions}, which keeps a newline in a name literal. Every line
  * of comment text therefore starts with {@code -- }, so no source name can end a comment early; a source name
  * appears nowhere else. Values go through {@link PostgresLiteral}, which renders them on one line.
  *
@@ -34,33 +29,36 @@ final class PostgresSupplemental {
 
     private static final String MANUAL = "requires manual handling";
 
-    private PostgresSupplemental() {
+    private final SourceDefinitions source;
+
+    PostgresSupplemental(SourceDefinitions source) {
+        this.source = source;
     }
 
-    static List<Statement> statements(List<DeferredStructure> structures) {
+    List<Statement> statements(List<DeferredStructure> structures) {
         List<DeferredStructure> ordered = new ArrayList<>(List.copyOf(structures));
         ordered.sort(Comparator.<DeferredStructure, Boolean>comparing(s -> s instanceof DeferredStructure.ForeignKey)
                 .thenComparing(s -> s.target().schema().name())
                 .thenComparing(s -> s.target().name().name()));
-        return ordered.stream().map(PostgresSupplemental::statement).toList();
+        return ordered.stream().map(this::statement).toList();
     }
 
-    private static Statement statement(DeferredStructure structure) {
+    private Statement statement(DeferredStructure structure) {
         return switch (structure) {
             case DeferredStructure.Index index -> index(index);
             case DeferredStructure.ForeignKey foreignKey -> foreignKey(foreignKey);
             case DeferredStructure.TableComment comment -> Statement.executable("COMMENT ON TABLE "
-                    + relation(comment.target()) + " IS " + text(comment.comment()));
+                    + relation(comment.target()) + " IS " + PostgresLiteral.text(comment.comment()));
             case DeferredStructure.ColumnCommentText comment -> switch (comment.column()) {
                 case MappedColumn.Pruned pruned -> commentOnly(SupplementalCommentReason.PRUNED_COLUMN,
-                        column(pruned.source()) + " COMMENT " + text(comment.comment()));
+                        source.column(pruned.source()) + " COMMENT " + PostgresLiteral.text(comment.comment()));
                 case MappedColumn.Approved approved -> Statement.executable("COMMENT ON COLUMN "
-                        + relation(comment.target()) + "." + PostgresDdl.quoted(approved.target()) + " IS "
-                        + text(comment.comment()));
+                        + relation(comment.target()) + "." + PostgresIdentifier.quoted(approved.target()) + " IS "
+                        + PostgresLiteral.text(comment.comment()));
             };
             case DeferredStructure.Collation collation -> {
-                String definition = collation.column().map(c -> column(c.source())).orElse(table(collation.source()))
-                        + " COLLATE " + collation.collation();
+                String definition = collation.column().map(c -> source.column(c.source()))
+                        .orElse(source.table(collation.source())) + " COLLATE " + collation.collation();
                 yield commentOnly(collation.column().filter(MappedColumn.Pruned.class::isInstance).isPresent()
                         ? SupplementalCommentReason.PRUNED_COLUMN : SupplementalCommentReason.COLLATION, definition);
             }
@@ -68,12 +66,13 @@ final class PostgresSupplemental {
                     onUpdate.column() instanceof MappedColumn.Pruned
                             ? SupplementalCommentReason.PRUNED_COLUMN
                             : SupplementalCommentReason.ON_UPDATE_CURRENT_TIMESTAMP,
-                    column(onUpdate.column().source()) + " ON UPDATE " + onUpdate.definition());
+                    source.column(onUpdate.column().source()) + " ON UPDATE " + onUpdate.definition());
             case DeferredStructure.ColumnDefault columnDefault -> switch (columnDefault.column()) {
                 case MappedColumn.Pruned pruned -> commentOnly(SupplementalCommentReason.PRUNED_COLUMN,
-                        column(pruned.source()) + " DEFAULT " + PostgresLiteral.render(columnDefault.value()));
+                        source.column(pruned.source()) + " DEFAULT " + PostgresLiteral.render(columnDefault.value()));
                 case MappedColumn.Approved approved -> Statement.executable("ALTER TABLE "
-                        + relation(columnDefault.target()) + " ALTER COLUMN " + PostgresDdl.quoted(approved.target())
+                        + relation(columnDefault.target()) + " ALTER COLUMN "
+                        + PostgresIdentifier.quoted(approved.target())
                         + " SET DEFAULT " + PostgresLiteral.render(columnDefault.value()));
             };
         };
@@ -81,41 +80,42 @@ final class PostgresSupplemental {
 
     /**
      * One reason per index, the first that applies: a pruned column (the target lacks it), a FULLTEXT or SPATIAL
-     * index, an expression key part, a prefix key part.
+     * index, an expression key part, a prefix key part. Otherwise every key part is an approved column, one
+     * {@code columns} entry each in key-part order.
      */
-    private static Statement index(DeferredStructure.Index deferred) {
+    private Statement index(DeferredStructure.Index deferred) {
         SourceIndex index = deferred.index();
-        String source = indexDefinition(deferred.source(), index);
+        String definition = source.index(deferred.source(), index);
         Optional<SupplementalCommentReason> reason = indexReason(deferred);
         if (reason.isPresent()) {
-            return commentOnly(reason.get(), source);
+            return commentOnly(reason.get(), definition);
         }
-        List<String> parts = new ArrayList<>();
-        int column = 0;
-        boolean descending = false;
-        for (SourceIndex.KeyPart part : index.keyParts()) {
-            MappedColumn.Approved approved = (MappedColumn.Approved) deferred.columns().get(column++);
-            descending |= part.direction() == SourceIndex.Direction.DESCENDING;
-            parts.add(PostgresDdl.quoted(approved.target())
-                    + (part.direction() == SourceIndex.Direction.DESCENDING ? " DESC" : ""));
+        List<String> keys = new ArrayList<>();
+        boolean anyDescending = false;
+        for (int keyPart = 0; keyPart < index.keyParts().size(); keyPart++) {
+            MappedColumn.Approved approved = (MappedColumn.Approved) deferred.columns().get(keyPart);
+            boolean descending = index.keyParts().get(keyPart).direction() == SourceIndex.Direction.DESCENDING;
+            anyDescending |= descending;
+            keys.add(PostgresIdentifier.quoted(approved.target()) + (descending ? " DESC" : ""));
         }
-        String keys = "(" + String.join(", ", parts) + ")";
-        String sql;
-        if (index.unique() && !descending) {
-            sql = "ALTER TABLE " + relation(deferred.target()) + " ADD UNIQUE " + keys;
-        } else {
-            sql = "CREATE " + (index.unique() ? "UNIQUE " : "") + "INDEX ON " + relation(deferred.target()) + " "
-                    + keys;
-        }
-        return Statement.executable(comment("source: " + source) + "\n" + sql);
+        String keyList = "(" + String.join(", ", keys) + ")";
+        // ADD UNIQUE takes no direction, so a unique index with a descending key part stays an index.
+        String sql = index.unique() && !anyDescending
+                ? "ALTER TABLE " + relation(deferred.target()) + " ADD UNIQUE " + keyList
+                : "CREATE " + (index.unique() ? "UNIQUE " : "") + "INDEX ON " + relation(deferred.target()) + " "
+                        + keyList;
+        return Statement.executable(comment("source: " + definition) + "\n" + sql);
     }
 
     private static Optional<SupplementalCommentReason> indexReason(DeferredStructure.Index deferred) {
         if (deferred.columns().stream().anyMatch(MappedColumn.Pruned.class::isInstance)) {
             return Optional.of(SupplementalCommentReason.PRUNED_COLUMN);
         }
-        String type = deferred.index().indexType();
-        if (type.equalsIgnoreCase("FULLTEXT") || type.equalsIgnoreCase("SPATIAL")) {
+        boolean fulltextOrSpatial = switch (deferred.index().indexType()) {
+            case FULLTEXT, SPATIAL -> true;
+            case BTREE, HASH -> false;
+        };
+        if (fulltextOrSpatial) {
             return Optional.of(SupplementalCommentReason.FULLTEXT_OR_SPATIAL_INDEX);
         }
         List<SourceIndex.KeyPart> parts = deferred.index().keyParts();
@@ -128,47 +128,24 @@ final class PostgresSupplemental {
         return Optional.empty();
     }
 
-    /** The index as MySQL would create it. */
-    private static String indexDefinition(TableCoordinate table, SourceIndex index) {
-        String type = index.indexType().equalsIgnoreCase("FULLTEXT") || index.indexType().equalsIgnoreCase("SPATIAL")
-                ? index.indexType().toUpperCase(Locale.ROOT) + " "
-                : index.unique() ? "UNIQUE " : "";
-        String parts = index.keyParts().stream().map(part -> {
-            String subject = switch (part.subject()) {
-                case SourceIndex.Subject.Column column -> MySqlIdentifier.quoted(column.column().column());
-                case SourceIndex.Subject.Expression expression -> "(" + expression.expression() + ")";
-            };
-            String prefix = part.prefixLength().isPresent() ? "(" + part.prefixLength().getAsLong() + ")" : "";
-            return subject + prefix + (part.direction() == SourceIndex.Direction.DESCENDING ? " DESC" : "");
-        }).collect(Collectors.joining(", "));
-        return "CREATE " + type + "INDEX " + MySqlIdentifier.quoted(index.name()) + " ON " + table(table)
-                + " (" + parts + ")" + (index.visible() ? "" : " INVISIBLE");
-    }
-
     /** One reason per foreign key, the first that applies: an out-of-scope referenced table, a pruned column. */
-    private static Statement foreignKey(DeferredStructure.ForeignKey deferred) {
+    private Statement foreignKey(DeferredStructure.ForeignKey deferred) {
         SourceForeignKey foreignKey = deferred.foreignKey();
-        String source = "ALTER TABLE " + table(deferred.source()) + " ADD CONSTRAINT "
-                + MySqlIdentifier.quoted(foreignKey.name()) + " FOREIGN KEY ("
-                + foreignKey.parts().stream().map(p -> MySqlIdentifier.quoted(p.column().column()))
-                        .collect(Collectors.joining(", "))
-                + ") REFERENCES " + table(foreignKey.referencedTable()) + " ("
-                + foreignKey.parts().stream().map(p -> MySqlIdentifier.quoted(p.referencedColumn().column()))
-                        .collect(Collectors.joining(", "))
-                + ")" + rules(foreignKey);
+        String definition = source.foreignKey(deferred.source(), foreignKey) + rules(foreignKey);
         if (!(deferred.referenced() instanceof DeferredStructure.ReferencedTable.InScope referenced)) {
-            return commentOnly(SupplementalCommentReason.REFERENCED_TABLE_OUT_OF_SCOPE, source);
+            return commentOnly(SupplementalCommentReason.REFERENCED_TABLE_OUT_OF_SCOPE, definition);
         }
         if (deferred.columns().stream().anyMatch(MappedColumn.Pruned.class::isInstance)
                 || referenced.columns().stream().anyMatch(MappedColumn.Pruned.class::isInstance)) {
-            return commentOnly(SupplementalCommentReason.PRUNED_COLUMN, source);
+            return commentOnly(SupplementalCommentReason.PRUNED_COLUMN, definition);
         }
         String sql = "ALTER TABLE " + relation(deferred.target()) + " ADD FOREIGN KEY (" + targets(deferred.columns())
                 + ") REFERENCES " + relation(referenced.table()) + " (" + targets(referenced.columns()) + ")"
                 + rules(foreignKey);
-        return Statement.executable(comment("source: " + source) + "\n" + sql);
+        return Statement.executable(comment("source: " + definition) + "\n" + sql);
     }
 
+    /** The referential rules, spelled the same in MySQL and PostgreSQL. */
     private static String rules(SourceForeignKey foreignKey) {
         return " ON UPDATE " + action(foreignKey.onUpdate()) + " ON DELETE " + action(foreignKey.onDelete());
     }
@@ -184,7 +161,7 @@ final class PostgresSupplemental {
     }
 
     private static String targets(List<MappedColumn> columns) {
-        return columns.stream().map(c -> PostgresDdl.quoted(((MappedColumn.Approved) c).target()))
+        return columns.stream().map(c -> PostgresIdentifier.quoted(((MappedColumn.Approved) c).target()))
                 .collect(Collectors.joining(", "));
     }
 
@@ -198,19 +175,6 @@ final class PostgresSupplemental {
     }
 
     private static String relation(TargetTableCoordinate coordinate) {
-        return PostgresDdl.qualified(coordinate.schema(), coordinate.name());
-    }
-
-    private static String table(TableCoordinate table) {
-        return MySqlIdentifier.quoted(table.database()) + "." + MySqlIdentifier.quoted(table.table());
-    }
-
-    private static String column(ColumnCoordinate column) {
-        return MySqlIdentifier.quoted(column.database()) + "." + MySqlIdentifier.quoted(column.table()) + "."
-                + MySqlIdentifier.quoted(column.column());
-    }
-
-    private static String text(String value) {
-        return PostgresLiteral.render(new SqlValue.Text(value));
+        return PostgresIdentifier.qualified(coordinate);
     }
 }

@@ -11,6 +11,7 @@ import com.dbx.dialect.api.DeferredStructure.MappedColumn;
 import com.dbx.dialect.api.DeferredStructure.ReferencedTable;
 import com.dbx.dialect.api.SourceForeignKey.ReferentialAction;
 import com.dbx.dialect.api.SourceIndex.Direction;
+import com.dbx.dialect.api.SourceIndex.IndexType;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -92,7 +93,7 @@ class SupplementalStatementsContractTest {
         Set<SupplementalCommentReason> produced = EnumSet.noneOf(SupplementalCommentReason.class);
         PAIR.target().supplementalStatements(representative()).forEach(s -> s.reason().ifPresent(produced::add));
         PAIR.target().supplementalStatements(List.of(index(ORDERS, APP_ORDERS,
-                sourceIndex("idx_legacy", false, "BTREE", columnPart(1, ORDERS, "legacy", Direction.ASCENDING)),
+                sourceIndex("idx_legacy", false, IndexType.BTREE, columnPart(1, ORDERS, "legacy", Direction.ASCENDING)),
                 List.of(pruned(ORDERS, "legacy"))))).forEach(s -> s.reason().ifPresent(produced::add));
         assertEquals(EnumSet.allOf(SupplementalCommentReason.class), produced,
                 "#123 obligation 25: every stable reason code is reachable from a real input");
@@ -120,7 +121,7 @@ class SupplementalStatementsContractTest {
     void pruningDecidesTheReasonBeforeAnyOtherCause() {
         TableCoordinate t = ORDERS;
         List<DeferredStructure> structures = List.of(
-                index(t, APP_ORDERS, sourceIndex("ft", false, "FULLTEXT",
+                index(t, APP_ORDERS, sourceIndex("ft", false, IndexType.FULLTEXT,
                         new SourceIndex.KeyPart(1, col(t, "legacy"), OptionalLong.of(4), Direction.NOT_SORTED)),
                         List.of(pruned(t, "legacy"))),
                 new DeferredStructure.Collation(t, APP_ORDERS, Optional.of(pruned(t, "legacy")), "utf8mb4_bin"),
@@ -149,7 +150,7 @@ class SupplementalStatementsContractTest {
                 foreignKey(ORDERS, first, "fk_out", "warehouse_id", new TableCoordinate("inv", "w"), "id",
                         List.of(approved(ORDERS, "warehouse_id", "warehouse_id")), new ReferencedTable.OutOfScope()),
                 new DeferredStructure.TableComment(CUSTOMERS, last, "late table"),
-                index(ORDERS, first, sourceIndex("i", false, "BTREE", columnPart(1, ORDERS, "code", Direction.ASCENDING)),
+                index(ORDERS, first, sourceIndex("i", false, IndexType.BTREE, columnPart(1, ORDERS, "code", Direction.ASCENDING)),
                         List.of(approved(ORDERS, "code", "code"))),
                 foreignKey(CUSTOMERS, last, "fk_z", "referrer_id", CUSTOMERS, "id",
                         List.of(approved(CUSTOMERS, "referrer_id", "referrer_id")),
@@ -179,9 +180,9 @@ class SupplementalStatementsContractTest {
         List<MappedColumn> mapped = List.of(approved(ORDERS, "b", "tb"), approved(ORDERS, "a", "ta"));
 
         List<String> sql = sql(PAIR.target().supplementalStatements(List.of(
-                index(ORDERS, APP_ORDERS, sourceIndex("ord", false, "BTREE", b, a), mapped),
-                index(ORDERS, APP_ORDERS, sourceIndex("uniq_desc", true, "BTREE", b, a), mapped),
-                index(ORDERS, APP_ORDERS, sourceIndex("uniq_asc", true, "BTREE",
+                index(ORDERS, APP_ORDERS, sourceIndex("ord", false, IndexType.BTREE, b, a), mapped),
+                index(ORDERS, APP_ORDERS, sourceIndex("uniq_desc", true, IndexType.BTREE, b, a), mapped),
+                index(ORDERS, APP_ORDERS, sourceIndex("uniq_asc", true, IndexType.BTREE,
                         columnPart(1, ORDERS, "b", Direction.ASCENDING), a), mapped))));
 
         assertEquals(List.of(
@@ -200,9 +201,9 @@ class SupplementalStatementsContractTest {
         for (String hostile : HOSTILE) {
             String name = "src_" + hostile;
             List<DeferredStructure> structures = List.of(
-                    index(ORDERS, APP_ORDERS, sourceIndex(name, true, "BTREE",
+                    index(ORDERS, APP_ORDERS, sourceIndex(name, true, IndexType.BTREE,
                             columnPart(1, ORDERS, "code", Direction.ASCENDING)), List.of(approved(ORDERS, "code", "c"))),
-                    index(ORDERS, APP_ORDERS, sourceIndex(name + "2", false, "BTREE",
+                    index(ORDERS, APP_ORDERS, sourceIndex(name + "2", false, IndexType.BTREE,
                             columnPart(1, ORDERS, "code", Direction.DESCENDING)), List.of(approved(ORDERS, "code", "c"))),
                     foreignKey(ORDERS, APP_ORDERS, name, "customer_id", CUSTOMERS, "id",
                             List.of(approved(ORDERS, "customer_id", "customer_id")),
@@ -227,17 +228,17 @@ class SupplementalStatementsContractTest {
         variants.put("target schema", s -> set(s, 13, new DeferredStructure.TableComment(CUSTOMERS,
                 target("app2", "customers"), "x")));
         variants.put("index direction", s -> set(s, 1, index(ORDERS, APP_ORDERS, sourceIndex("idx_created", false,
-                "BTREE", columnPart(1, ORDERS, "created_at", Direction.ASCENDING),
+                IndexType.BTREE, columnPart(1, ORDERS, "created_at", Direction.ASCENDING),
                 columnPart(2, ORDERS, "status", Direction.ASCENDING)),
                 List.of(approved(ORDERS, "created_at", "created"), approved(ORDERS, "status", "status")))));
         variants.put("index key order", s -> set(s, 1, index(ORDERS, APP_ORDERS, sourceIndex("idx_created", false,
-                "BTREE", columnPart(1, ORDERS, "status", Direction.ASCENDING),
+                IndexType.BTREE, columnPart(1, ORDERS, "status", Direction.ASCENDING),
                 columnPart(2, ORDERS, "created_at", Direction.DESCENDING)),
                 List.of(approved(ORDERS, "status", "status"), approved(ORDERS, "created_at", "created")))));
         variants.put("uniqueness", s -> set(s, 2, index(ORDERS, APP_ORDERS, sourceIndex("uk_orders_code", false,
-                "BTREE", columnPart(1, ORDERS, "code", Direction.ASCENDING)), List.of(approved(ORDERS, "code", "code")))));
+                IndexType.BTREE, columnPart(1, ORDERS, "code", Direction.ASCENDING)), List.of(approved(ORDERS, "code", "code")))));
         variants.put("approved column name", s -> set(s, 2, index(ORDERS, APP_ORDERS, sourceIndex("uk_orders_code",
-                true, "BTREE", columnPart(1, ORDERS, "code", Direction.ASCENDING)),
+                true, IndexType.BTREE, columnPart(1, ORDERS, "code", Direction.ASCENDING)),
                 List.of(approved(ORDERS, "code", "code2")))));
         variants.put("comment text", s -> set(s, 3, new DeferredStructure.TableComment(ORDERS, APP_ORDERS, "other")));
         variants.put("default value", s -> set(s, 5, new DeferredStructure.ColumnDefault(ORDERS, APP_ORDERS,
@@ -249,10 +250,10 @@ class SupplementalStatementsContractTest {
         variants.put("on update definition", s -> set(s, 7, new DeferredStructure.OnUpdate(ORDERS, APP_ORDERS,
                 approved(ORDERS, "updated_at", "updated_at"), "CURRENT_TIMESTAMP")));
         variants.put("prefix length", s -> set(s, 8, index(ORDERS, APP_ORDERS, sourceIndex("idx_note_prefix", false,
-                "BTREE", new SourceIndex.KeyPart(1, col(ORDERS, "note"), OptionalLong.of(11), Direction.ASCENDING)),
+                IndexType.BTREE, new SourceIndex.KeyPart(1, col(ORDERS, "note"), OptionalLong.of(11), Direction.ASCENDING)),
                 List.of(approved(ORDERS, "note", "note")))));
         variants.put("visibility", s -> set(s, 8, index(ORDERS, APP_ORDERS, new SourceIndex("idx_note_prefix", false,
-                false, "BTREE", List.of(new SourceIndex.KeyPart(1, col(ORDERS, "note"), OptionalLong.of(10),
+                false, IndexType.BTREE, List.of(new SourceIndex.KeyPart(1, col(ORDERS, "note"), OptionalLong.of(10),
                 Direction.ASCENDING))), List.of(approved(ORDERS, "note", "note")))));
         variants.put("delete rule", s -> set(s, 0, foreignKey(ORDERS, APP_ORDERS, "fk_orders_customer", "customer_id",
                 CUSTOMERS, "id", List.of(approved(ORDERS, "customer_id", "customer_id")),
@@ -328,11 +329,11 @@ class SupplementalStatementsContractTest {
         SourceIndex.KeyPart code = columnPart(1, ORDERS, "code", Direction.ASCENDING);
         Map<String, Supplier<Object>> inconsistent = new LinkedHashMap<>();
         inconsistent.put("the primary key", () -> index(ORDERS, APP_ORDERS,
-                sourceIndex(SourceIndex.PRIMARY, true, "BTREE", code), List.of(approved(ORDERS, "code", "code"))));
+                sourceIndex(SourceIndex.PRIMARY, true, IndexType.BTREE, code), List.of(approved(ORDERS, "code", "code"))));
         inconsistent.put("an index column without its mapping", () -> index(ORDERS, APP_ORDERS,
-                sourceIndex("i", false, "BTREE", code), List.of()));
+                sourceIndex("i", false, IndexType.BTREE, code), List.of()));
         inconsistent.put("an index mapping another column", () -> index(ORDERS, APP_ORDERS,
-                sourceIndex("i", false, "BTREE", code), List.of(approved(ORDERS, "note", "note"))));
+                sourceIndex("i", false, IndexType.BTREE, code), List.of(approved(ORDERS, "note", "note"))));
         inconsistent.put("a column of another table", () -> new DeferredStructure.OnUpdate(ORDERS, APP_ORDERS,
                 approved(CUSTOMERS, "code", "code"), "CURRENT_TIMESTAMP"));
         inconsistent.put("a referenced column mapping of another column", () -> foreignKey(ORDERS, APP_ORDERS, "fk",
@@ -357,11 +358,11 @@ class SupplementalStatementsContractTest {
                         List.of(approved(ORDERS, "customer_id", "customer_id")),
                         new ReferencedTable.InScope(APP_CUSTOMERS, List.of(approved(CUSTOMERS, "id", "id"))),
                         ReferentialAction.CASCADE, ReferentialAction.RESTRICT),
-                index(ORDERS, APP_ORDERS, sourceIndex("idx_created", false, "BTREE",
+                index(ORDERS, APP_ORDERS, sourceIndex("idx_created", false, IndexType.BTREE,
                                 columnPart(1, ORDERS, "created_at", Direction.DESCENDING),
                                 columnPart(2, ORDERS, "status", Direction.ASCENDING)),
                         List.of(approved(ORDERS, "created_at", "created"), approved(ORDERS, "status", "status"))),
-                index(ORDERS, APP_ORDERS, sourceIndex("uk_orders_code", true, "BTREE",
+                index(ORDERS, APP_ORDERS, sourceIndex("uk_orders_code", true, IndexType.BTREE,
                         columnPart(1, ORDERS, "code", Direction.ASCENDING)), List.of(approved(ORDERS, "code", "code"))),
                 new DeferredStructure.TableComment(ORDERS, APP_ORDERS, "客户's orders"),
                 new DeferredStructure.ColumnCommentText(ORDERS, APP_ORDERS, approved(ORDERS, "status", "status"),
@@ -372,19 +373,19 @@ class SupplementalStatementsContractTest {
                         "utf8mb4_bin"),
                 new DeferredStructure.OnUpdate(ORDERS, APP_ORDERS, approved(ORDERS, "updated_at", "updated_at"),
                         "CURRENT_TIMESTAMP(3)"),
-                index(ORDERS, APP_ORDERS, sourceIndex("idx_note_prefix", false, "BTREE",
+                index(ORDERS, APP_ORDERS, sourceIndex("idx_note_prefix", false, IndexType.BTREE,
                                 new SourceIndex.KeyPart(1, col(ORDERS, "note"), OptionalLong.of(10), Direction.ASCENDING)),
                         List.of(approved(ORDERS, "note", "note"))),
-                index(ORDERS, APP_ORDERS, sourceIndex("idx_expr", false, "BTREE", new SourceIndex.KeyPart(1,
+                index(ORDERS, APP_ORDERS, sourceIndex("idx_expr", false, IndexType.BTREE, new SourceIndex.KeyPart(1,
                         new SourceIndex.Subject.Expression("lower(`code`)"), OptionalLong.empty(), Direction.ASCENDING)),
                         List.of()),
-                index(ORDERS, APP_ORDERS, sourceIndex("ft_note", false, "FULLTEXT",
+                index(ORDERS, APP_ORDERS, sourceIndex("ft_note", false, IndexType.FULLTEXT,
                         columnPart(1, ORDERS, "note", Direction.NOT_SORTED)), List.of(approved(ORDERS, "note", "note"))),
                 new DeferredStructure.ColumnCommentText(ORDERS, APP_ORDERS, pruned(ORDERS, "legacy"), "old"),
                 foreignKey(ORDERS, APP_ORDERS, "fk_orders_warehouse", "warehouse_id",
                         new TableCoordinate("inv", "warehouses"), "id",
                         List.of(approved(ORDERS, "warehouse_id", "warehouse_id")), new ReferencedTable.OutOfScope()),
-                index(CUSTOMERS, APP_CUSTOMERS, sourceIndex("uk_email", true, "BTREE",
+                index(CUSTOMERS, APP_CUSTOMERS, sourceIndex("uk_email", true, IndexType.BTREE,
                         columnPart(1, CUSTOMERS, "email", Direction.ASCENDING)),
                         List.of(approved(CUSTOMERS, "email", "email"))),
                 foreignKey(CUSTOMERS, APP_CUSTOMERS, "fk_referrer", "referrer_id", CUSTOMERS, "id",
@@ -401,9 +402,9 @@ class SupplementalStatementsContractTest {
         TargetTableCoordinate refTgt = target("s" + h, "r" + h);
         MappedColumn c = approved(source, "c" + h, "tc" + h);
         return List.of(
-                index(source, tgt, sourceIndex("i" + h, false, "BTREE", columnPart(1, source, "c" + h, Direction.DESCENDING)),
+                index(source, tgt, sourceIndex("i" + h, false, IndexType.BTREE, columnPart(1, source, "c" + h, Direction.DESCENDING)),
                         List.of(c)),
-                index(source, tgt, sourceIndex("x" + h, false, "BTREE", new SourceIndex.KeyPart(1,
+                index(source, tgt, sourceIndex("x" + h, false, IndexType.BTREE, new SourceIndex.KeyPart(1,
                         new SourceIndex.Subject.Expression("f(" + h + ")"), OptionalLong.empty(), Direction.ASCENDING)),
                         List.of()),
                 new DeferredStructure.TableComment(source, tgt, "comment " + h),
@@ -430,7 +431,7 @@ class SupplementalStatementsContractTest {
         return new SourceIndex.KeyPart(sequence, col(table, column), OptionalLong.empty(), direction);
     }
 
-    private static SourceIndex sourceIndex(String name, boolean unique, String type, SourceIndex.KeyPart... parts) {
+    private static SourceIndex sourceIndex(String name, boolean unique, SourceIndex.IndexType type, SourceIndex.KeyPart... parts) {
         return new SourceIndex(name, unique, true, type, List.of(parts));
     }
 

@@ -399,6 +399,20 @@ class DialectContractTest {
     }
 
     @Test
+    void endpointDialectsNeverDependOnEachOther() {
+        noClasses().that().resideInAPackage("com.dbx.dialect.postgres..")
+                .should().dependOnClassesThat().resideInAPackage("com.dbx.dialect.mysql..")
+                .as("ADR-0008 §Contract and mapping boundary: the target dialect quotes under its own rules; "
+                        + "cross-endpoint knowledge belongs to the pair")
+                .check(DIALECT);
+        noClasses().that().resideInAPackage("com.dbx.dialect.mysql..")
+                .should().dependOnClassesThat().resideInAPackage("com.dbx.dialect.postgres..")
+                .as("ADR-0008 §Contract and mapping boundary: the source dialect quotes under its own rules; "
+                        + "cross-endpoint knowledge belongs to the pair")
+                .check(DIALECT);
+    }
+
+    @Test
     void theApiCarriesNoMapBag() {
         noClasses().that().resideInAPackage("com.dbx.dialect.api..")
                 .should().dependOnClassesThat().belongToAnyOf(Map.class)

@@ -91,8 +91,7 @@ final class CapabilityPlans {
      */
     private static SqlPlan selectProbe(TableCoordinate table) {
         String sql = "SELECT COUNT(*) AS " + MySqlIdentifier.quoted("probed_rows") + " FROM (SELECT * FROM "
-                + MySqlIdentifier.quoted(table.database()) + "." + MySqlIdentifier.quoted(table.table())
-                + " LIMIT 0) AS " + MySqlIdentifier.quoted("select_probe");
+                + MySqlIdentifier.qualified(table) + " LIMIT 0) AS " + MySqlIdentifier.quoted("select_probe");
         return new SqlPlan(
                 OperationKind.SOURCE_CAPABILITY_CHECK,
                 List.of(new ParameterizedStatement(sql, List.of())),

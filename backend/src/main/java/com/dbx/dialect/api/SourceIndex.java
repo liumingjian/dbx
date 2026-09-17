@@ -8,14 +8,14 @@ import java.util.OptionalLong;
  * sequence order. The primary key is the index MySQL names {@code PRIMARY}, a name no other index may
  * take. Invisible indexes are kept: they still enforce uniqueness.
  */
-public record SourceIndex(String name, boolean unique, boolean visible, String indexType, List<KeyPart> keyParts) {
+public record SourceIndex(String name, boolean unique, boolean visible, IndexType indexType, List<KeyPart> keyParts) {
 
     /** The name MySQL reserves for the primary key. */
     public static final String PRIMARY = "PRIMARY";
 
     public SourceIndex {
         Checks.nonEmpty(name, "name");
-        Checks.nonEmpty(indexType, "indexType");
+        Checks.present(indexType, "indexType");
         keyParts = Checks.nonEmptyList(keyParts, "keyParts");
         for (int i = 0; i < keyParts.size(); i++) {
             if (keyParts.get(i).sequence() != i + 1) {
@@ -30,6 +30,14 @@ public record SourceIndex(String name, boolean unique, boolean visible, String i
 
     public boolean primaryKey() {
         return name.equals(PRIMARY);
+    }
+
+    /** {@code STATISTICS.INDEX_TYPE} as MySQL 8.0 reports it. */
+    public enum IndexType {
+        BTREE,
+        HASH,
+        FULLTEXT,
+        SPATIAL
     }
 
     /** One key part: a column or an expression, an optional prefix length, and its direction. */

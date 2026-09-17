@@ -317,17 +317,17 @@ class SourceMetadataContractTest {
                 new ColumnComment(orders("code"), ""), new ColumnComment(orders("customer_id"), "客户'编号"),
                 new ColumnComment(orders("created"), ""));
         List<SourceIndex> indexes = List.of(
-                new SourceIndex("a_created", false, false, "BTREE", List.of(
+                new SourceIndex("a_created", false, false, SourceIndex.IndexType.BTREE, List.of(
                         part(1, column("created"), OptionalLong.empty(), SourceIndex.Direction.DESCENDING))),
-                new SourceIndex("B_customer", true, true, "BTREE", List.of(
+                new SourceIndex("B_customer", true, true, SourceIndex.IndexType.BTREE, List.of(
                         part(1, column("customer_id"), OptionalLong.empty(), SourceIndex.Direction.ASCENDING),
                         part(2, column("code"), OptionalLong.of(8), SourceIndex.Direction.ASCENDING))),
-                new SourceIndex("c_lower", true, true, "BTREE", List.of(
+                new SourceIndex("c_lower", true, true, SourceIndex.IndexType.BTREE, List.of(
                         part(1, new SourceIndex.Subject.Expression("lower(`code`)"), OptionalLong.empty(),
                                 SourceIndex.Direction.ASCENDING))),
-                new SourceIndex("PRIMARY", true, true, "BTREE", List.of(
+                new SourceIndex("PRIMARY", true, true, SourceIndex.IndexType.BTREE, List.of(
                         part(1, column("id"), OptionalLong.empty(), SourceIndex.Direction.ASCENDING))),
-                new SourceIndex("x_code", false, true, "HASH", List.of(
+                new SourceIndex("x_code", false, true, SourceIndex.IndexType.HASH, List.of(
                         part(1, column("code"), OptionalLong.empty(), SourceIndex.Direction.NOT_SORTED))));
         List<SourceForeignKey> foreignKeys = List.of(
                 new SourceForeignKey("fk_customer", new TableCoordinate("shop", "customers"), List.of(
@@ -562,7 +562,7 @@ class SourceMetadataContractTest {
                         case NOT_SORTED -> { }
                     }
                     r.put("is_visible", text(index.visible() ? "YES" : "NO"));
-                    r.put("index_type", text(index.indexType()));
+                    r.put("index_type", text(index.indexType().name()));
                     indexes.add(r);
                 }
             }

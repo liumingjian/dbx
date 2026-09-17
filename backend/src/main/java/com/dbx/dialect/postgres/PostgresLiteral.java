@@ -31,7 +31,8 @@ final class PostgresLiteral {
         };
     }
 
-    private static String text(String value) {
+    /** {@code render(new SqlValue.Text(value))}. */
+    static String text(String value) {
         StringBuilder out = new StringBuilder(value.length() + 3).append("E'");
         for (int i = 0; i < value.length(); ) {
             int codePoint = value.codePointAt(i);

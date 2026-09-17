@@ -53,7 +53,7 @@ final class QueryProjection {
             items.add(columnExpression(approved.source()) + " AS " + MySqlIdentifier.quoted(approved.target().name()));
         }
         return new ProjectionSql("SELECT " + String.join(", ", items) + " FROM "
-                + MySqlIdentifier.quoted(table.database()) + "." + MySqlIdentifier.quoted(table.table()));
+                + MySqlIdentifier.qualified(table));
     }
 
     /**

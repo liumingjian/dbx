@@ -53,11 +53,11 @@ class KeysetCandidatesContractTest {
         for (int i = 0; i < columns.length; i++) {
             parts.add(part(i + 1, columns[i]));
         }
-        return new SourceIndex(name, unique, visible, "BTREE", parts);
+        return new SourceIndex(name, unique, visible, SourceIndex.IndexType.BTREE, parts);
     }
 
     private static SourceIndex expression(String name, String text) {
-        return new SourceIndex(name, true, true, "BTREE", List.of(new SourceIndex.KeyPart(1,
+        return new SourceIndex(name, true, true, SourceIndex.IndexType.BTREE, List.of(new SourceIndex.KeyPart(1,
                 new SourceIndex.Subject.Expression(text), OptionalLong.empty(), SourceIndex.Direction.ASCENDING)));
     }
 

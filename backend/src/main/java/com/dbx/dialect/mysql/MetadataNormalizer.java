@@ -146,9 +146,16 @@ final class MetadataNormalizer {
                 case "NO" -> false;
                 default -> throw new IllegalArgumentException(where + " has IS_VISIBLE " + row.text(Column.IS_VISIBLE));
             };
-            String indexType = row.text(Column.INDEX_TYPE);
+            SourceIndex.IndexType indexType = switch (row.text(Column.INDEX_TYPE)) {
+                case "BTREE" -> SourceIndex.IndexType.BTREE;
+                case "HASH" -> SourceIndex.IndexType.HASH;
+                case "FULLTEXT" -> SourceIndex.IndexType.FULLTEXT;
+                case "SPATIAL" -> SourceIndex.IndexType.SPATIAL;
+                default -> throw new IllegalArgumentException(where + " has an unknown INDEX_TYPE "
+                        + row.text(Column.INDEX_TYPE));
+            };
             IndexFacts index = indexes.computeIfAbsent(name, n -> new IndexFacts(name, unique, visible, indexType));
-            if (index.unique != unique || index.visible != visible || !index.indexType.equals(indexType)) {
+            if (index.unique != unique || index.visible != visible || index.indexType != indexType) {
                 throw new IllegalArgumentException(where + ": its key parts disagree on uniqueness, visibility or type");
             }
 
@@ -235,10 +242,10 @@ final class MetadataNormalizer {
         final String name;
         final boolean unique;
         final boolean visible;
-        final String indexType;
+        final SourceIndex.IndexType indexType;
         final List<SourceIndex.KeyPart> parts = new ArrayList<>();
 
-        IndexFacts(String name, boolean unique, boolean visible, String indexType) {
+        IndexFacts(String name, boolean unique, boolean visible, SourceIndex.IndexType indexType) {
             this.name = name;
             this.unique = unique;
             this.visible = visible;
