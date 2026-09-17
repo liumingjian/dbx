@@ -84,8 +84,9 @@ final class CapabilityPlans {
     }
 
     /**
-     * A zero-row read that fails unless {@code SELECT} is held on every column. {@code *} makes MySQL
-     * check the privilege on each column of the table; {@code LIMIT} keeps the derived table from being
+     * A zero-row read that fails unless {@code SELECT} is held on every visible column. {@code *} makes
+     * MySQL check the privilege on each column it expands to. INVISIBLE columns are not in {@code *}, so a
+     * missing grant on one passes: an open gap on #123, not a proof. {@code LIMIT} keeps the derived table from being
      * merged away, and {@code LIMIT 0} reads no row. The outer {@code COUNT(*)} gives one typed row whatever
      * the table's columns are. Whether a real partial revoke fails it is proven at L2/L3, not here.
      */
