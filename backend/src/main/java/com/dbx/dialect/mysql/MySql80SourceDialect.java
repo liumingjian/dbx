@@ -2,7 +2,9 @@ package com.dbx.dialect.mysql;
 
 import com.dbx.dialect.NotImplementedInSlice;
 import com.dbx.dialect.api.ApprovedColumn;
+import com.dbx.dialect.api.BoundedReadRequirement;
 import com.dbx.dialect.api.ConnectionSemantics;
+import com.dbx.dialect.api.DialectId;
 import com.dbx.dialect.api.KeysetCandidate;
 import com.dbx.dialect.api.KeysetColumn;
 import com.dbx.dialect.api.MappingOptions;
@@ -20,11 +22,25 @@ import java.util.List;
 import java.util.Optional;
 
 /** The MySQL 8.0 source dialect. Slices 5 and 6 implement it; until then every capability fails. */
-public final class MySql80SourceDialect implements SourceDialect {
+public final class MySql80SourceDialect extends SourceDialect {
+
+    /** Stable across releases: a contract snapshot records it (ADR-0008 §Registration). */
+    public static final DialectId ID = new DialectId("mysql-8.0");
+
+    private static final long MIB = 1024L * 1024L;
+
+    /**
+     * ADR-0033 §Settings: fetches sized from 4 MiB, {@code LIMIT} keyset chunks and bulk reads within
+     * 64 MiB. The declaration exists here because a source dialect cannot be built without one; slice 5
+     * owns its content and may reshape it.
+     */
+    private static final BoundedReadRequirement BOUNDED_READ =
+            new BoundedReadRequirement(4 * MIB, 64 * MIB, 64 * MIB);
 
     public static final MySql80SourceDialect INSTANCE = new MySql80SourceDialect();
 
     private MySql80SourceDialect() {
+        super(BOUNDED_READ);
     }
 
     @Override

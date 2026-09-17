@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 import com.dbx.dialect.NotImplementedInSlice;
-import com.dbx.dialect.pair.MySql80ToPostgres15;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -40,10 +39,9 @@ import org.junit.jupiter.api.TestFactory;
  */
 class DialectContractTest {
 
-    private static final DialectCatalog CATALOG = DialectCatalog.compileTime();
-
-    /** Reached directly until slice 2's {@code catalog.select} hands it out. */
-    private static final DatabasePair PAIR = MySql80ToPostgres15.INSTANCE;
+    /** The one certified pair, as {@code catalog.select} hands it out. */
+    private static final DatabasePair PAIR = (DatabasePair) DialectCatalog.compileTime()
+            .select(new ProductVersion("MySQL", "8.0.36"), new ProductVersion("PostgreSQL", "15.4"));
 
     // --- Stubs fail, they do not return empty (ADR-0008 §Ownership) --------------------------------
 
@@ -53,10 +51,6 @@ class DialectContractTest {
      * are null on purpose: a stub has to fail before it looks at them.
      */
     private static final List<Stub> STUBS = List.of(
-            new Stub("catalog.select", 2, () -> CATALOG.select(null, null)),
-            new Stub("catalog.list", 2, CATALOG::list),
-            new Stub("pair.descriptor", 2, PAIR::descriptor),
-            new Stub("pair.descriptorCodec", 2, () -> PAIR.descriptorCodec(null)),
             new Stub("pair.map", 3, () -> PAIR.map(null, null)),
             new Stub("source.metadataPlan", 5, () -> PAIR.source().metadataPlan(null)),
             new Stub("source.normalizeMetadata", 5, () -> PAIR.source().normalizeMetadata(null)),
@@ -81,9 +75,14 @@ class DialectContractTest {
             new Stub("pair.executionRequirements", 9, () -> PAIR.executionRequirements(null)),
             new Stub("pair.validationCapabilities", 9, PAIR::validationCapabilities));
 
-    /** Entry points a landed slice implements, one per line. Empty in slice 1. */
+    /** Entry points a landed slice implements, one per line. */
     private static final Set<String> IMPLEMENTED = Set.of(
-            "pair.mapIdentifier");
+            "catalog.select",
+            "catalog.list",
+            "pair.descriptor",
+            "pair.descriptorCodec",
+            "pair.mapIdentifier",
+            "source.boundedRead");
 
     /** Composition, not capability: they hand out the dialects whose entry points are listed above. */
     private static final Set<String> COMPOSITION = Set.of("pair.source", "pair.target");

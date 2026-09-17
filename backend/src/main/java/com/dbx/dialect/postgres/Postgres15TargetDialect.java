@@ -2,6 +2,7 @@ package com.dbx.dialect.postgres;
 
 import com.dbx.dialect.NotImplementedInSlice;
 import com.dbx.dialect.api.DeferredStructure;
+import com.dbx.dialect.api.DialectId;
 import com.dbx.dialect.api.MaintenanceAction;
 import com.dbx.dialect.api.RequiredPrivilege;
 import com.dbx.dialect.api.ResultRows;
@@ -20,6 +21,9 @@ import java.util.Set;
 
 /** The PostgreSQL 15 target dialect. Slices 7 and 8 implement it; until then every capability fails. */
 public final class Postgres15TargetDialect implements TargetDialect {
+
+    /** Stable across releases: a contract snapshot records it (ADR-0008 §Registration). */
+    public static final DialectId ID = new DialectId("postgresql-15");
 
     public static final Postgres15TargetDialect INSTANCE = new Postgres15TargetDialect();
 

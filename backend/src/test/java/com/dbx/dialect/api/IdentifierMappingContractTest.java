@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.dbx.dialect.pair.MySql80ToPostgres15;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -24,7 +23,8 @@ import org.junit.jupiter.api.Test;
 class IdentifierMappingContractTest {
 
     /** Reached directly until slice 2's {@code catalog.select} hands it out. */
-    private static final DatabasePair PAIR = MySql80ToPostgres15.INSTANCE;
+    private static final DatabasePair PAIR = (DatabasePair) DialectCatalog.compileTime()
+            .select(new ProductVersion("MySQL", "8.0.36"), new ProductVersion("PostgreSQL", "15.4"));
 
     private static final Pattern RENAMED_SHAPE = Pattern.compile("(.+)_([0-9a-f]{12})", Pattern.DOTALL);
 
