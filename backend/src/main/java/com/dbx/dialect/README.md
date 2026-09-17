@@ -11,7 +11,7 @@ Pure and at the bottom of the graph: depends on no other module, no `JdbcTemplat
 - `SourceDialect` (its only constructor demands a `BoundedReadRequirement`, ADR-0033), `TargetDialect` → the plan, normalisation and settings capabilities of the sub-spec §Interface
 - `DescriptorCodec` → reads and writes only its own `DescriptorVersion`; an unknown version is `Unsupported`
 - `SqlPlan` → immutable, closed `OperationKind`, bound `SqlValue`s, `ResultSchema`, `TimeoutClass`, `RequiredPrivilege`s, `EvidencePolicy`, `fingerprint()`
-- `TargetIdentifier.quoted()` → the one place an identifier becomes SQL text (always double-quoted)
+- `TargetIdentifier.quoted()` → the one place an identifier becomes SQL text (always double-quoted); its source counterpart is `mysql.MySqlIdentifier.quoted` (backticks, internal to `dialect`)
 - `ConnectionSemantics`, `SinkSettings` (the single `V1`) → ordered `ConnectorProperty` records, never a map; `BoundedReadRequirement` → M-independent constants only (`connector.deriveBox` applies M)
 - `ProofOutcome` → `PROVEN | INCONCLUSIVE | REJECTED`
 
@@ -27,7 +27,7 @@ An entry point its slice has not landed throws `NotImplementedInSlice` naming it
 
 ## Contract test
 
-`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting); `NumericMappingContractTest`, `CharacterBinarySpecialMappingContractTest`, `TemporalMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`; `ConnectionSemanticsContractTest`, `BoundedReadContractTest`, `SinkSettingsContractTest`. Later slices add `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
+`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting); `NumericMappingContractTest`, `CharacterBinarySpecialMappingContractTest`, `TemporalMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`; `ConnectionSemanticsContractTest`, `BoundedReadContractTest`, `SinkSettingsContractTest`; `SourceCapabilityPlansContractTest` (read-only capability plans, MySQL quoting). Later slices add `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
 
 ## Read
 
