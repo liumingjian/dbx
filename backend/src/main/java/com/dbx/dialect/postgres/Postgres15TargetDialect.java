@@ -17,6 +17,7 @@ import com.dbx.dialect.api.TargetTableCoordinate;
 import com.dbx.dialect.api.TargetTableFacts;
 import com.dbx.dialect.api.ValidationItem;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /** The PostgreSQL 15 target dialect. Slices 7 and 8 implement it; a capability not yet landed fails. */
@@ -32,7 +33,7 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public SqlPlan ddlPlan(TargetTable table) {
-        throw new NotImplementedInSlice("target.ddlPlan", 7);
+        return PostgresDdl.plan(Objects.requireNonNull(table, "table is required"));
     }
 
     @Override
