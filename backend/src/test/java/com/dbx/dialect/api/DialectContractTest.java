@@ -53,7 +53,6 @@ class DialectContractTest {
     private static final List<Stub> STUBS = List.of(
             new Stub("source.metadataPlan", 5, () -> PAIR.source().metadataPlan(null)),
             new Stub("source.normalizeMetadata", 5, () -> PAIR.source().normalizeMetadata(null)),
-            new Stub("source.capabilityPlans", 5, () -> PAIR.source().capabilityPlans(null)),
             new Stub("source.keysetCandidates", 5, () -> PAIR.source().keysetCandidates(null)),
             new Stub("source.queryProjection", 5, () -> PAIR.source().queryProjection(null, null)),
             new Stub("source.connectionSemantics", 5, () -> PAIR.source().connectionSemantics(null)),
@@ -82,7 +81,8 @@ class DialectContractTest {
             "pair.descriptorCodec",
             "pair.map",
             "pair.mapIdentifier",
-            "source.boundedRead");
+            "source.boundedRead",
+            "source.capabilityPlans");
 
     /** Composition, not capability: they hand out the dialects whose entry points are listed above. */
     private static final Set<String> COMPOSITION = Set.of("pair.source", "pair.target");

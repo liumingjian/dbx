@@ -55,7 +55,7 @@ public final class MySql80SourceDialect extends SourceDialect {
 
     @Override
     public List<SqlPlan> capabilityPlans(MetadataScope scope) {
-        throw new NotImplementedInSlice("source.capabilityPlans", 5);
+        return CapabilityPlans.of(scope);
     }
 
     @Override
