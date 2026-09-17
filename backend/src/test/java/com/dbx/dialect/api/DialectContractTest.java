@@ -52,7 +52,6 @@ class DialectContractTest {
      */
     private static final List<Stub> STUBS = List.of(
             new Stub("source.keysetCandidates", 5, () -> PAIR.source().keysetCandidates(null)),
-            new Stub("source.queryProjection", 5, () -> PAIR.source().queryProjection(null, null)),
             new Stub("source.preflightScanPlan", 6, () -> PAIR.source().preflightScanPlan(null, null)),
             new Stub("source.baselinePlan", 6, () -> PAIR.source().baselinePlan(null, null)),
             new Stub("source.validationFactPlans", 6, () -> PAIR.source().validationFactPlans(null)),
@@ -81,6 +80,7 @@ class DialectContractTest {
             "source.connectionSemantics",
             "source.metadataPlan",
             "source.normalizeMetadata",
+            "source.queryProjection",
             "target.ddlPlan",
             "target.sinkSettings");
 
