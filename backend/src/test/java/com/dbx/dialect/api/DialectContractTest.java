@@ -56,14 +56,12 @@ class DialectContractTest {
             new Stub("source.capabilityPlans", 5, () -> PAIR.source().capabilityPlans(null)),
             new Stub("source.keysetCandidates", 5, () -> PAIR.source().keysetCandidates(null)),
             new Stub("source.queryProjection", 5, () -> PAIR.source().queryProjection(null, null)),
-            new Stub("source.connectionSemantics", 5, () -> PAIR.source().connectionSemantics(null)),
             new Stub("source.preflightScanPlan", 6, () -> PAIR.source().preflightScanPlan(null, null)),
             new Stub("source.baselinePlan", 6, () -> PAIR.source().baselinePlan(null, null)),
             new Stub("source.validationFactPlans", 6, () -> PAIR.source().validationFactPlans(null)),
             new Stub("source.samplingPlan", 6, () -> PAIR.source().samplingPlan(null, 1)),
             new Stub("target.ddlPlan", 7, () -> PAIR.target().ddlPlan(null)),
             new Stub("target.supplementalStatements", 7, () -> PAIR.target().supplementalStatements(null)),
-            new Stub("target.sinkSettings", 7, () -> PAIR.target().sinkSettings()),
             new Stub("target.catalogReadPlan", 8, () -> PAIR.target().catalogReadPlan(null)),
             new Stub("target.capabilityProbePlans", 8, () -> PAIR.target().capabilityProbePlans(null, null)),
             new Stub("target.maintenancePlans", 8, () -> PAIR.target().maintenancePlans(null)),
@@ -82,7 +80,9 @@ class DialectContractTest {
             "pair.descriptorCodec",
             "pair.map",
             "pair.mapIdentifier",
-            "source.boundedRead");
+            "source.boundedRead",
+            "source.connectionSemantics",
+            "target.sinkSettings");
 
     /** Composition, not capability: they hand out the dialects whose entry points are listed above. */
     private static final Set<String> COMPOSITION = Set.of("pair.source", "pair.target");
