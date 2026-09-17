@@ -12,6 +12,16 @@ on:
   push:
     branches: [main]
   pull_request:
+  # L3's runner has to be able to stand up the five pinned services of the #9 test bed. Until the
+  # first e2e test lands, nothing exercises that, and an unexercised claim about a runner is the
+  # kind that fails the day it first matters. This trigger starts the bed on demand so the claim
+  # can be proved now and re-proved whenever the bed or the runner image changes.
+  workflow_dispatch:
+    inputs:
+      start_test_bed:
+        description: "Start the #9 test bed even if L3 has no tests yet (proves the runner can host it)"
+        type: boolean
+        default: false
 
 # A second push to a branch makes the first run's verdict worthless, and L3 pulls a 6 GB test bed.
 # `main` is exempt: its runs are the post-merge gate and each one judges a different commit.
@@ -81,42 +91,81 @@ jobs:
   # goes red on `main` after the merge. That is the ADR's design, not a gap.
   e2e:
     name: L3 e2eTest
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The scope decision below diffs the pushed range; a shallow checkout has neither end.
+          fetch-depth: 0
 
-      - name: Decide whether the rung has content
-        id: rung
-        # An empty rung is a pass, not an error — `backend/gradle/rungs.gradle.kts` makes the same
-        # ruling twice (`failOnNoDiscoveredTests = false`, and a Docker probe that only bites once
-        # the source set has classes). Standing up a 6 GB test bed to run zero tests would be the
-        # one place CI disagreed with the build. The check is for sources, not for a list of
-        # modules, so the first e2e test to land turns the bed on by existing.
+      - name: Decide what this run does
+        id: plan
+        working-directory: .
+        # Two questions, answered in one place so the steps below read as a plan rather than as a
+        # pile of conditions.
+        #
+        # `rung` — does the rung run at all? ADR-0022 scopes L3 to changes that touch the backend
+        # (`dialect` is a package inside it) or the bed itself. A docs-only merge has nothing for
+        # L3 to say.
+        #
+        # `bed` — does the #9 test bed come up? Only if the rung has tests to run against it.
+        # `rungs.gradle.kts` already rules twice that an empty rung is a pass
+        # (`failOnNoDiscoveredTests = false`, and a Docker probe that only bites once the source
+        # set has classes); standing up 6 GB of images to run zero tests would be the one place CI
+        # disagreed with the build. The check is for sources rather than a hand-maintained list, so
+        # the first e2e test to land turns the bed on by existing.
         run: |
           set -o pipefail
-          if find src/e2eTest -name '*.java' -print -quit 2>/dev/null | grep -q .; then
-            echo "has_tests=true" >> "$GITHUB_OUTPUT"
+
+          if find backend/src/e2eTest -name '*.java' -print -quit 2>/dev/null | grep -q .; then
+            has_tests=true
           else
-            echo "has_tests=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::L3 (e2eTest) has no tests yet; the #9 test bed is not started. The bed comes up automatically once backend/src/e2eTest holds its first test."
+            has_tests=false
           fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            rung=true
+            # The whole point of the manual trigger: prove the runner can host the bed before any
+            # test depends on it.
+            if [ "${{ inputs.start_test_bed }}" = "true" ]; then bed=true; else bed="$has_tests"; fi
+          else
+            # `git diff` rather than `on.push.paths`, which would gate every job in this file
+            # including L1 and L2. A force-push or a first push reports an all-zero base, and the
+            # honest answer to "what changed" is then "assume everything".
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              touched=true
+            elif git diff --name-only "$base" "${{ github.sha }}" \
+                 | grep -qE '^(backend|local-env)/'; then
+              touched=true
+            else
+              touched=false
+            fi
+            rung="$touched"
+            if [ "$touched" = "true" ] && [ "$has_tests" = "true" ]; then bed=true; else bed=false; fi
+          fi
+
+          echo "rung=$rung" >> "$GITHUB_OUTPUT"
+          echo "bed=$bed" >> "$GITHUB_OUTPUT"
+          echo "::notice::L3 plan — run rung: $rung; start #9 test bed: $bed (tests present: $has_tests)."
 
       # The bed is ~6.3 GB of images plus ~2.2 GB of volumes (#9 §Resolution) against a runner that
       # ships with roughly 14 GB free. Reclaiming the preinstalled toolchains this repository never
       # uses buys about 20 GB, which is the difference between a rung that fits and one that dies
       # halfway through a pull for reasons that look nothing like the real cause.
       - name: Reclaim runner disk
-        if: steps.rung.outputs.has_tests == 'true'
+        if: steps.plan.outputs.bed == 'true'
         working-directory: .
         run: |
           set -o pipefail
-          df -h / | tail -1
+          echo "before:"; df -h / | tail -1
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
-          df -h / | tail -1
+          echo "after:"; df -h / | tail -1
 
       - name: Start the #9 test bed
-        if: steps.rung.outputs.has_tests == 'true'
+        if: steps.plan.outputs.bed == 'true'
         working-directory: local-env
         # MySQL's seed builds a 25 MiB high-entropy blob server-side, which is why the compose file
         # gives it a 300s start_period; `--wait` honours the healthchecks rather than racing them.
@@ -127,15 +176,33 @@ jobs:
           docker compose up -d --wait
           docker compose ps
 
+      # The measurement #9 recorded on a mac, taken again on the runner that now has to host it.
+      - name: Record what the bed costs here
+        if: steps.plan.outputs.bed == 'true'
+        working-directory: .
+        run: |
+          set -o pipefail
+          echo "--- disk ---"; df -h / | tail -1
+          echo "--- images ---"; docker system df
+          echo "--- memory ---"; free -h
+
       - uses: actions/setup-java@v4
+        if: steps.plan.outputs.rung == 'true'
         with:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.plan.outputs.rung == 'true'
       - run: ./gradlew e2eTest
+        if: steps.plan.outputs.rung == 'true'
 
       # Reading `docker compose ps` alone after a failure says which service died but never why.
       - name: Test bed logs on failure
-        if: failure() && steps.rung.outputs.has_tests == 'true'
+        if: failure() && steps.plan.outputs.bed == 'true'
         working-directory: local-env
         run: docker compose logs --tail 200
+
+      - name: Stop the #9 test bed
+        if: always() && steps.plan.outputs.bed == 'true'
+        working-directory: local-env
+        run: docker compose down -v
