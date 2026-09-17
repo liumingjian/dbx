@@ -22,7 +22,7 @@ public abstract class SourceDialect {
                 "ADR-0033: a source dialect without a bounded-read declaration cannot be registered");
     }
 
-    /** How this dialect's reads stay bounded in bytes (ADR-0033); its content is slice 5's. */
+    /** How this dialect's reads stay bounded in bytes (ADR-0033; ADR-0037), without M. */
     public final BoundedReadRequirement boundedRead() {
         return boundedRead;
     }

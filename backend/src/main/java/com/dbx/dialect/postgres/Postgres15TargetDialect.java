@@ -19,7 +19,7 @@ import com.dbx.dialect.api.ValidationItem;
 import java.util.List;
 import java.util.Set;
 
-/** The PostgreSQL 15 target dialect. Slices 7 and 8 implement it; until then every capability fails. */
+/** The PostgreSQL 15 target dialect. Slices 7 and 8 implement it; a capability not yet landed fails. */
 public final class Postgres15TargetDialect implements TargetDialect {
 
     /** Stable across releases: a contract snapshot records it (ADR-0008 §Registration). */
@@ -77,6 +77,6 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public SinkSettings sinkSettings() {
-        throw new NotImplementedInSlice("target.sinkSettings", 7);
+        return SinkSettings.V1;
     }
 }
