@@ -1,0 +1,49 @@
+# Every value MySQL 8.0 reports in information_schema.COLUMNS.DATA_TYPE, written from the MySQL 8.0
+# Reference Manual (chapter 13, Data Types), never derived from the implementation. Aliases are
+# absent because information_schema reports the canonical name: BOOL/BOOLEAN -> tinyint,
+# INTEGER -> int, NUMERIC/DEC/FIXED -> decimal, REAL/DOUBLE PRECISION -> double, SERIAL -> bigint,
+# NCHAR -> char, LONG VARCHAR -> mediumtext, GEOMETRYCOLLECTION -> geomcollection.
+# One type per line, grouped by TP §6 family.
+
+# numeric (TP §6.2)
+tinyint
+smallint
+mediumint
+int
+bigint
+decimal
+float
+double
+bit
+
+# character, binary and special (TP §6.3)
+char
+varchar
+binary
+varbinary
+tinytext
+text
+mediumtext
+longtext
+tinyblob
+blob
+mediumblob
+longblob
+enum
+set
+json
+geometry
+point
+linestring
+polygon
+multipoint
+multilinestring
+multipolygon
+geomcollection
+
+# temporal (TP §6.4)
+date
+datetime
+timestamp
+time
+year

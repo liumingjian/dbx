@@ -23,7 +23,8 @@ public final class GoldenSets {
     public static final String GOLDEN_ROOT = "backend/src/test/resources/golden";
 
     private static final Map<String, GoldenSource> REGISTRY = register(
-            new HarnessGoldenSource());
+            new HarnessGoldenSource(),
+            new com.dbx.dialect.api.TypeMappingMatrixGoldenSource());
 
     private GoldenSets() {
     }

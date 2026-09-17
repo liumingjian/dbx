@@ -51,7 +51,6 @@ class DialectContractTest {
      * are null on purpose: a stub has to fail before it looks at them.
      */
     private static final List<Stub> STUBS = List.of(
-            new Stub("pair.map", 3, () -> PAIR.map(null, null)),
             new Stub("source.metadataPlan", 5, () -> PAIR.source().metadataPlan(null)),
             new Stub("source.normalizeMetadata", 5, () -> PAIR.source().normalizeMetadata(null)),
             new Stub("source.capabilityPlans", 5, () -> PAIR.source().capabilityPlans(null)),
@@ -81,6 +80,7 @@ class DialectContractTest {
             "catalog.list",
             "pair.descriptor",
             "pair.descriptorCodec",
+            "pair.map",
             "pair.mapIdentifier",
             "source.boundedRead");
 
