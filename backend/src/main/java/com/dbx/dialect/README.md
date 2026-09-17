@@ -6,9 +6,10 @@ Pure and at the bottom of the graph: depends on no other module, no `JdbcTemplat
 
 ## Entry points (`com.dbx.dialect.api`)
 
-- `DialectCatalog.compileTime()` → `select` (`DatabasePair | Unsupported`), `list`
+- `DialectCatalog.compileTime()` → `select` (`DatabasePair | Unsupported`: exact product and release series, no fallback, endpoints never compose a pair), `list`
 - `DatabasePair` → `map` (`Supported | Unsupported`), `mapIdentifier` (`Exact | Renamed | Unsupported`), `descriptorCodec`, `executionRequirements`, `validationCapabilities`, `source()`, `target()`
-- `SourceDialect`, `TargetDialect` → the plan, normalisation and settings capabilities of the sub-spec §Interface
+- `SourceDialect` (its only constructor demands a `BoundedReadRequirement`, ADR-0033), `TargetDialect` → the plan, normalisation and settings capabilities of the sub-spec §Interface
+- `DescriptorCodec` → reads and writes only its own `DescriptorVersion`; an unknown version is `Unsupported`
 - `SqlPlan` → immutable, closed `OperationKind`, bound `SqlValue`s, `ResultSchema`, `TimeoutClass`, `RequiredPrivilege`s, `EvidencePolicy`, `fingerprint()`
 - `ProofOutcome` → `PROVEN | INCONCLUSIVE | REJECTED`
 
@@ -17,13 +18,13 @@ An entry point its slice has not landed throws `NotImplementedInSlice` naming it
 ## Layout
 
 - `api/` — every public type, one file per type
-- `catalog/` — the compile-time catalog (slice 2)
-- `pair/` — `MySql80ToPostgres15` composes one class per capability: `PairRegistration` (2), `TypeMapper` (3), `IdentifierMapper` (4), `PairRequirements` (9)
+- `catalog/` — the compile-time catalog: endpoint release series and certified pairs, registered separately
+- `pair/` — `MySql80ToPostgres15` composes one class per capability: `PairRegistration` + `DescriptorCodecV1` (2), `TypeMapper` (3), `IdentifierMapper` (4), `PairRequirements` (9)
 - `mysql/`, `postgres/` — the two endpoint dialects (slices 5–6, 7–8)
 
 ## Contract test
 
-`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity). Later slices add `DialectCatalogContractTest`, `IdentifierMappingContractTest`, `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
+`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition). Later slices add `IdentifierMappingContractTest`, `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
 
 ## Read
 
