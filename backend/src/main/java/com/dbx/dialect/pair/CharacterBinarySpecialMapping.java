@@ -117,15 +117,16 @@ final class CharacterBinarySpecialMapping {
 
     /**
      * {@code ENUM} → {@code text} + {@code CHECK}. MySQL can hold a value outside the declared set (the
-     * empty sentinel of an illegal insert), so the membership preflight is required, not advisory.
+     * empty sentinel of an illegal insert), so the membership preflight is required, not advisory. An
+     * {@code ENUM} of the binary character set is {@code bytea}, where a text {@code CHECK} cannot apply:
+     * like {@code SET}, it states the missing {@code CHECK} and keeps the exact membership preflight.
      */
     private static MappingDecision enumeration(SourceColumn column) {
         List<RequiredPreflight> membership = List.of(RequiredPreflight.ENUM_VALUE_DECLARED);
-        List<ContractEffect> check = List.of(ContractEffect.ENUM_CHECK_CONSTRAINT);
         return binaryCharacterSet(column)
                 .<MappingDecision>map(binary -> binary
-                        ? binaryCharacter(membership, check, List.of())
-                        : text(membership, check, List.of()))
+                        ? binaryCharacter(membership, List.of(), List.of(MappingNotice.ENUM_WITHOUT_CHECK_CONSTRAINT))
+                        : text(membership, List.of(ContractEffect.ENUM_CHECK_CONSTRAINT), List.of()))
                 .orElseGet(() -> inconsistent(column));
     }
 

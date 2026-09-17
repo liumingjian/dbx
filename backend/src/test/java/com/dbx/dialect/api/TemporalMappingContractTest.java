@@ -146,6 +146,34 @@ class TemporalMappingContractTest {
                     "TP §6.1: the switch is a decision to lose a value, so " + label + " records it");
             assertFalse(decision.requiredPreflights().contains(RequiredPreflight.NO_ZERO_DATE),
                     "TP §6.6 check 6: an approved conversion no longer demands the absence of zero dates");
+            assertTrue(decision.requiredPreflights().contains(RequiredPreflight.ZERO_DATE_ROWS_COUNTED),
+                    "TP §7.3: the relaxation depends on what exact preflight observed, so " + label
+                            + " still needs an exact zero-date count under the switch");
+        }
+    }
+
+    @Test
+    void notNullIsRelaxedOnlyUnderTheSwitchAndOnlyWhenPreflightObservesZeroDates() {
+        for (SourceColumns zeroDateCapable : zeroDateCapable()) {
+            SourceColumns notNull = zeroDateCapable.notNull();
+            String label = notNull.build().columnType() + " NOT NULL";
+            assertTrue(supported(notNull, ZERO_DATE_ON).contractEffects()
+                            .contains(ContractEffect.NOT_NULL_RELAXED_IF_ZERO_DATES_OBSERVED),
+                    "TP §7.3, ADR-0011 §DDL: a converted zero date is NULL, so under the switch " + label
+                            + " must record the per-column NOT NULL relaxation conditioned on exact preflight");
+            assertFalse(supported(notNull, OFF).contractEffects()
+                            .contains(ContractEffect.NOT_NULL_RELAXED_IF_ZERO_DATES_OBSERVED),
+                    "TP §7.3: with the switch off nothing becomes NULL, so " + label + " keeps NOT NULL");
+        }
+        for (SourceColumns nullable : zeroDateCapable()) {
+            assertFalse(supported(nullable, ZERO_DATE_ON).contractEffects()
+                            .contains(ContractEffect.NOT_NULL_RELAXED_IF_ZERO_DATES_OBSERVED),
+                    "a nullable " + nullable.build().columnType() + " has no NOT NULL to relax");
+        }
+        for (SourceColumns untouched : List.of(fractional("time", 0).notNull(), column("year", "year").notNull())) {
+            assertFalse(supported(untouched, ZERO_DATE_ON).contractEffects()
+                            .contains(ContractEffect.NOT_NULL_RELAXED_IF_ZERO_DATES_OBSERVED),
+                    "TP §6.4: TIME and YEAR have no zero date to convert");
         }
     }
 

@@ -218,10 +218,10 @@ connect: INT32
 jdbc_binder: INT
 value_semantics: EXACT
 required_preflights: []
-contract_effects: []
+contract_effects: [IDENTITY_GENERATED_BY_DEFAULT]
 alternatives: []
 notices: []
-fingerprint: 6a6a81d3c9514598fa0c4b312f766079734ca48ff34ae9e795e39448a87ff8b5
+fingerprint: 0620923b15179b908d0562d2afe5afaa529d6c0772a56fa5e553d4d38c5fad59
 
 ## INT UNSIGNED
 input: data_type=int column_type=int unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=10 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
@@ -307,11 +307,33 @@ extraction_intent: AS_DECLARED
 connect: INT64
 jdbc_binder: LONG
 value_semantics: EXACT
-required_preflights: [UNSIGNED_BIGINT_MAX_WITHIN_SIGNED_RANGE]
-contract_effects: []
+required_preflights: [UNSIGNED_BIGINT_MAX_WITHIN_SIGNED_RANGE, AUTO_INCREMENT_NEXT_VALUE_WITHIN_SIGNED_RANGE]
+contract_effects: [OWNED_SEQUENCE_FOR_IDENTITY]
 alternatives: []
 notices: []
-fingerprint: 2c9af66700434a7a6298ce5d044121b493cccc45a2b5b9e5bf0b09c98cd6031c
+fingerprint: a19a3c00c05d81c568f7e27e63e186ab9ee6f30c0575817481aa2749656adff3
+
+## BIGINT AUTO_INCREMENT
+input: data_type=bigint column_type=bigint unsigned=false char_max_length=- char_octet_length=- numeric_precision=19 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NOT_NULL default=- extra=auto_increment ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BIGINT
+extraction_intent: AS_DECLARED
+connect: INT64
+jdbc_binder: LONG
+value_semantics: EXACT
+required_preflights: []
+contract_effects: [IDENTITY_GENERATED_BY_DEFAULT]
+alternatives: []
+notices: []
+fingerprint: 1d8dfaff27cd0d064a8fea1bf1df8a7c898304d310a49b04541a5c9a7f3f274c
+
+## TINYINT(1) AUTO_INCREMENT, Boolean switch on
+input: data_type=tinyint column_type=tinyint(1) unsigned=false char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NOT_NULL default=- extra=auto_increment ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=false
+result: UNSUPPORTED
+reason: AUTO_INCREMENT_TARGET_NOT_INTEGER
+fingerprint: 088768bd90d7caaf6722f03572c3e9a37b78b1ba340f2837b76908f0690ddcd8
 
 ## FLOAT
 input: data_type=float column_type=float unsigned=false char_max_length=- char_octet_length=- numeric_precision=12 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
@@ -327,6 +349,13 @@ contract_effects: []
 alternatives: []
 notices: []
 fingerprint: 3500eb03fb14809b6738fe5e37115397eba80bbfc58539503210d677f1411af4
+
+## DOUBLE AUTO_INCREMENT
+input: data_type=double column_type=double unsigned=false char_max_length=- char_octet_length=- numeric_precision=22 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NOT_NULL default=- extra=auto_increment ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: AUTO_INCREMENT_TARGET_NOT_INTEGER
+fingerprint: 46c1edc692618aeda11f585de67cd07ffdaa9c9a2ac9dd096eebd79e0eafdfbf
 
 ## FLOAT UNSIGNED
 input: data_type=float column_type=float unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=12 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1

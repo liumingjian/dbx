@@ -17,6 +17,12 @@ public enum MappingUnsupportedReason implements UnsupportedReason {
     // numeric (TP §6.2)
     /** {@code BIT(n >= 8)}: values can truncate or overflow before the Sink sees them. */
     BIT_WIDTH_AT_LEAST_8,
+    /**
+     * {@code AUTO_INCREMENT} whose target is not an integer type ({@code FLOAT}/{@code DOUBLE}, or
+     * {@code TINYINT(1)} under the Boolean switch): TP §7.3 defines identity only for integer targets and
+     * {@code numeric(20,0)}.
+     */
+    AUTO_INCREMENT_TARGET_NOT_INTEGER,
 
     // character, binary and special (TP §6.3)
     /** {@code GEOMETRY} and its subtypes are outside the v1 whitelist; pruning the column is the only way on. */

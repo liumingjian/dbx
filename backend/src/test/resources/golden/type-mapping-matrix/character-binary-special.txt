@@ -358,10 +358,10 @@ connect: BYTES
 jdbc_binder: BYTES
 value_semantics: EXACT_BYTES
 required_preflights: [ENUM_VALUE_DECLARED]
-contract_effects: [ENUM_CHECK_CONSTRAINT]
+contract_effects: []
 alternatives: []
-notices: []
-fingerprint: ac0e50afda75760f855cd33ddbb7a91ea8a788838949d95271cde305fa9e6c74
+notices: [ENUM_WITHOUT_CHECK_CONSTRAINT]
+fingerprint: aaa73798be397376446ae5f41fd240f5caa19d9d41d92d8fd75f8c1260de5dfd
 
 ## ENUM without members
 input: data_type=enum column_type=enum unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1

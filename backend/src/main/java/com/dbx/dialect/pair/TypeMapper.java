@@ -25,12 +25,19 @@ final class TypeMapper {
                 .orElseGet(() -> new Unsupported(MappingUnsupportedReason.NOT_WHITELISTED, column));
     }
 
+    /**
+     * MySQL accepts {@code AUTO_INCREMENT} only on integer and floating-point columns, so on another
+     * family it is a contradiction; {@link NumericMapping} decides what it means for its own types.
+     */
     private static MappingDecision family(MySqlDataType type, SourceColumn column, MappingOptions options) {
         return switch (type) {
             case NumericType numeric -> NumericMapping.map(numeric, column, options);
-            case CharacterBinarySpecialType characterBinarySpecial ->
-                    CharacterBinarySpecialMapping.map(characterBinarySpecial, column, options);
-            case TemporalType temporal -> TemporalMapping.map(temporal, column, options);
+            case CharacterBinarySpecialType characterBinarySpecial -> SourceFacts.autoIncrement(column)
+                    ? SourceFacts.inconsistent(column)
+                    : CharacterBinarySpecialMapping.map(characterBinarySpecial, column, options);
+            case TemporalType temporal -> SourceFacts.autoIncrement(column)
+                    ? SourceFacts.inconsistent(column)
+                    : TemporalMapping.map(temporal, column, options);
         };
     }
 }

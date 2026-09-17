@@ -11,6 +11,11 @@ public enum RequiredPreflight {
     BOOLEAN_VALUES_ZERO_OR_ONE,
     /** TP §6.6 check 3: {@code MAX(column) <= 2^63-1}, because the Source cannot read larger values. */
     UNSIGNED_BIGINT_MAX_WITHIN_SIGNED_RANGE,
+    /**
+     * TP §6.6 check 7, TP §7.3: an {@code AUTO_INCREMENT BIGINT UNSIGNED}'s next value is at most
+     * {@code 2^63-1}, or the owned {@code bigint} sequence could not continue it.
+     */
+    AUTO_INCREMENT_NEXT_VALUE_WITHIN_SIGNED_RANGE,
 
     // character, binary and special (TP §6.3)
     /**
@@ -28,5 +33,10 @@ public enum RequiredPreflight {
     /** TP §6.6 check 4: every {@code TIME} value lies in {@code [00:00:00, 24:00:00)}. */
     TIME_WITHIN_DAY,
     /** TP §6.6 check 6: no zero date, because the operator has not approved converting it to {@code NULL}. */
-    NO_ZERO_DATE
+    NO_ZERO_DATE,
+    /**
+     * TP §6.6 check 6 under the approved zero-date switch: count the zero dates exactly. An observation, never a
+     * blocker; it decides {@link ContractEffect#NOT_NULL_RELAXED_IF_ZERO_DATES_OBSERVED} (TP §7.3).
+     */
+    ZERO_DATE_ROWS_COUNTED
 }

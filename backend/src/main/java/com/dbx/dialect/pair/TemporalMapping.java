@@ -11,6 +11,7 @@ import com.dbx.dialect.api.JdbcBinder;
 import com.dbx.dialect.api.MappingDecision;
 import com.dbx.dialect.api.MappingNotice;
 import com.dbx.dialect.api.MappingOptions;
+import com.dbx.dialect.api.Nullability;
 import com.dbx.dialect.api.RequiredPreflight;
 import com.dbx.dialect.api.SourceColumn;
 import com.dbx.dialect.api.Supported;
@@ -30,7 +31,8 @@ import java.util.regex.Pattern;
  * TP §6.4: the temporal rows, where v1's one deliberate precision loss lives. Connect logical time is
  * milliseconds, so the target records {@code min(n,3)}, never a misleading {@code 6}, and the lost
  * fraction is a stated notice. Zero dates become {@code NULL} only under the operator's switch; with
- * it off they are an exact preflight obligation (TP §6.6 check 6), never a silent conversion.
+ * it off they are an exact preflight obligation (TP §6.6 check 6), never a silent conversion; with it on
+ * they are counted exactly and decide a {@code NOT NULL} column's relaxation (TP §7.3).
  */
 final class TemporalMapping {
 
@@ -52,7 +54,7 @@ final class TemporalMapping {
         }
         String columnType = column.columnType().toLowerCase(Locale.ROOT);
         return switch (type) {
-            case DATE -> columnType.equals("date") && noFraction(column) ? date(options) : inconsistent(column);
+            case DATE -> columnType.equals("date") && noFraction(column) ? date(column, options) : inconsistent(column);
             case YEAR -> YEAR_TYPE.matcher(columnType).matches() && noFraction(column) ? year() : inconsistent(column);
             case DATETIME -> fractional(type, column, columnType, options, sourceFraction -> {
                 Decision datetime = new Decision(new TargetType(TargetTypeName.TIMESTAMP, kept(sourceFraction)),
@@ -76,10 +78,10 @@ final class TemporalMapping {
     }
 
     /** {@code DATE} → {@code date}; the zero-date policy applies. */
-    private static Supported date(MappingOptions options) {
+    private static Supported date(SourceColumn column, MappingOptions options) {
         Decision date = new Decision(new TargetType(TargetTypeName.DATE, List.of()), LogicalType.DATE,
                 JdbcBinder.DATE, ValueSemantics.CALENDAR_DATE);
-        date.zeroDatePolicy(options);
+        date.zeroDatePolicy(column, options);
         return date.build();
     }
 
@@ -106,7 +108,7 @@ final class TemporalMapping {
             decision.notices.add(MappingNotice.MICROSECONDS_TRUNCATED_TO_MILLISECONDS);
         }
         if (type != TemporalType.TIME) {
-            decision.zeroDatePolicy(options);
+            decision.zeroDatePolicy(column, options);
         }
         return decision.build();
     }
@@ -134,12 +136,18 @@ final class TemporalMapping {
         }
 
         /**
-         * The switch is the operator's decision to lose a value, so the decision records it. Off, a zero
-         * date must be proven absent and the Source rejects one ({@code zeroDateTimeBehavior=EXCEPTION}).
+         * The switch is the operator's decision to lose a value, so the decision records it. On, the zero
+         * dates are still counted exactly, and a {@code NOT NULL} column is relaxed only if that count finds
+         * one (TP §7.3). Off, a zero date must be proven absent and the Source rejects one
+         * ({@code zeroDateTimeBehavior=EXCEPTION}).
          */
-        void zeroDatePolicy(MappingOptions options) {
+        void zeroDatePolicy(SourceColumn column, MappingOptions options) {
             if (options.zeroDateAsNull()) {
                 intent = ExtractionIntent.ZERO_DATE_AS_NULL;
+                preflights.add(RequiredPreflight.ZERO_DATE_ROWS_COUNTED);
+                if (column.nullability() == Nullability.NOT_NULL) {
+                    effects.add(ContractEffect.NOT_NULL_RELAXED_IF_ZERO_DATES_OBSERVED);
+                }
                 notices.add(MappingNotice.ZERO_DATE_CONVERTED_TO_NULL);
             } else {
                 preflights.add(RequiredPreflight.NO_ZERO_DATE);

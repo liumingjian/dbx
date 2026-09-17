@@ -22,11 +22,11 @@ extraction_intent: ZERO_DATE_AS_NULL
 connect: INT32/DATE
 jdbc_binder: DATE
 value_semantics: CALENDAR_DATE
-required_preflights: []
+required_preflights: [ZERO_DATE_ROWS_COUNTED]
 contract_effects: []
 alternatives: []
 notices: [ZERO_DATE_CONVERTED_TO_NULL]
-fingerprint: 4bd20bcc184a197d179a448d4544180b7355ab829df57832a8f928347ceb4154
+fingerprint: deb5351f0b47ec885374db198c10e660396cbe94d9a2cd9e842d97c905dfd7c7
 
 ## DATE NOT NULL, zero-date switch on
 input: data_type=date column_type=date unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NOT_NULL default=- extra=- ordinal=1
@@ -37,11 +37,11 @@ extraction_intent: ZERO_DATE_AS_NULL
 connect: INT32/DATE
 jdbc_binder: DATE
 value_semantics: CALENDAR_DATE
-required_preflights: []
-contract_effects: []
+required_preflights: [ZERO_DATE_ROWS_COUNTED]
+contract_effects: [NOT_NULL_RELAXED_IF_ZERO_DATES_OBSERVED]
 alternatives: []
 notices: [ZERO_DATE_CONVERTED_TO_NULL]
-fingerprint: 4bd20bcc184a197d179a448d4544180b7355ab829df57832a8f928347ceb4154
+fingerprint: e00e28f7e085951c979306a188a0815ca2e356709889465902baa403dbb0be73
 
 ## DATETIME
 input: data_type=datetime column_type=datetime unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=0 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
@@ -112,11 +112,11 @@ extraction_intent: ZERO_DATE_AS_NULL
 connect: INT64/TIMESTAMP
 jdbc_binder: TIMESTAMP
 value_semantics: WALL_CLOCK_MILLISECONDS
-required_preflights: []
+required_preflights: [ZERO_DATE_ROWS_COUNTED]
 contract_effects: [ORIGINAL_SOURCE_TYPE_DATETIME]
 alternatives: []
 notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS, ZERO_DATE_CONVERTED_TO_NULL]
-fingerprint: c454a86efe2cbeacc4931f01d059cf35684c2808a2e1e090417578e2ab2c94a4
+fingerprint: 4e037af72f38881f9070833158eec1a77422f010fc968a41fe23ce3aa99cbdad
 
 ## DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
 input: data_type=datetime column_type=datetime(6) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=6 charset=- collation=- nullability=NOT_NULL default=CURRENT_TIMESTAMP(6) extra=DEFAULT_GENERATED ordinal=1
@@ -178,6 +178,21 @@ alternatives: []
 notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS]
 fingerprint: 56a807d24c9d5ae913b321f9d7e78b50a86483df6c4d7e1629f2575b7e5702e1
 
+## TIMESTAMP NOT NULL, zero-date switch on
+input: data_type=timestamp column_type=timestamp unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=0 charset=- collation=- nullability=NOT_NULL default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=true
+result: SUPPORTED
+target_type: TIMESTAMPTZ(0)
+extraction_intent: ZERO_DATE_AS_NULL
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: UTC_INSTANT_MILLISECONDS
+required_preflights: [ZERO_DATE_ROWS_COUNTED]
+contract_effects: [ORIGINAL_SOURCE_TYPE_TIMESTAMP, NOT_NULL_RELAXED_IF_ZERO_DATES_OBSERVED]
+alternatives: []
+notices: [ZERO_DATE_CONVERTED_TO_NULL]
+fingerprint: 7d51a83974a886030245a4c1833a6e553a32bb1f2b91c5a220bc4660af7777a2
+
 ## TIMESTAMP(6), zero-date switch on
 input: data_type=timestamp column_type=timestamp(6) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=6 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
 options: tinyintOneAsBoolean=false zeroDateAsNull=true
@@ -187,11 +202,11 @@ extraction_intent: ZERO_DATE_AS_NULL
 connect: INT64/TIMESTAMP
 jdbc_binder: TIMESTAMP
 value_semantics: UTC_INSTANT_MILLISECONDS
-required_preflights: []
+required_preflights: [ZERO_DATE_ROWS_COUNTED]
 contract_effects: [ORIGINAL_SOURCE_TYPE_TIMESTAMP]
 alternatives: []
 notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS, ZERO_DATE_CONVERTED_TO_NULL]
-fingerprint: 3221f90fc469acdbba55a2ff4b48765e4f7071c1e4182c8a59d3ee6887c7adf8
+fingerprint: 56bb2a8ca42537550eeb05a4e5a4361c0b8b5eee2c9a534cd77dedfd1d506971
 
 ## TIME
 input: data_type=time column_type=time unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=0 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1

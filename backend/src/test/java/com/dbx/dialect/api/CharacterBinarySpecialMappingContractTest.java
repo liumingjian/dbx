@@ -154,6 +154,22 @@ class CharacterBinarySpecialMappingContractTest {
     }
 
     @Test
+    void aBinaryEnumIsByteaWithTheMembershipPreflightAndNoTextCheck() {
+        for (MappingOptions options : ALL_OPTIONS) {
+            Supported decision = supported(column("enum", "enum('a','b')").characterLength(1, 1)
+                    .charset("binary", "binary"), options);
+            assertEquals(new TargetType(TargetTypeName.BYTEA, List.of()), decision.targetType(),
+                    "TP §6.3: an ENUM of the binary character set holds bytes");
+            assertEquals(List.of(), decision.contractEffects(),
+                    "a text CHECK over the members cannot constrain a bytea column, so none is added");
+            assertEquals(List.of(RequiredPreflight.ENUM_VALUE_DECLARED), decision.requiredPreflights(),
+                    "TP §6.6 check 5: membership and the illegal sentinel are still proven exactly");
+            assertEquals(List.of(MappingNotice.ENUM_WITHOUT_CHECK_CONSTRAINT), decision.notices(),
+                    "the missing CHECK is stated, as for SET");
+        }
+    }
+
+    @Test
     void setIsTextWithNoCombinatorialCheck() {
         Supported decision = supported(column("set", "set('read','write','admin')").characterLength(16, 64)
                 .charset(UTF8MB4, UTF8MB4_CI), OFF);

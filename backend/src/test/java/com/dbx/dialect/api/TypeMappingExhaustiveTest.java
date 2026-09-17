@@ -58,6 +58,74 @@ class TypeMappingExhaustiveTest {
                         + "mapping decision, not a deferred list");
     }
 
+    /**
+     * A refusal of contradictory facts is closed but decides nothing, so the loop above would still pass for
+     * a type the mapper always refuses as inconsistent. Each fixture type's canonical, well-formed metadata,
+     * as MySQL 8.0 reports it, must therefore reach a real decision: {@code Supported}, or a refusal with its
+     * own stable reason such as {@code GEOMETRY}.
+     */
+    @Test
+    void everyMySql80DataTypeReachesARealDecisionFromWellFormedMetadata() {
+        assertEquals(DATA_TYPES, CANONICAL.stream().map(c -> c.build().dataType()).toList(),
+                "one canonical metadata row per fixture type, in fixture order");
+        List<String> undecided = new ArrayList<>();
+        for (SourceColumns canonical : CANONICAL) {
+            SourceColumn column = canonical.build();
+            for (MappingOptions options : ALL_OPTIONS) {
+                if (PAIR.map(column, options) instanceof Unsupported refused
+                        && (refused.reason() == MappingUnsupportedReason.NOT_WHITELISTED
+                        || refused.reason() == MappingUnsupportedReason.SOURCE_FACTS_INCONSISTENT)) {
+                    undecided.add(column.columnType() + " under " + options + ": " + refused.reason());
+                }
+            }
+        }
+        assertEquals(List.of(), undecided, "TP §6.1–6.4: well-formed metadata of every MySQL 8.0 data_type needs a "
+                + "real decision, not NOT_WHITELISTED or SOURCE_FACTS_INCONSISTENT");
+    }
+
+    private static final String UTF8MB4 = "utf8mb4";
+    private static final String UTF8MB4_CI = "utf8mb4_0900_ai_ci";
+
+    /** Each fixture type as a plain {@code CREATE TABLE} column of that type reports it in MySQL 8.0.36. */
+    private static final List<SourceColumns> CANONICAL = List.of(
+            column("tinyint", "tinyint").precision(3, 0),
+            column("smallint", "smallint").precision(5, 0),
+            column("mediumint", "mediumint").precision(7, 0),
+            column("int", "int").precision(10, 0),
+            column("bigint", "bigint").precision(19, 0),
+            column("decimal", "decimal(10,2)").precision(10, 2),
+            column("float", "float").precision(12),
+            column("double", "double").precision(22),
+            column("bit", "bit(1)").precision(1),
+            column("char", "char(10)").characterLength(10, 40).charset(UTF8MB4, UTF8MB4_CI),
+            column("varchar", "varchar(255)").characterLength(255, 1020).charset(UTF8MB4, UTF8MB4_CI),
+            column("binary", "binary(16)").characterLength(16, 16),
+            column("varbinary", "varbinary(255)").characterLength(255, 255),
+            column("tinytext", "tinytext").characterLength(255, 255).charset(UTF8MB4, UTF8MB4_CI),
+            column("text", "text").characterLength(65535, 65535).charset(UTF8MB4, UTF8MB4_CI),
+            column("mediumtext", "mediumtext").characterLength(16777215, 16777215).charset(UTF8MB4, UTF8MB4_CI),
+            column("longtext", "longtext").characterLength(4294967295L, 4294967295L).charset(UTF8MB4, UTF8MB4_CI),
+            column("tinyblob", "tinyblob").characterLength(255, 255),
+            column("blob", "blob").characterLength(65535, 65535),
+            column("mediumblob", "mediumblob").characterLength(16777215, 16777215),
+            column("longblob", "longblob").characterLength(4294967295L, 4294967295L),
+            column("enum", "enum('a','b')").characterLength(1, 4).charset(UTF8MB4, UTF8MB4_CI),
+            column("set", "set('a','b')").characterLength(3, 12).charset(UTF8MB4, UTF8MB4_CI),
+            column("json", "json"),
+            column("geometry", "geometry"),
+            column("point", "point"),
+            column("linestring", "linestring"),
+            column("polygon", "polygon"),
+            column("multipoint", "multipoint"),
+            column("multilinestring", "multilinestring"),
+            column("multipolygon", "multipolygon"),
+            column("geomcollection", "geomcollection"),
+            column("date", "date"),
+            column("datetime", "datetime").datetimePrecision(0),
+            column("timestamp", "timestamp").datetimePrecision(0),
+            column("time", "time").datetimePrecision(0),
+            column("year", "year"));
+
     @Test
     void theFixtureListsEachTypeOnceAndNoDeferredListExists() {
         assertEquals(new LinkedHashSet<>(DATA_TYPES).size(), DATA_TYPES.size(), "the fixture lists each type once");

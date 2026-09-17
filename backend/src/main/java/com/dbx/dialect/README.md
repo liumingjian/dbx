@@ -7,7 +7,7 @@ Pure and at the bottom of the graph: depends on no other module, no `JdbcTemplat
 ## Entry points (`com.dbx.dialect.api`)
 
 - `DialectCatalog.compileTime()` → `select` (`DatabasePair | Unsupported`: exact product and release series, no fallback, endpoints never compose a pair), `list`
-- `DatabasePair` → `map` (`Supported | Unsupported`), `mapIdentifier` (`Exact | Renamed | Unsupported`), `descriptorCodec`, `executionRequirements`, `validationCapabilities`, `source()`, `target()`
+- `DatabasePair` → `map` (`Supported | Unsupported`), `mapIdentifier` (`Exact | Renamed | Unsupported`; a mapping rule is refused, TP §7.1), `descriptorCodec`, `executionRequirements`, `validationCapabilities`, `source()`, `target()`
 - `SourceDialect` (its only constructor demands a `BoundedReadRequirement`, ADR-0033), `TargetDialect` → the plan, normalisation and settings capabilities of the sub-spec §Interface
 - `DescriptorCodec` → reads and writes only its own `DescriptorVersion`; an unknown version is `Unsupported`
 - `SqlPlan` → immutable, closed `OperationKind`, bound `SqlValue`s, `ResultSchema`, `TimeoutClass`, `RequiredPrivilege`s, `EvidencePolicy`, `fingerprint()`
@@ -21,7 +21,7 @@ An entry point its slice has not landed throws `NotImplementedInSlice` naming it
 - `api/` — every public type, one file per type
 - `catalog/` — the compile-time catalog: endpoint release series and certified pairs, registered separately
 - `pair/` — `MySql80ToPostgres15` composes one class per capability: `PairRegistration` + `DescriptorCodecV1` (2), `TypeMapper` (3), `IdentifierMapper` (4), `PairRequirements` (9)
-  - `TypeMapper` dispatches on `MySqlDataType` to one class per TP §6 family: `NumericMapping`, `CharacterBinarySpecialMapping`, `TemporalMapping`
+  - `TypeMapper` dispatches on the sealed `MySqlDataType` (one enum per TP §6 family) to `NumericMapping`, `CharacterBinarySpecialMapping`, `TemporalMapping`; shared fact readings live in `SourceFacts`
 - `mysql/`, `postgres/` — the two endpoint dialects (slices 5–6, 7–8)
 
 ## Contract test

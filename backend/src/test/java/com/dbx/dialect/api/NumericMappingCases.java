@@ -43,7 +43,13 @@ final class NumericMappingCases {
                     BOOLEAN_ON),
             of("SERIAL", column("bigint", "bigint unsigned").precision(20, 0).notNull().extra("auto_increment"),
                     SWITCHES_OFF),
+            of("BIGINT AUTO_INCREMENT", column("bigint", "bigint").precision(19, 0).notNull().extra("auto_increment"),
+                    SWITCHES_OFF),
+            of("TINYINT(1) AUTO_INCREMENT, Boolean switch on", column("tinyint", "tinyint(1)").precision(3, 0)
+                    .notNull().extra("auto_increment"), BOOLEAN_ON),
             of("FLOAT", column("float", "float").precision(12), SWITCHES_OFF),
+            of("DOUBLE AUTO_INCREMENT", column("double", "double").precision(22).notNull().extra("auto_increment"),
+                    SWITCHES_OFF),
             of("FLOAT UNSIGNED", column("float", "float unsigned").precision(12), SWITCHES_OFF),
             of("FLOAT(7,4)", column("float", "float(7,4)").precision(7, 4), SWITCHES_OFF),
             of("DOUBLE", column("double", "double").precision(22), SWITCHES_OFF),

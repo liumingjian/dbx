@@ -30,6 +30,8 @@ final class TemporalMappingCases {
             of("TIMESTAMP", column("timestamp", "timestamp").datetimePrecision(0), SWITCHES_OFF),
             of("TIMESTAMP(3)", column("timestamp", "timestamp(3)").datetimePrecision(3), SWITCHES_OFF),
             of("TIMESTAMP(6)", column("timestamp", "timestamp(6)").datetimePrecision(6), SWITCHES_OFF),
+            of("TIMESTAMP NOT NULL, zero-date switch on", column("timestamp", "timestamp").datetimePrecision(0)
+                    .notNull(), ZERO_DATE_ON),
             of("TIMESTAMP(6), zero-date switch on", column("timestamp", "timestamp(6)").datetimePrecision(6),
                     ZERO_DATE_ON),
             of("TIME", column("time", "time").datetimePrecision(0), SWITCHES_OFF),
