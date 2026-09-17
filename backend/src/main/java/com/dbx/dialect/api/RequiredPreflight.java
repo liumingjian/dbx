@@ -1,11 +1,22 @@
 package com.dbx.dialect.api;
 
-/** The column-level exact preflights of TP §6.6 checks 1–6 a mapping can require. Owned by slice 3. */
+/**
+ * An exact column-level preflight a mapping requires (TP §6.6 checks 1–6). {@code preflight} derives
+ * its obligations from these instead of keeping a second copy of TP §6. Grouped by the TP §6 family
+ * that introduced each constant; add yours to your group.
+ */
 public enum RequiredPreflight {
-    LARGE_RECORD_ENVELOPE,
+    // numeric (TP §6.2)
+    /** TP §6.6 check 2: under the Boolean switch every value is {@code 0}, {@code 1} or {@code NULL}. */
     BOOLEAN_VALUES_ZERO_OR_ONE,
+    /** TP §6.6 check 3: {@code MAX(column) <= 2^63-1}, because the Source cannot read larger values. */
     UNSIGNED_BIGINT_MAX_WITHIN_SIGNED_RANGE,
-    TIME_WITHIN_DAY,
+
+    // character, binary and special (TP §6.3)
+    LARGE_RECORD_ENVELOPE,
     ENUM_VALUE_DECLARED,
+
+    // temporal (TP §6.4)
+    TIME_WITHIN_DAY,
     NO_ZERO_DATE
 }

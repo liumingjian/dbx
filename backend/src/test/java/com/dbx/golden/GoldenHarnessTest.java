@@ -60,7 +60,7 @@ class GoldenHarnessTest {
 
     @Test
     void theRegistryAddressesSetsByName() {
-        assertEquals(java.util.Set.of(HarnessGoldenSource.SET), GoldenSets.names());
+        assertTrue(GoldenSets.names().contains(HarnessGoldenSource.SET), "the harness set is registered");
         assertEquals(HarnessGoldenSource.SET, GoldenSets.require(HarnessGoldenSource.SET).name());
     }
 }

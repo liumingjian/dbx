@@ -19,11 +19,12 @@ An entry point its slice has not landed throws `NotImplementedInSlice` naming it
 - `api/` — every public type, one file per type
 - `catalog/` — the compile-time catalog (slice 2)
 - `pair/` — `MySql80ToPostgres15` composes one class per capability: `PairRegistration` (2), `TypeMapper` (3), `IdentifierMapper` (4), `PairRequirements` (9)
+  - `TypeMapper` dispatches on `MySqlDataType` to one class per TP §6 family: `NumericMapping`, `CharacterBinarySpecialMapping`, `TemporalMapping`
 - `mysql/`, `postgres/` — the two endpoint dialects (slices 5–6, 7–8)
 
 ## Contract test
 
-`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity). Later slices add `DialectCatalogContractTest`, `IdentifierMappingContractTest`, `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
+`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity). `NumericMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`. Later slices add `DialectCatalogContractTest`, `IdentifierMappingContractTest`, `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
 
 ## Read
 
