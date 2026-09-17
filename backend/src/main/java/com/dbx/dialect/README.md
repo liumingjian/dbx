@@ -26,7 +26,7 @@ An entry point its slice has not landed throws `NotImplementedInSlice` naming it
 
 ## Contract test
 
-`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting); `NumericMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`. Later slices add `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
+`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting); `NumericMappingContractTest`, `TemporalMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`. Later slices add `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
 
 ## Read
 
