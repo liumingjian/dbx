@@ -10,6 +10,7 @@ Pure and at the bottom of the graph: depends on no other module, no `JdbcTemplat
 - `DatabasePair` → `map` (`Supported | Unsupported`), `mapIdentifier` (`Exact | Renamed | Unsupported`), `descriptorCodec`, `executionRequirements`, `validationCapabilities`, `source()`, `target()`
 - `SourceDialect`, `TargetDialect` → the plan, normalisation and settings capabilities of the sub-spec §Interface
 - `SqlPlan` → immutable, closed `OperationKind`, bound `SqlValue`s, `ResultSchema`, `TimeoutClass`, `RequiredPrivilege`s, `EvidencePolicy`, `fingerprint()`
+- `TargetIdentifier.quoted()` → the one place an identifier becomes SQL text (always double-quoted)
 - `ProofOutcome` → `PROVEN | INCONCLUSIVE | REJECTED`
 
 An entry point its slice has not landed throws `NotImplementedInSlice` naming itself and the slice; it never returns an empty value.
@@ -23,7 +24,7 @@ An entry point its slice has not landed throws `NotImplementedInSlice` naming it
 
 ## Contract test
 
-`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity). Later slices add `DialectCatalogContractTest`, `IdentifierMappingContractTest`, `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
+`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting). Later slices add `DialectCatalogContractTest`, `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
 
 ## Read
 

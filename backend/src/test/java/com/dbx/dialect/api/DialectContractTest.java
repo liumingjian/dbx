@@ -58,7 +58,6 @@ class DialectContractTest {
             new Stub("pair.descriptor", 2, PAIR::descriptor),
             new Stub("pair.descriptorCodec", 2, () -> PAIR.descriptorCodec(null)),
             new Stub("pair.map", 3, () -> PAIR.map(null, null)),
-            new Stub("pair.mapIdentifier", 4, () -> PAIR.mapIdentifier(null, null)),
             new Stub("source.metadataPlan", 5, () -> PAIR.source().metadataPlan(null)),
             new Stub("source.normalizeMetadata", 5, () -> PAIR.source().normalizeMetadata(null)),
             new Stub("source.capabilityPlans", 5, () -> PAIR.source().capabilityPlans(null)),
@@ -83,7 +82,8 @@ class DialectContractTest {
             new Stub("pair.validationCapabilities", 9, PAIR::validationCapabilities));
 
     /** Entry points a landed slice implements, one per line. Empty in slice 1. */
-    private static final Set<String> IMPLEMENTED = Set.of();
+    private static final Set<String> IMPLEMENTED = Set.of(
+            "pair.mapIdentifier");
 
     /** Composition, not capability: they hand out the dialects whose entry points are listed above. */
     private static final Set<String> COMPOSITION = Set.of("pair.source", "pair.target");
