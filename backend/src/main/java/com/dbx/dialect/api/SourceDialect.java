@@ -27,11 +27,17 @@ public abstract class SourceDialect {
         return boundedRead;
     }
 
-    /** Reads types, keys, indexes, defaults, statistics, charset and collation (slice 5). */
+    /**
+     * One plan reading types, keys, indexes, foreign keys, defaults, comments, charset, collation and fresh
+     * statistics of every table in {@code scope}, names bound as values (obligations 15, 19b; slice 5).
+     */
     public abstract SqlPlan metadataPlan(MetadataScope scope);
 
-    /** Keeps the raw {@code information_schema} facts (slice 5). */
-    public abstract SourceTableMetadata normalizeMetadata(ResultRows rows);
+    /**
+     * The rows of one {@link #metadataPlan} as one {@link SourceTableMetadata} per table, in the order the
+     * server returned them, keeping the raw {@code information_schema} facts (slice 5).
+     */
+    public abstract List<SourceTableMetadata> normalizeMetadata(ResultRows rows);
 
     /** Read-only capability checks (ADR-0006; slice 5). */
     public abstract List<SqlPlan> capabilityPlans(MetadataScope scope);

@@ -45,12 +45,12 @@ public final class MySql80SourceDialect extends SourceDialect {
 
     @Override
     public SqlPlan metadataPlan(MetadataScope scope) {
-        throw new NotImplementedInSlice("source.metadataPlan", 5);
+        return MetadataRead.plan(scope);
     }
 
     @Override
-    public SourceTableMetadata normalizeMetadata(ResultRows rows) {
-        throw new NotImplementedInSlice("source.normalizeMetadata", 5);
+    public List<SourceTableMetadata> normalizeMetadata(ResultRows rows) {
+        return MetadataNormalizer.normalize(rows);
     }
 
     @Override
