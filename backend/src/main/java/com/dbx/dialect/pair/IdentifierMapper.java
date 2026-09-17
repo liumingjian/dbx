@@ -46,10 +46,8 @@ final class IdentifierMapper {
         Objects.requireNonNull(sourceCoordinate, "sourceCoordinate is required");
         Objects.requireNonNull(mappingRule, "mappingRule is required; pass Optional.empty() for none");
         if (mappingRule.isPresent()) {
-            // Ignoring a rule silently would be a default-success path (ADR-0008 §Ownership).
-            throw new UnsupportedOperationException("pair.mapIdentifier derives names from the source coordinate "
-                    + "only (TP §7.1); applying a mapping rule is not decided by slice 4 of docs/spec/dialect.md: "
-                    + mappingRule.get());
+            // No slice applies a rule at this seam; ignoring it would be a default-success path (ADR-0008 §Ownership).
+            return new Unsupported(IdentifierUnsupportedReason.MAPPING_RULE_NOT_SUPPORTED_IN_V1, sourceCoordinate);
         }
         String name = switch (sourceCoordinate) {
             case SchemaCoordinate schema -> schema.database();

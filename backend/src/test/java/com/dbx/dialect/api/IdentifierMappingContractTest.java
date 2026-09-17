@@ -4,11 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -199,12 +199,26 @@ class IdentifierMappingContractTest {
     }
 
     @Test
-    void aMappingRuleIsRefusedLoudlyRatherThanIgnored() {
-        TableCoordinate source = new TableCoordinate("shop", "orders");
-        MappingRule rule = new MappingRule.TableRename(source, new TargetIdentifier("orders_v2"),
-                MappingRule.RuleOrigin.USER);
-        assertThrows(UnsupportedOperationException.class, () -> PAIR.mapIdentifier(source, Optional.of(rule)),
-                "ADR-0008 §Ownership: a rule this slice does not apply must fail, not be silently ignored");
+    void aMappingRuleIsAClosedRefusalRatherThanIgnoredOrThrown() {
+        TableCoordinate table = new TableCoordinate("shop", "orders");
+        ColumnCoordinate column = new ColumnCoordinate("shop", "orders", "note");
+        record Probe(SourceCoordinate source, MappingRule rule) {
+        }
+        List<Probe> probes = new ArrayList<>();
+        for (MappingRule.RuleOrigin origin : MappingRule.RuleOrigin.values()) {
+            probes.add(new Probe(table, new MappingRule.TableRename(table, new TargetIdentifier("orders_v2"), origin)));
+            probes.add(new Probe(column, new MappingRule.ColumnPrune(column, origin)));
+            probes.add(new Probe(column, new MappingRule.ColumnRename(column, new TargetIdentifier("memo"), origin)));
+            probes.add(new Probe(column, new MappingRule.TargetTypeOverride(column,
+                    new TargetType(TargetTypeName.TEXT, List.of()), origin)));
+        }
+        for (Probe probe : probes) {
+            IdentifierMapping mapping = PAIR.mapIdentifier(probe.source(), Optional.of(probe.rule()));
+            assertEquals(new Unsupported(IdentifierUnsupportedReason.MAPPING_RULE_NOT_SUPPORTED_IN_V1, probe.source()),
+                    mapping, "docs/spec/dialect.md assigns applying a mapping rule at this seam to no slice, so "
+                            + "pair.mapIdentifier returns a closed refusal with a stable code, never ignores the rule "
+                            + "(ADR-0008 §Ownership) and never throws: " + probe.rule());
+        }
     }
 
     // --- Quoting ---------------------------------------------------------------------------------
