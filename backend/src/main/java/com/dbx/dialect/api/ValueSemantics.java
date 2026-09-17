@@ -18,6 +18,8 @@ public enum ValueSemantics {
     JSON_TEXT,
 
     // temporal (TP §6.4)
+    /** A calendar date, compared by its year, month and day fields. */
+    CALENDAR_DATE,
     WALL_CLOCK_MILLISECONDS,
     UTC_INSTANT_MILLISECONDS,
     TIME_OF_DAY_MILLISECONDS,

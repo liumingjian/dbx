@@ -4,5 +4,11 @@ package com.dbx.dialect.api;
 public enum ContractEffect {
     ENUM_CHECK_CONSTRAINT,
     OWNED_SEQUENCE_FOR_IDENTITY,
-    ORIGINAL_SOURCE_TYPE_RETAINED
+    /**
+     * The original MySQL type is {@code DATETIME}. Connect carries {@code DATETIME} and {@code TIMESTAMP}
+     * as the same Timestamp, so after conversion only this record tells them apart (TP §6.4).
+     */
+    ORIGINAL_SOURCE_TYPE_DATETIME,
+    /** The original MySQL type is {@code TIMESTAMP}; see {@link #ORIGINAL_SOURCE_TYPE_DATETIME} (TP §6.4). */
+    ORIGINAL_SOURCE_TYPE_TIMESTAMP
 }

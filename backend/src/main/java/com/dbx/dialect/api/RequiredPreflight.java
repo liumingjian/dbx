@@ -17,6 +17,8 @@ public enum RequiredPreflight {
     ENUM_VALUE_DECLARED,
 
     // temporal (TP §6.4)
+    /** TP §6.6 check 4: every {@code TIME} value lies in {@code [00:00:00, 24:00:00)}. */
     TIME_WITHIN_DAY,
+    /** TP §6.6 check 6: no zero date, because the operator has not approved converting it to {@code NULL}. */
     NO_ZERO_DATE
 }

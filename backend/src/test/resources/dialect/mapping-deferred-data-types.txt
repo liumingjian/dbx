@@ -27,10 +27,3 @@ multipoint
 multilinestring
 multipolygon
 geomcollection
-
-# temporal (TP §6.4) — removed by #117
-date
-datetime
-timestamp
-time
-year
