@@ -300,7 +300,7 @@ class DialectCatalogContractTest {
         }
 
         @Override
-        public SourceTableMetadata normalizeMetadata(ResultRows rows) {
+        public List<SourceTableMetadata> normalizeMetadata(ResultRows rows) {
             throw new AssertionError("never constructed");
         }
 
