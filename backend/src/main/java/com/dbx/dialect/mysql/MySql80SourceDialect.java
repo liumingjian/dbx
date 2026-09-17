@@ -84,7 +84,7 @@ public final class MySql80SourceDialect extends SourceDialect {
 
     @Override
     public List<KeysetCandidate> keysetCandidates(SourceTableMetadata table) {
-        throw new NotImplementedInSlice("source.keysetCandidates", 5);
+        return KeysetCandidates.of(table);
     }
 
     @Override

@@ -51,7 +51,6 @@ class DialectContractTest {
      * are null on purpose: a stub has to fail before it looks at them.
      */
     private static final List<Stub> STUBS = List.of(
-            new Stub("source.keysetCandidates", 5, () -> PAIR.source().keysetCandidates(null)),
             new Stub("source.preflightScanPlan", 6, () -> PAIR.source().preflightScanPlan(null, null)),
             new Stub("source.baselinePlan", 6, () -> PAIR.source().baselinePlan(null, null)),
             new Stub("source.validationFactPlans", 6, () -> PAIR.source().validationFactPlans(null)),
@@ -78,6 +77,7 @@ class DialectContractTest {
             "source.boundedRead",
             "source.capabilityPlans",
             "source.connectionSemantics",
+            "source.keysetCandidates",
             "source.metadataPlan",
             "source.normalizeMetadata",
             "source.queryProjection",
