@@ -26,7 +26,7 @@ An entry point its slice has not landed throws `NotImplementedInSlice` naming it
 
 ## Contract test
 
-`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting); `NumericMappingContractTest`, `CharacterBinarySpecialMappingContractTest`, `TemporalMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`; `SourceMetadataContractTest` (metadata plan text, fresh statistics, bound names, normalisation). Later slices add `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
+`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting); `NumericMappingContractTest`, `CharacterBinarySpecialMappingContractTest`, `TemporalMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`; `SourceMetadataContractTest` (metadata plan text, fresh statistics, bound names, normalisation); `KeysetCandidatesContractTest` (ADR-0037 §Choice order and exclusions). Later slices add `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
 
 ## Read
 

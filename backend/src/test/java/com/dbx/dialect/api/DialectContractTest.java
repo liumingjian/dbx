@@ -52,7 +52,6 @@ class DialectContractTest {
      */
     private static final List<Stub> STUBS = List.of(
             new Stub("source.capabilityPlans", 5, () -> PAIR.source().capabilityPlans(null)),
-            new Stub("source.keysetCandidates", 5, () -> PAIR.source().keysetCandidates(null)),
             new Stub("source.queryProjection", 5, () -> PAIR.source().queryProjection(null, null)),
             new Stub("source.connectionSemantics", 5, () -> PAIR.source().connectionSemantics(null)),
             new Stub("source.preflightScanPlan", 6, () -> PAIR.source().preflightScanPlan(null, null)),
@@ -81,6 +80,7 @@ class DialectContractTest {
             "pair.map",
             "pair.mapIdentifier",
             "source.boundedRead",
+            "source.keysetCandidates",
             "source.metadataPlan",
             "source.normalizeMetadata");
 
