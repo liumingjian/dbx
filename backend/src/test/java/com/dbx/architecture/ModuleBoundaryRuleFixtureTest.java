@@ -54,6 +54,24 @@ class ModuleBoundaryRuleFixtureTest {
         assertTrue(failure.contains("reads the wall clock"), "the rule names the now() read: " + failure);
     }
 
+    /**
+     * {@code dialect}'s real code lives in {@code dialect.api} and its subpackages, not beside
+     * {@code ImpureDialect}, so the purity rule is watched to fail there too: a plan that stamps the
+     * wall clock into its fingerprint is the impurity slice 1 of {@code docs/spec/dialect.md} invites.
+     */
+    @Test
+    void thePureModuleRuleReportsAnImpureDialectApiType() {
+        String failure = failureOf(ModuleBoundaryRules.noPureModuleDependsOnAnEffect(FIXTURE_ROOT));
+
+        assertNames(failure, "rule 3");
+        assertTrue(
+                failure.contains("ClockStampedSqlPlan") && failure.contains("reads the wall clock"),
+                "the rule names the impure dialect.api type and its now() read: " + failure);
+        assertTrue(
+                failure.contains("ClockStampedSqlPlan") && failure.contains("java.time.Clock is an effect"),
+                "the rule names the Clock the dialect.api type holds: " + failure);
+    }
+
     @Test
     void theWorkflowCommandCallerRuleReportsItsFixture() {
         String failure =
