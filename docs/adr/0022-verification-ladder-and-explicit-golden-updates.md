@@ -17,7 +17,17 @@ A rung over budget is a defect: move the slow test down a rung or make it faster
 
 ## Where it runs
 
-All execution — compilation included — runs on the mac through the `rexec` skill. The development server has too little memory to run anything, so no rung is "local"; the rungs differ by duration and by whether they need Docker, not by location.
+There are two execution paths, and this section used to describe only the first as though it were both.
+
+**Agent sessions and the development server.** All execution — compilation included — runs on the mac through the `rexec` skill. The development server has too little memory to run anything, so no rung is "local"; the rungs differ by duration and by whether they need Docker, not by location.
+
+**CI.** Every rung CI runs, runs on a GitHub-hosted `ubuntu-latest` runner (#108). Docker is native there rather than behind a virtual machine, and the runner's 4 vCPU / 16 GB matches the floor #6 set for the test bed; #9 measured that bed at 2.80 GiB idle and 3.41 GiB while migrating, so L3 fits. The runner is free because this repository is public, and it is GitHub's to keep alive rather than a machine somebody has to restart.
+
+A self-hosted runner on the maintainer's mac was rejected, not overlooked. It would have put every rung on one machine, which reads as the tidier answer. But a self-hosted runner on a **public** repository executes whatever a fork's pull request tells it to, on hardware that also holds the `rexec` agent and the maintainer's keys. No approval gate is worth that as a default.
+
+L4 (`packageTest`) stays off CI entirely: ADR-0035 puts it on the mac before a release tag, against the real package.
+
+This split is a clarification of where each path runs, not a relaxation of any rung. Nothing about which rung contains what, or who must see it green, changes here. The rungs CI runs on a pull request — L1 and L2 — are required status checks, so a red rung blocks the merge and no gate is advisory. L3 runs on merge into `main`, where going red is the last automatic gate rather than a merge block, which is what §Who runs which rung has always said.
 
 ## Who runs which rung
 
