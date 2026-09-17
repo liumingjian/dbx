@@ -13,7 +13,15 @@ public enum RequiredPreflight {
     UNSIGNED_BIGINT_MAX_WITHIN_SIGNED_RANGE,
 
     // character, binary and special (TP §6.3)
+    /**
+     * TP §6.6 check 1: every selected value and the selected row payload are at most 20 MiB
+     * (20,971,520 source bytes), the large-record envelope of ADR-0003.
+     */
     LARGE_RECORD_ENVELOPE,
+    /**
+     * TP §6.6 check 5: every {@code ENUM} value is one of the declared members and is not the empty
+     * sentinel MySQL stores for an illegal value, so the target {@code CHECK} cannot reject a row mid-run.
+     */
     ENUM_VALUE_DECLARED,
 
     // temporal (TP §6.4)

@@ -19,6 +19,13 @@ public enum MappingUnsupportedReason implements UnsupportedReason {
     BIT_WIDTH_AT_LEAST_8,
 
     // character, binary and special (TP §6.3)
+    /** {@code GEOMETRY} and its subtypes are outside the v1 whitelist; pruning the column is the only way on. */
     GEOMETRY,
-    VECTOR
+    /** MySQL 9.0+ {@code VECTOR} is outside the v1 whitelist; pruning the column is the only way on. */
+    VECTOR,
+    /**
+     * {@code CHAR(0)}/{@code VARCHAR(0)} of a text character set: MySQL allows length 0, PostgreSQL's
+     * {@code char(n)}/{@code varchar(n)} require {@code n >= 1}, and TP §6.3 keeps {@code M} exactly.
+     */
+    CHARACTER_LENGTH_ZERO
 }

@@ -1,0 +1,487 @@
+## CHAR(10)
+input: data_type=char column_type=char(10) unsigned=false char_max_length=10 char_octet_length=40 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: CHAR(10)
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: TRAILING_SPACE_PADDED
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 949ad4615bbdee1ede3c4213dff4fe8f9be1a7e4ca31201b075be4d51aa67124
+
+## CHAR(255) latin1
+input: data_type=char column_type=char(255) unsigned=false char_max_length=255 char_octet_length=255 numeric_precision=- numeric_scale=- datetime_precision=- charset=latin1 collation=latin1_swedish_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: CHAR(255)
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: TRAILING_SPACE_PADDED
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 7194ed00986f13f849df3b9e347d4bead9671cec209da16c3ff6fba552f16dc3
+
+## CHAR(0)
+input: data_type=char column_type=char(0) unsigned=false char_max_length=0 char_octet_length=0 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: CHARACTER_LENGTH_ZERO
+fingerprint: 0fd0aa654d9e780f7b6983d1b8ff1991ff6d60ae11ac0ef46aa1039df51a362b
+
+## VARCHAR(255)
+input: data_type=varchar column_type=varchar(255) unsigned=false char_max_length=255 char_octet_length=1020 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: VARCHAR(255)
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 2495e9a5eff3a5dc2a6a4246def6337ee44a7f942020fcc64a910795f6fb18f3
+
+## VARCHAR(255), both switches on
+input: data_type=varchar column_type=varchar(255) unsigned=false char_max_length=255 char_octet_length=1020 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=true
+result: SUPPORTED
+target_type: VARCHAR(255)
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 2495e9a5eff3a5dc2a6a4246def6337ee44a7f942020fcc64a910795f6fb18f3
+
+## VARCHAR(64) utf8mb4_bin collation
+input: data_type=varchar column_type=varchar(64) unsigned=false char_max_length=64 char_octet_length=256 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_bin nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: VARCHAR(64)
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 37f66e3d124da16d9a4a9c53cee1d7be4987e0caf9533b9657090cc8e8d30fee
+
+## VARCHAR(16) NOT NULL DEFAULT ''
+input: data_type=varchar column_type=varchar(16) unsigned=false char_max_length=16 char_octet_length=64 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NOT_NULL default= extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: VARCHAR(16)
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: c177a98fd7a7f247cafade42c29c407580a665a3017def3296f84b1a02e8b756
+
+## VARCHAR(16) binary character set
+input: data_type=varchar column_type=varchar(16) unsigned=false char_max_length=16 char_octet_length=16 numeric_precision=- numeric_scale=- datetime_precision=- charset=binary collation=binary nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BYTEA
+extraction_intent: BINARY_CHARACTER_AS_BYTES
+connect: BYTES
+jdbc_binder: BYTES
+value_semantics: EXACT_BYTES
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: a0ec11118d46512b97bc97b3f0950412e83d8b6a46200a5eea3aa757ed40c8a3
+
+## CHAR(4) binary character set
+input: data_type=char column_type=char(4) unsigned=false char_max_length=4 char_octet_length=4 numeric_precision=- numeric_scale=- datetime_precision=- charset=binary collation=binary nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BYTEA
+extraction_intent: BINARY_CHARACTER_AS_BYTES
+connect: BYTES
+jdbc_binder: BYTES
+value_semantics: EXACT_BYTES
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: a0ec11118d46512b97bc97b3f0950412e83d8b6a46200a5eea3aa757ed40c8a3
+
+## VARCHAR(16) binary character set with a text collation
+input: data_type=varchar column_type=varchar(16) unsigned=false char_max_length=16 char_octet_length=16 numeric_precision=- numeric_scale=- datetime_precision=- charset=binary collation=utf8mb4_bin nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: 76d915344c2640737381ac3f5fe1560ee2690cb7634c54c836f303d8ab4c1c8d
+
+## VARCHAR(16) without character set facts
+input: data_type=varchar column_type=varchar(16) unsigned=false char_max_length=16 char_octet_length=64 numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: 0bcd7f915a81e44f6ac2fd3cb418f889755529183a9925b357a69a31401d77d7
+
+## VARCHAR(16) length disagreeing with column_type
+input: data_type=varchar column_type=varchar(16) unsigned=false char_max_length=32 char_octet_length=128 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: cdb2e4c5ad9687f4cfa8b51090d19f1c0c2e2e5bef505ca3b2d033cc0ff35d8b
+
+## TINYTEXT
+input: data_type=tinytext column_type=tinytext unsigned=false char_max_length=255 char_octet_length=255 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TEXT
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9eadbc5272d310b0f53905ab1070752280d239adbe2ea9ff0484b3b5f4d5371e
+
+## TEXT
+input: data_type=text column_type=text unsigned=false char_max_length=65535 char_octet_length=65535 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TEXT
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9eadbc5272d310b0f53905ab1070752280d239adbe2ea9ff0484b3b5f4d5371e
+
+## MEDIUMTEXT
+input: data_type=mediumtext column_type=mediumtext unsigned=false char_max_length=16777215 char_octet_length=16777215 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TEXT
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9eadbc5272d310b0f53905ab1070752280d239adbe2ea9ff0484b3b5f4d5371e
+
+## LONGTEXT
+input: data_type=longtext column_type=longtext unsigned=false char_max_length=4294967295 char_octet_length=4294967295 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TEXT
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9eadbc5272d310b0f53905ab1070752280d239adbe2ea9ff0484b3b5f4d5371e
+
+## LONGTEXT binary character set
+input: data_type=longtext column_type=longtext unsigned=false char_max_length=4294967295 char_octet_length=4294967295 numeric_precision=- numeric_scale=- datetime_precision=- charset=binary collation=binary nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BYTEA
+extraction_intent: BINARY_CHARACTER_AS_BYTES
+connect: BYTES
+jdbc_binder: BYTES
+value_semantics: EXACT_BYTES
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 96a6e91a084d6c0a62e8490c4727170d07fbb4f7b0b78eafe45d531c57996d36
+
+## BINARY(16)
+input: data_type=binary column_type=binary(16) unsigned=false char_max_length=16 char_octet_length=16 numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BYTEA
+extraction_intent: AS_DECLARED
+connect: BYTES
+jdbc_binder: BYTES
+value_semantics: EXACT_BYTES
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: e8715771ef10ffe2989f922db90f11e25a18cdd07cb54d6e0a6d7c0492ef96d7
+
+## VARBINARY(255)
+input: data_type=varbinary column_type=varbinary(255) unsigned=false char_max_length=255 char_octet_length=255 numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BYTEA
+extraction_intent: AS_DECLARED
+connect: BYTES
+jdbc_binder: BYTES
+value_semantics: EXACT_BYTES
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: e8715771ef10ffe2989f922db90f11e25a18cdd07cb54d6e0a6d7c0492ef96d7
+
+## VARBINARY(255) with a text character set
+input: data_type=varbinary column_type=varbinary(255) unsigned=false char_max_length=255 char_octet_length=255 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: 1196a6add01aea838b6b43c80e66603da5a5705cbc0e30d31d5ad7d447177fd5
+
+## TINYBLOB
+input: data_type=tinyblob column_type=tinyblob unsigned=false char_max_length=255 char_octet_length=255 numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BYTEA
+extraction_intent: AS_DECLARED
+connect: BYTES
+jdbc_binder: BYTES
+value_semantics: EXACT_BYTES
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 73b7d61ee97b8b75c81410464b6ae1c0a913811bd0a269e9cc516fe9bf1e2e4e
+
+## BLOB
+input: data_type=blob column_type=blob unsigned=false char_max_length=65535 char_octet_length=65535 numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BYTEA
+extraction_intent: AS_DECLARED
+connect: BYTES
+jdbc_binder: BYTES
+value_semantics: EXACT_BYTES
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 73b7d61ee97b8b75c81410464b6ae1c0a913811bd0a269e9cc516fe9bf1e2e4e
+
+## MEDIUMBLOB
+input: data_type=mediumblob column_type=mediumblob unsigned=false char_max_length=16777215 char_octet_length=16777215 numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BYTEA
+extraction_intent: AS_DECLARED
+connect: BYTES
+jdbc_binder: BYTES
+value_semantics: EXACT_BYTES
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 73b7d61ee97b8b75c81410464b6ae1c0a913811bd0a269e9cc516fe9bf1e2e4e
+
+## LONGBLOB
+input: data_type=longblob column_type=longblob unsigned=false char_max_length=4294967295 char_octet_length=4294967295 numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BYTEA
+extraction_intent: AS_DECLARED
+connect: BYTES
+jdbc_binder: BYTES
+value_semantics: EXACT_BYTES
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 73b7d61ee97b8b75c81410464b6ae1c0a913811bd0a269e9cc516fe9bf1e2e4e
+
+## ENUM('small','medium','large')
+input: data_type=enum column_type=enum('small','medium','large') unsigned=false char_max_length=6 char_octet_length=24 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TEXT
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: [ENUM_VALUE_DECLARED]
+contract_effects: [ENUM_CHECK_CONSTRAINT]
+alternatives: []
+notices: []
+fingerprint: 70570a65c1c447d96869a667a683a75769f073c91dd08b0be6284a1e2e5259bb
+
+## ENUM('it''s','') NOT NULL DEFAULT ''
+input: data_type=enum column_type=enum('it''s','') unsigned=false char_max_length=4 char_octet_length=16 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NOT_NULL default= extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TEXT
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: [ENUM_VALUE_DECLARED]
+contract_effects: [ENUM_CHECK_CONSTRAINT]
+alternatives: []
+notices: []
+fingerprint: 70570a65c1c447d96869a667a683a75769f073c91dd08b0be6284a1e2e5259bb
+
+## ENUM binary character set
+input: data_type=enum column_type=enum('a','b') unsigned=false char_max_length=1 char_octet_length=1 numeric_precision=- numeric_scale=- datetime_precision=- charset=binary collation=binary nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BYTEA
+extraction_intent: BINARY_CHARACTER_AS_BYTES
+connect: BYTES
+jdbc_binder: BYTES
+value_semantics: EXACT_BYTES
+required_preflights: [ENUM_VALUE_DECLARED]
+contract_effects: [ENUM_CHECK_CONSTRAINT]
+alternatives: []
+notices: []
+fingerprint: ac0e50afda75760f855cd33ddbb7a91ea8a788838949d95271cde305fa9e6c74
+
+## ENUM without members
+input: data_type=enum column_type=enum unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: 4a1deb92acfbc3ea42180dacbeceb791a756ace2fd9e76ee2828d57d50da6469
+
+## SET('read','write','admin')
+input: data_type=set column_type=set('read','write','admin') unsigned=false char_max_length=16 char_octet_length=64 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TEXT
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: EXACT_TEXT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: [SET_WITHOUT_CHECK_CONSTRAINT]
+fingerprint: 7cec82f28b666dddd2453aa7398a11a42489a151ff98cef012c2276109fb4b91
+
+## JSON
+input: data_type=json column_type=json unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: JSON
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: JSON_VALUE
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: [TEXT via STRING STRING JSON_VALUE]
+notices: [JSON_BYTE_FIDELITY_NOT_CLAIMED]
+fingerprint: 99f011a4df0d36c489f7b284ac0a07248411cff79eced39b9ec2e6f16d4380f7
+
+## JSON, both switches on
+input: data_type=json column_type=json unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=true
+result: SUPPORTED
+target_type: JSON
+extraction_intent: AS_DECLARED
+connect: STRING
+jdbc_binder: STRING
+value_semantics: JSON_VALUE
+required_preflights: [LARGE_RECORD_ENVELOPE]
+contract_effects: []
+alternatives: [TEXT via STRING STRING JSON_VALUE]
+notices: [JSON_BYTE_FIDELITY_NOT_CLAIMED]
+fingerprint: 99f011a4df0d36c489f7b284ac0a07248411cff79eced39b9ec2e6f16d4380f7
+
+## GEOMETRY
+input: data_type=geometry column_type=geometry unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: GEOMETRY
+fingerprint: 7f63d8f7e1195473996d7a52316aeaf048aa7a816c2c644096c6620a8b96dae8
+
+## POINT
+input: data_type=point column_type=point unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: GEOMETRY
+fingerprint: e60cb646bebbed6d032f10cc4601ee4b65a412912d5fde7b65680f121d1e8664
+
+## LINESTRING
+input: data_type=linestring column_type=linestring unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: GEOMETRY
+fingerprint: e0055d3565dcedf716f5775232e5fcd7cce6e3c5dacba4df8375fe8c776a02b0
+
+## POLYGON
+input: data_type=polygon column_type=polygon unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: GEOMETRY
+fingerprint: 80748bf4c5a38d65d35466047f56cfc2c297a88f24a4a1fd02a24461d6491310
+
+## MULTIPOINT
+input: data_type=multipoint column_type=multipoint unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: GEOMETRY
+fingerprint: f8df2aecafc0775e2395f1fe8205b9ec9758f5a2ffef7f8d4d1b2a45633905fb
+
+## MULTILINESTRING
+input: data_type=multilinestring column_type=multilinestring unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: GEOMETRY
+fingerprint: c4818b91692bd6f8e0ec92b5bbde089efa63bf0d8a7bb016134ff2def8316fdc
+
+## MULTIPOLYGON
+input: data_type=multipolygon column_type=multipolygon unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: GEOMETRY
+fingerprint: bd7297a59e28ad470d9c547c6a08037d43b1cb58a53e83ec7f7c2c57a64a3bf9
+
+## GEOMETRYCOLLECTION
+input: data_type=geomcollection column_type=geomcollection unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: GEOMETRY
+fingerprint: 141cbf87a9725f20177a790cea39b46d4354064dc5b4f0908fb2c07c777e9652
+
+## VECTOR(2048), MySQL 9.0+
+input: data_type=vector column_type=vector(2048) unsigned=false char_max_length=8192 char_octet_length=8192 numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=false
+result: UNSUPPORTED
+reason: VECTOR
+fingerprint: 5991e4240a9d8723a9020e08fbb51e06834c3ff710bac4b700d8c5000fe6932f
+
+## CHAR(10) UNSIGNED, contradictory
+input: data_type=char column_type=char(10) unsigned unsigned=true char_max_length=10 char_octet_length=40 numeric_precision=- numeric_scale=- datetime_precision=- charset=utf8mb4 collation=utf8mb4_0900_ai_ci nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=true
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: 0b93d1989952bc76c0205cc9f64763a1677f0ff4ca50e78c27d708639b85792d
+
