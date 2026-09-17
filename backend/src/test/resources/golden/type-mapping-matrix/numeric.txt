@@ -1,0 +1,582 @@
+## TINYINT
+input: data_type=tinyint column_type=tinyint unsigned=false char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT8
+jdbc_binder: BYTE
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9363278ee544244772a19e2d1763edf9504cb0da90d067c165041c43af6ff158
+
+## TINYINT(4), pre-8.0.19 display width
+input: data_type=tinyint column_type=tinyint(4) unsigned=false char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT8
+jdbc_binder: BYTE
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9363278ee544244772a19e2d1763edf9504cb0da90d067c165041c43af6ff158
+
+## TINYINT(4), Boolean switch on
+input: data_type=tinyint column_type=tinyint(4) unsigned=false char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT8
+jdbc_binder: BYTE
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9363278ee544244772a19e2d1763edf9504cb0da90d067c165041c43af6ff158
+
+## TINYINT(1)
+input: data_type=tinyint column_type=tinyint(1) unsigned=false char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT8
+jdbc_binder: BYTE
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9363278ee544244772a19e2d1763edf9504cb0da90d067c165041c43af6ff158
+
+## TINYINT(1), Boolean switch on
+input: data_type=tinyint column_type=tinyint(1) unsigned=false char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=false
+result: SUPPORTED
+target_type: BOOLEAN
+extraction_intent: TINYINT_ONE_AS_BOOLEAN
+connect: BOOLEAN
+jdbc_binder: BOOLEAN
+value_semantics: ZERO_ONE_AS_BOOLEAN
+required_preflights: [BOOLEAN_VALUES_ZERO_OR_ONE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 2c3225d7bb314b7e3d456d699dbb300fb9704f04befa656b5c1abaedd850eab9
+
+## BOOLEAN NOT NULL DEFAULT 0
+input: data_type=tinyint column_type=tinyint(1) unsigned=false char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NOT_NULL default=0 extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT8
+jdbc_binder: BYTE
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9363278ee544244772a19e2d1763edf9504cb0da90d067c165041c43af6ff158
+
+## BOOLEAN NOT NULL DEFAULT 0, Boolean switch on
+input: data_type=tinyint column_type=tinyint(1) unsigned=false char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NOT_NULL default=0 extra=- ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=false
+result: SUPPORTED
+target_type: BOOLEAN
+extraction_intent: TINYINT_ONE_AS_BOOLEAN
+connect: BOOLEAN
+jdbc_binder: BOOLEAN
+value_semantics: ZERO_ONE_AS_BOOLEAN
+required_preflights: [BOOLEAN_VALUES_ZERO_OR_ONE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 2c3225d7bb314b7e3d456d699dbb300fb9704f04befa656b5c1abaedd850eab9
+
+## TINYINT UNSIGNED
+input: data_type=tinyint column_type=tinyint unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT16
+jdbc_binder: SHORT
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 2147fe66a224f574577417e6ae22aa290af56925fba08550d804557820d7d9a1
+
+## TINYINT(1) UNSIGNED, Boolean switch on
+input: data_type=tinyint column_type=tinyint(1) unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT16
+jdbc_binder: SHORT
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 2147fe66a224f574577417e6ae22aa290af56925fba08550d804557820d7d9a1
+
+## SMALLINT
+input: data_type=smallint column_type=smallint unsigned=false char_max_length=- char_octet_length=- numeric_precision=5 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT16
+jdbc_binder: SHORT
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 2147fe66a224f574577417e6ae22aa290af56925fba08550d804557820d7d9a1
+
+## SMALLINT UNSIGNED
+input: data_type=smallint column_type=smallint unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=5 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: INTEGER
+extraction_intent: AS_DECLARED
+connect: INT32
+jdbc_binder: INT
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 6a6a81d3c9514598fa0c4b312f766079734ca48ff34ae9e795e39448a87ff8b5
+
+## MEDIUMINT
+input: data_type=mediumint column_type=mediumint unsigned=false char_max_length=- char_octet_length=- numeric_precision=7 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: INTEGER
+extraction_intent: AS_DECLARED
+connect: INT32
+jdbc_binder: INT
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 6a6a81d3c9514598fa0c4b312f766079734ca48ff34ae9e795e39448a87ff8b5
+
+## MEDIUMINT UNSIGNED
+input: data_type=mediumint column_type=mediumint unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=7 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BIGINT
+extraction_intent: AS_DECLARED
+connect: INT64
+jdbc_binder: LONG
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 5467660a129d70c55891fd84545999ff1773fad13cedd12eec101221f12bba46
+
+## INT
+input: data_type=int column_type=int unsigned=false char_max_length=- char_octet_length=- numeric_precision=10 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: INTEGER
+extraction_intent: AS_DECLARED
+connect: INT32
+jdbc_binder: INT
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 6a6a81d3c9514598fa0c4b312f766079734ca48ff34ae9e795e39448a87ff8b5
+
+## INT AUTO_INCREMENT
+input: data_type=int column_type=int unsigned=false char_max_length=- char_octet_length=- numeric_precision=10 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NOT_NULL default=- extra=auto_increment ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: INTEGER
+extraction_intent: AS_DECLARED
+connect: INT32
+jdbc_binder: INT
+value_semantics: EXACT
+required_preflights: []
+contract_effects: [IDENTITY_GENERATED_BY_DEFAULT]
+alternatives: []
+notices: []
+fingerprint: 0620923b15179b908d0562d2afe5afaa529d6c0772a56fa5e553d4d38c5fad59
+
+## INT UNSIGNED
+input: data_type=int column_type=int unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=10 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BIGINT
+extraction_intent: AS_DECLARED
+connect: INT64
+jdbc_binder: LONG
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 5467660a129d70c55891fd84545999ff1773fad13cedd12eec101221f12bba46
+
+## INT(10) UNSIGNED ZEROFILL
+input: data_type=int column_type=int(10) unsigned zerofill unsigned=true char_max_length=- char_octet_length=- numeric_precision=10 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BIGINT
+extraction_intent: AS_DECLARED
+connect: INT64
+jdbc_binder: LONG
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 5467660a129d70c55891fd84545999ff1773fad13cedd12eec101221f12bba46
+
+## BIGINT
+input: data_type=bigint column_type=bigint unsigned=false char_max_length=- char_octet_length=- numeric_precision=19 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BIGINT
+extraction_intent: AS_DECLARED
+connect: INT64
+jdbc_binder: LONG
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 5467660a129d70c55891fd84545999ff1773fad13cedd12eec101221f12bba46
+
+## BIGINT UNSIGNED
+input: data_type=bigint column_type=bigint unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=20 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: NUMERIC(20,0)
+extraction_intent: AS_DECLARED
+connect: INT64
+jdbc_binder: LONG
+value_semantics: EXACT
+required_preflights: [UNSIGNED_BIGINT_MAX_WITHIN_SIGNED_RANGE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 2c9af66700434a7a6298ce5d044121b493cccc45a2b5b9e5bf0b09c98cd6031c
+
+## BIGINT UNSIGNED, Boolean switch on
+input: data_type=bigint column_type=bigint unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=20 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=false
+result: SUPPORTED
+target_type: NUMERIC(20,0)
+extraction_intent: AS_DECLARED
+connect: INT64
+jdbc_binder: LONG
+value_semantics: EXACT
+required_preflights: [UNSIGNED_BIGINT_MAX_WITHIN_SIGNED_RANGE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 2c9af66700434a7a6298ce5d044121b493cccc45a2b5b9e5bf0b09c98cd6031c
+
+## SERIAL
+input: data_type=bigint column_type=bigint unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=20 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NOT_NULL default=- extra=auto_increment ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: NUMERIC(20,0)
+extraction_intent: AS_DECLARED
+connect: INT64
+jdbc_binder: LONG
+value_semantics: EXACT
+required_preflights: [UNSIGNED_BIGINT_MAX_WITHIN_SIGNED_RANGE, AUTO_INCREMENT_NEXT_VALUE_WITHIN_SIGNED_RANGE]
+contract_effects: [OWNED_SEQUENCE_FOR_IDENTITY]
+alternatives: []
+notices: []
+fingerprint: a19a3c00c05d81c568f7e27e63e186ab9ee6f30c0575817481aa2749656adff3
+
+## BIGINT AUTO_INCREMENT
+input: data_type=bigint column_type=bigint unsigned=false char_max_length=- char_octet_length=- numeric_precision=19 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NOT_NULL default=- extra=auto_increment ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: BIGINT
+extraction_intent: AS_DECLARED
+connect: INT64
+jdbc_binder: LONG
+value_semantics: EXACT
+required_preflights: []
+contract_effects: [IDENTITY_GENERATED_BY_DEFAULT]
+alternatives: []
+notices: []
+fingerprint: 1d8dfaff27cd0d064a8fea1bf1df8a7c898304d310a49b04541a5c9a7f3f274c
+
+## TINYINT(1) AUTO_INCREMENT, Boolean switch on
+input: data_type=tinyint column_type=tinyint(1) unsigned=false char_max_length=- char_octet_length=- numeric_precision=3 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NOT_NULL default=- extra=auto_increment ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=false
+result: UNSUPPORTED
+reason: AUTO_INCREMENT_TARGET_NOT_INTEGER
+fingerprint: 088768bd90d7caaf6722f03572c3e9a37b78b1ba340f2837b76908f0690ddcd8
+
+## FLOAT
+input: data_type=float column_type=float unsigned=false char_max_length=- char_octet_length=- numeric_precision=12 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: REAL
+extraction_intent: AS_DECLARED
+connect: FLOAT32
+jdbc_binder: FLOAT
+value_semantics: IEEE_FLOATING_POINT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 3500eb03fb14809b6738fe5e37115397eba80bbfc58539503210d677f1411af4
+
+## DOUBLE AUTO_INCREMENT
+input: data_type=double column_type=double unsigned=false char_max_length=- char_octet_length=- numeric_precision=22 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NOT_NULL default=- extra=auto_increment ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: AUTO_INCREMENT_TARGET_NOT_INTEGER
+fingerprint: 46c1edc692618aeda11f585de67cd07ffdaa9c9a2ac9dd096eebd79e0eafdfbf
+
+## FLOAT UNSIGNED
+input: data_type=float column_type=float unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=12 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: REAL
+extraction_intent: AS_DECLARED
+connect: FLOAT32
+jdbc_binder: FLOAT
+value_semantics: IEEE_FLOATING_POINT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 3500eb03fb14809b6738fe5e37115397eba80bbfc58539503210d677f1411af4
+
+## FLOAT(7,4)
+input: data_type=float column_type=float(7,4) unsigned=false char_max_length=- char_octet_length=- numeric_precision=7 numeric_scale=4 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: REAL
+extraction_intent: AS_DECLARED
+connect: FLOAT32
+jdbc_binder: FLOAT
+value_semantics: IEEE_FLOATING_POINT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 3500eb03fb14809b6738fe5e37115397eba80bbfc58539503210d677f1411af4
+
+## DOUBLE
+input: data_type=double column_type=double unsigned=false char_max_length=- char_octet_length=- numeric_precision=22 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: DOUBLE_PRECISION
+extraction_intent: AS_DECLARED
+connect: FLOAT64
+jdbc_binder: DOUBLE
+value_semantics: IEEE_FLOATING_POINT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: ceb8ea809c1972e899a0b6ac28b0ae0593b3e493c7fbfdf2afdca67217a99c86
+
+## DOUBLE UNSIGNED
+input: data_type=double column_type=double unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=22 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: DOUBLE_PRECISION
+extraction_intent: AS_DECLARED
+connect: FLOAT64
+jdbc_binder: DOUBLE
+value_semantics: IEEE_FLOATING_POINT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: ceb8ea809c1972e899a0b6ac28b0ae0593b3e493c7fbfdf2afdca67217a99c86
+
+## REAL
+input: data_type=double column_type=double unsigned=false char_max_length=- char_octet_length=- numeric_precision=22 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: DOUBLE_PRECISION
+extraction_intent: AS_DECLARED
+connect: FLOAT64
+jdbc_binder: DOUBLE
+value_semantics: IEEE_FLOATING_POINT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: ceb8ea809c1972e899a0b6ac28b0ae0593b3e493c7fbfdf2afdca67217a99c86
+
+## DECIMAL
+input: data_type=decimal column_type=decimal(10,0) unsigned=false char_max_length=- char_octet_length=- numeric_precision=10 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: NUMERIC(10,0)
+extraction_intent: AS_DECLARED
+connect: BYTES/DECIMAL
+jdbc_binder: BIG_DECIMAL
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: afd969dfb9d36e1d64c2ed2462357d5784231333363fcc2a8441fde4457d17de
+
+## DECIMAL without reported precision or scale
+input: data_type=decimal column_type=decimal unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: NUMERIC(10,0)
+extraction_intent: AS_DECLARED
+connect: BYTES/DECIMAL
+jdbc_binder: BIG_DECIMAL
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: afd969dfb9d36e1d64c2ed2462357d5784231333363fcc2a8441fde4457d17de
+
+## DECIMAL(5,2)
+input: data_type=decimal column_type=decimal(5,2) unsigned=false char_max_length=- char_octet_length=- numeric_precision=5 numeric_scale=2 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: NUMERIC(5,2)
+extraction_intent: AS_DECLARED
+connect: BYTES/DECIMAL
+jdbc_binder: BIG_DECIMAL
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 26afbc8f9f023eeb2552022e6bd19ce46b2ff10986886c153a54c45dfb480951
+
+## NUMERIC(65,30)
+input: data_type=decimal column_type=decimal(65,30) unsigned=false char_max_length=- char_octet_length=- numeric_precision=65 numeric_scale=30 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: NUMERIC(65,30)
+extraction_intent: AS_DECLARED
+connect: BYTES/DECIMAL
+jdbc_binder: BIG_DECIMAL
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 71cea10e86b03bfdb0a488531a805910f9f714aab467e9c0127f0d8910fe300d
+
+## DECIMAL(5,2) UNSIGNED
+input: data_type=decimal column_type=decimal(5,2) unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=5 numeric_scale=2 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: NUMERIC(5,2)
+extraction_intent: AS_DECLARED
+connect: BYTES/DECIMAL
+jdbc_binder: BIG_DECIMAL
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 26afbc8f9f023eeb2552022e6bd19ce46b2ff10986886c153a54c45dfb480951
+
+## DECIMAL with precision but no scale
+input: data_type=decimal column_type=decimal(5,2) unsigned=false char_max_length=- char_octet_length=- numeric_precision=5 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: aca5e509e07355eacecf3e3eec1dcec6c31c6fc7f186ae82264618d33c0a5d85
+
+## BIT(1)
+input: data_type=bit column_type=bit(1) unsigned=false char_max_length=- char_octet_length=- numeric_precision=1 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT8
+jdbc_binder: BYTE
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9363278ee544244772a19e2d1763edf9504cb0da90d067c165041c43af6ff158
+
+## BIT(1), Boolean switch on
+input: data_type=bit column_type=bit(1) unsigned=false char_max_length=- char_octet_length=- numeric_precision=1 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=true zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT8
+jdbc_binder: BYTE
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9363278ee544244772a19e2d1763edf9504cb0da90d067c165041c43af6ff158
+
+## BIT(7)
+input: data_type=bit column_type=bit(7) unsigned=false char_max_length=- char_octet_length=- numeric_precision=7 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: SMALLINT
+extraction_intent: AS_DECLARED
+connect: INT8
+jdbc_binder: BYTE
+value_semantics: EXACT
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 9363278ee544244772a19e2d1763edf9504cb0da90d067c165041c43af6ff158
+
+## BIT(8)
+input: data_type=bit column_type=bit(8) unsigned=false char_max_length=- char_octet_length=- numeric_precision=8 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: BIT_WIDTH_AT_LEAST_8
+fingerprint: 48590c8734f30defeb0936e2a71236255a608b049b958d3d1263d2eea9ad18d1
+
+## BIT(64)
+input: data_type=bit column_type=bit(64) unsigned=false char_max_length=- char_octet_length=- numeric_precision=64 numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: BIT_WIDTH_AT_LEAST_8
+fingerprint: cd4a6ca4f9b2e6cffacea944b57bcfc4794aaaca9709a749616ba573d37cc3f7
+
+## INT with unsigned flag contradicting column_type
+input: data_type=int column_type=int unsigned=true char_max_length=- char_octet_length=- numeric_precision=10 numeric_scale=0 datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: 56a839e42013c579aa69c20329894a7ea9c98bf6de8a9413be58918f94c7581e
+

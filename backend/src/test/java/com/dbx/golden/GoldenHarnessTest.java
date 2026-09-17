@@ -60,7 +60,9 @@ class GoldenHarnessTest {
 
     @Test
     void theRegistryAddressesSetsByName() {
-        assertEquals(java.util.Set.of(HarnessGoldenSource.SET), GoldenSets.names());
+        assertEquals(
+                java.util.Set.of(HarnessGoldenSource.SET, com.dbx.dialect.api.TypeMappingMatrixGoldenSource.SET),
+                GoldenSets.names());
         assertEquals(HarnessGoldenSource.SET, GoldenSets.require(HarnessGoldenSource.SET).name());
     }
 }

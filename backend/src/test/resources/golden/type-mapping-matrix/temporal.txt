@@ -1,0 +1,336 @@
+## DATE
+input: data_type=date column_type=date unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: DATE
+extraction_intent: AS_DECLARED
+connect: INT32/DATE
+jdbc_binder: DATE
+value_semantics: CALENDAR_DATE
+required_preflights: [NO_ZERO_DATE]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: e40951022ee3b01bb736dd383035cca5c92acbcd1ec82e6e0a1678d9f64d74c0
+
+## DATE, zero-date switch on
+input: data_type=date column_type=date unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=true
+result: SUPPORTED
+target_type: DATE
+extraction_intent: ZERO_DATE_AS_NULL
+connect: INT32/DATE
+jdbc_binder: DATE
+value_semantics: CALENDAR_DATE
+required_preflights: [ZERO_DATE_ROWS_COUNTED]
+contract_effects: []
+alternatives: []
+notices: [ZERO_DATE_CONVERTED_TO_NULL]
+fingerprint: deb5351f0b47ec885374db198c10e660396cbe94d9a2cd9e842d97c905dfd7c7
+
+## DATE NOT NULL, zero-date switch on
+input: data_type=date column_type=date unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NOT_NULL default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=true
+result: SUPPORTED
+target_type: DATE
+extraction_intent: ZERO_DATE_AS_NULL
+connect: INT32/DATE
+jdbc_binder: DATE
+value_semantics: CALENDAR_DATE
+required_preflights: [ZERO_DATE_ROWS_COUNTED]
+contract_effects: [NOT_NULL_RELAXED_IF_ZERO_DATES_OBSERVED]
+alternatives: []
+notices: [ZERO_DATE_CONVERTED_TO_NULL]
+fingerprint: e00e28f7e085951c979306a188a0815ca2e356709889465902baa403dbb0be73
+
+## DATETIME
+input: data_type=datetime column_type=datetime unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=0 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIMESTAMP(0)
+extraction_intent: AS_DECLARED
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: WALL_CLOCK_MILLISECONDS
+required_preflights: [NO_ZERO_DATE]
+contract_effects: [ORIGINAL_SOURCE_TYPE_DATETIME]
+alternatives: []
+notices: []
+fingerprint: 6103eee7e0962e2355c642975b646dc322102154d5e04534af641cd731f3b00c
+
+## DATETIME(3)
+input: data_type=datetime column_type=datetime(3) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=3 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIMESTAMP(3)
+extraction_intent: AS_DECLARED
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: WALL_CLOCK_MILLISECONDS
+required_preflights: [NO_ZERO_DATE]
+contract_effects: [ORIGINAL_SOURCE_TYPE_DATETIME]
+alternatives: []
+notices: []
+fingerprint: e3708f9a8c0332e6b091c5555b35fad23ac5225f27f560018ca333219bb7fd10
+
+## DATETIME(4)
+input: data_type=datetime column_type=datetime(4) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=4 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIMESTAMP(3)
+extraction_intent: AS_DECLARED
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: WALL_CLOCK_MILLISECONDS
+required_preflights: [NO_ZERO_DATE]
+contract_effects: [ORIGINAL_SOURCE_TYPE_DATETIME]
+alternatives: []
+notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS]
+fingerprint: 99fdb6407ae224bc39d0a59061db85655f09d21fc0b1f6bbeffc2daf010ff278
+
+## DATETIME(6)
+input: data_type=datetime column_type=datetime(6) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=6 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIMESTAMP(3)
+extraction_intent: AS_DECLARED
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: WALL_CLOCK_MILLISECONDS
+required_preflights: [NO_ZERO_DATE]
+contract_effects: [ORIGINAL_SOURCE_TYPE_DATETIME]
+alternatives: []
+notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS]
+fingerprint: 99fdb6407ae224bc39d0a59061db85655f09d21fc0b1f6bbeffc2daf010ff278
+
+## DATETIME(6), zero-date switch on
+input: data_type=datetime column_type=datetime(6) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=6 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=true
+result: SUPPORTED
+target_type: TIMESTAMP(3)
+extraction_intent: ZERO_DATE_AS_NULL
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: WALL_CLOCK_MILLISECONDS
+required_preflights: [ZERO_DATE_ROWS_COUNTED]
+contract_effects: [ORIGINAL_SOURCE_TYPE_DATETIME]
+alternatives: []
+notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS, ZERO_DATE_CONVERTED_TO_NULL]
+fingerprint: 4e037af72f38881f9070833158eec1a77422f010fc968a41fe23ce3aa99cbdad
+
+## DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+input: data_type=datetime column_type=datetime(6) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=6 charset=- collation=- nullability=NOT_NULL default=CURRENT_TIMESTAMP(6) extra=DEFAULT_GENERATED ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIMESTAMP(3)
+extraction_intent: AS_DECLARED
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: WALL_CLOCK_MILLISECONDS
+required_preflights: [NO_ZERO_DATE]
+contract_effects: [ORIGINAL_SOURCE_TYPE_DATETIME]
+alternatives: []
+notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS]
+fingerprint: 99fdb6407ae224bc39d0a59061db85655f09d21fc0b1f6bbeffc2daf010ff278
+
+## TIMESTAMP
+input: data_type=timestamp column_type=timestamp unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=0 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIMESTAMPTZ(0)
+extraction_intent: AS_DECLARED
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: UTC_INSTANT_MILLISECONDS
+required_preflights: [NO_ZERO_DATE]
+contract_effects: [ORIGINAL_SOURCE_TYPE_TIMESTAMP]
+alternatives: []
+notices: []
+fingerprint: 87d65eb861de883d1c6f6e16b0160191ba1a6ab247a0853770dc460d2eca75d6
+
+## TIMESTAMP(3)
+input: data_type=timestamp column_type=timestamp(3) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=3 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIMESTAMPTZ(3)
+extraction_intent: AS_DECLARED
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: UTC_INSTANT_MILLISECONDS
+required_preflights: [NO_ZERO_DATE]
+contract_effects: [ORIGINAL_SOURCE_TYPE_TIMESTAMP]
+alternatives: []
+notices: []
+fingerprint: 97c7991468d04e3d9019bc282efc28810a188dc49e03a276d87898f80dcbc793
+
+## TIMESTAMP(6)
+input: data_type=timestamp column_type=timestamp(6) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=6 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIMESTAMPTZ(3)
+extraction_intent: AS_DECLARED
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: UTC_INSTANT_MILLISECONDS
+required_preflights: [NO_ZERO_DATE]
+contract_effects: [ORIGINAL_SOURCE_TYPE_TIMESTAMP]
+alternatives: []
+notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS]
+fingerprint: 56a807d24c9d5ae913b321f9d7e78b50a86483df6c4d7e1629f2575b7e5702e1
+
+## TIMESTAMP NOT NULL, zero-date switch on
+input: data_type=timestamp column_type=timestamp unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=0 charset=- collation=- nullability=NOT_NULL default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=true
+result: SUPPORTED
+target_type: TIMESTAMPTZ(0)
+extraction_intent: ZERO_DATE_AS_NULL
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: UTC_INSTANT_MILLISECONDS
+required_preflights: [ZERO_DATE_ROWS_COUNTED]
+contract_effects: [ORIGINAL_SOURCE_TYPE_TIMESTAMP, NOT_NULL_RELAXED_IF_ZERO_DATES_OBSERVED]
+alternatives: []
+notices: [ZERO_DATE_CONVERTED_TO_NULL]
+fingerprint: 7d51a83974a886030245a4c1833a6e553a32bb1f2b91c5a220bc4660af7777a2
+
+## TIMESTAMP(6), zero-date switch on
+input: data_type=timestamp column_type=timestamp(6) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=6 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=true
+result: SUPPORTED
+target_type: TIMESTAMPTZ(3)
+extraction_intent: ZERO_DATE_AS_NULL
+connect: INT64/TIMESTAMP
+jdbc_binder: TIMESTAMP
+value_semantics: UTC_INSTANT_MILLISECONDS
+required_preflights: [ZERO_DATE_ROWS_COUNTED]
+contract_effects: [ORIGINAL_SOURCE_TYPE_TIMESTAMP]
+alternatives: []
+notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS, ZERO_DATE_CONVERTED_TO_NULL]
+fingerprint: 56bb2a8ca42537550eeb05a4e5a4361c0b8b5eee2c9a534cd77dedfd1d506971
+
+## TIME
+input: data_type=time column_type=time unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=0 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIME(0)
+extraction_intent: AS_DECLARED
+connect: INT32/TIME
+jdbc_binder: TIME
+value_semantics: TIME_OF_DAY_MILLISECONDS
+required_preflights: [TIME_WITHIN_DAY]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: bd065ed5a801934d1320f3500e582803b51778047d28fa886692d97d93476550
+
+## TIME(3)
+input: data_type=time column_type=time(3) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=3 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIME(3)
+extraction_intent: AS_DECLARED
+connect: INT32/TIME
+jdbc_binder: TIME
+value_semantics: TIME_OF_DAY_MILLISECONDS
+required_preflights: [TIME_WITHIN_DAY]
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 77a8c0bc35c70fb0307dfd3e2f2f50030812735c8ee9e9cbd28ce2b92a742159
+
+## TIME(6)
+input: data_type=time column_type=time(6) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=6 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: TIME(3)
+extraction_intent: AS_DECLARED
+connect: INT32/TIME
+jdbc_binder: TIME
+value_semantics: TIME_OF_DAY_MILLISECONDS
+required_preflights: [TIME_WITHIN_DAY]
+contract_effects: []
+alternatives: []
+notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS]
+fingerprint: 0b2d2a6fb8bc775158fda1f7e30d35448176409740250c910ec0091cd3c8e826
+
+## TIME(6), zero-date switch on
+input: data_type=time column_type=time(6) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=6 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=true
+result: SUPPORTED
+target_type: TIME(3)
+extraction_intent: AS_DECLARED
+connect: INT32/TIME
+jdbc_binder: TIME
+value_semantics: TIME_OF_DAY_MILLISECONDS
+required_preflights: [TIME_WITHIN_DAY]
+contract_effects: []
+alternatives: []
+notices: [MICROSECONDS_TRUNCATED_TO_MILLISECONDS]
+fingerprint: 0b2d2a6fb8bc775158fda1f7e30d35448176409740250c910ec0091cd3c8e826
+
+## YEAR
+input: data_type=year column_type=year unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: DATE
+extraction_intent: YEAR_AS_DATE
+connect: INT32/DATE
+jdbc_binder: DATE
+value_semantics: YEAR_AS_FIRST_OF_JANUARY
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 6c6e10e88c415858698ebb789ffde380fd5cdc6af8134055893f456273fe37e0
+
+## YEAR(4), pre-8.0.19 display width
+input: data_type=year column_type=year(4) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: SUPPORTED
+target_type: DATE
+extraction_intent: YEAR_AS_DATE
+connect: INT32/DATE
+jdbc_binder: DATE
+value_semantics: YEAR_AS_FIRST_OF_JANUARY
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 6c6e10e88c415858698ebb789ffde380fd5cdc6af8134055893f456273fe37e0
+
+## YEAR, zero-date switch on
+input: data_type=year column_type=year unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=true
+result: SUPPORTED
+target_type: DATE
+extraction_intent: YEAR_AS_DATE
+connect: INT32/DATE
+jdbc_binder: DATE
+value_semantics: YEAR_AS_FIRST_OF_JANUARY
+required_preflights: []
+contract_effects: []
+alternatives: []
+notices: []
+fingerprint: 6c6e10e88c415858698ebb789ffde380fd5cdc6af8134055893f456273fe37e0
+
+## DATETIME(6) with datetime_precision contradicting column_type
+input: data_type=datetime column_type=datetime(6) unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=3 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: 266ef571f22dafdcdeca812292fcc717e61b4347f811fdf0a00bafd73073ad83
+
+## DATETIME without datetime_precision
+input: data_type=datetime column_type=datetime unsigned=false char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=- charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: 05ee7d8e7df932b6f0bae97a2425cd6d4904a090dcbe54dddd1435b07e31f484
+
+## TIME UNSIGNED
+input: data_type=time column_type=time unsigned unsigned=true char_max_length=- char_octet_length=- numeric_precision=- numeric_scale=- datetime_precision=0 charset=- collation=- nullability=NULLABLE default=- extra=- ordinal=1
+options: tinyintOneAsBoolean=false zeroDateAsNull=false
+result: UNSUPPORTED
+reason: SOURCE_FACTS_INCONSISTENT
+fingerprint: 2c512ffb05a66732c01aa7f1b02818334b5c20cf0452d9c839bdfe9a59d0ecb2
+
