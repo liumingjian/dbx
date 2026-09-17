@@ -2,28 +2,3 @@
 # has not landed. A type here must still be refused as NOT_WHITELISTED; a type that gains a real
 # decision must leave this list. The family ticket deletes its whole section; the last ticket of
 # spec #111 deletes this file. One type per line.
-
-# character, binary and special (TP §6.3) — removed by #116
-char
-varchar
-binary
-varbinary
-tinytext
-text
-mediumtext
-longtext
-tinyblob
-blob
-mediumblob
-longblob
-enum
-set
-json
-geometry
-point
-linestring
-polygon
-multipoint
-multilinestring
-multipolygon
-geomcollection
