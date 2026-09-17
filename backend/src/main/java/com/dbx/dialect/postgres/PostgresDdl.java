@@ -131,11 +131,11 @@ final class PostgresDdl {
         return type.modifiers().stream().map(String::valueOf).collect(Collectors.joining(","));
     }
 
-    private static String qualified(TargetIdentifier schema, TargetIdentifier name) {
+    static String qualified(TargetIdentifier schema, TargetIdentifier name) {
         return quoted(schema) + "." + quoted(name);
     }
 
-    private static String quoted(TargetIdentifier identifier) {
+    static String quoted(TargetIdentifier identifier) {
         int bytes = identifier.name().getBytes(StandardCharsets.UTF_8).length;
         if (bytes > MAX_IDENTIFIER_BYTES) {
             throw new IllegalArgumentException("TP §7.1: PostgreSQL truncates identifiers beyond 63 bytes, so "

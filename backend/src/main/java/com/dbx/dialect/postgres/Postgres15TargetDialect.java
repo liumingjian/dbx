@@ -68,7 +68,7 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public List<Statement> supplementalStatements(List<DeferredStructure> deferredStructures) {
-        throw new NotImplementedInSlice("target.supplementalStatements", 7);
+        return PostgresSupplemental.statements(Objects.requireNonNull(deferredStructures, "deferredStructures is required"));
     }
 
     @Override
