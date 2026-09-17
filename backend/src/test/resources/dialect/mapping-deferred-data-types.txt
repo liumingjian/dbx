@@ -1,4 +1,0 @@
-# The shrinking deferred list of TypeMappingExhaustiveTest: MySQL 8.0 data_types whose TP §6 family
-# has not landed. A type here must still be refused as NOT_WHITELISTED; a type that gains a real
-# decision must leave this list. The family ticket deletes its whole section; the last ticket of
-# spec #111 deletes this file. One type per line.
