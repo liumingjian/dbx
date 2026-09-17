@@ -35,7 +35,7 @@ None: `dialect` is the bottom of the dependency graph (ADR-0018 §Dependency dir
 2. Fixed, strongly typed capabilities only: no string lookup, reflection, SPI, default-success stub, `Map<String,Object>`, or JSON bag (ADR-0008 §Ownership; TP §3.2).
 3. Nothing advances workflow, creates or approves a contract, or returns a gate override; proof outcomes are `PROVEN|INCONCLUSIVE|REJECTED` (ADR-0008 §Ownership).
 4. Each `SqlPlan` is immutable and fingerprintable: closed operation kind, parameterized statements, typed parameters, typed result schema (columns, types, cardinality, nullability), timeout class, required privileges, evidence policy (ADR-0008 §Plans).
-5. Values are always bound; identifiers are always quoted, and only from approved typed identifiers (ADR-0008 §Plans; TP §7.1).
+5. Values are always bound, except the DDL `DEFAULT`/`CHECK` and supplemental-SQL literals, which go through the target dialect's single typed literal renderer; identifiers are always quoted, and only from approved typed identifiers (ADR-0008 §Plans as amended by #123; TP §7.1).
 
 **Catalog and versions**
 6. Compile-time catalog: MySQL 8.0 source, PostgreSQL 15 target, one directed pair recording dialect ids, mapping version, and certification version (ADR-0008 §Registration).
@@ -103,10 +103,10 @@ None: `dialect` is the bottom of the dependency graph (ADR-0018 §Dependency dir
 3. **TypeMapper** with golden set 1 (10–13). After 1.
 4. **Quoting and identifiers** (5, 14). After 1.
 5. **Source metadata, capability plans, connection semantics, keyset candidates, query projection, bounded read** (15, 18, 19a–19b, 20–22). After 3, 4.
-6. **Preflight scan, baseline, validation and sampling plans** (16–17, 19, 23). After 3, 5.
+6. **Preflight scan, baseline, validation and sampling plans** (16–17, 19, 23, 23b). After 3, 5.
 7. **Target DDL, supplemental statements, Sink settings** (24–25, 29). After 3, 4.
 8. **Target catalog, probe, maintenance, validation plans** (26–28). After 7.
-9. **Pair execution requirements and validation capabilities** (30). After 3, 5.
+9. **Pair execution requirements and validation capabilities** (23a, 30). After 3, 5.
 
 No slice is blocked by another module.
 

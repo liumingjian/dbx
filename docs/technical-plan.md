@@ -194,11 +194,11 @@ Every external mutation follows: commit intent, perform the bounded idempotent o
 | Character column with binary charset/collation representation | BYTES | `bytea` | Determined from source metadata, not target preference |
 | `ENUM(...)` | STRING | `text` + `CHECK` | Exact illegal/sentinel-value preflight |
 | `SET(...)` | STRING | `text` | No combinatorial `CHECK` |
-| `JSON` | STRING | `json` | JSON cast is proven, but UTF-8 connector baseline is mandatory; do not claim byte fidelity without E2E evidence |
+| `JSON` | STRING | `json` | 20 MiB value/row preflight applies; JSON cast is proven, but UTF-8 connector baseline is mandatory; do not claim byte fidelity without E2E evidence |
 | `BINARY(M)`, `VARBINARY(M)` | BYTES | `bytea` | |
 | `TINYBLOB`, `BLOB`, `MEDIUMBLOB`, `LONGBLOB` | BYTES | `bytea` | 20 MiB value/row preflight applies |
 
-`jsonb` and `text` may be offered only as structured widening/semantic alternatives with matching validation semantics. The E2E prototype observed mojibake under an incorrect default connection, so release certification must prove Chinese and emoji through the fixed UTF-8 chain before the UI or report describes JSON text preservation.
+`text` may be offered only as a structured widening alternative with matching validation semantics. `jsonb` is not an alternative: it rejects a string holding U+0000 that MySQL `JSON` and PostgreSQL `json` accept, so it narrows the value domain (PR #122). The E2E prototype observed mojibake under an incorrect default connection, so release certification must prove Chinese and emoji through the fixed UTF-8 chain before the UI or report describes JSON text preservation.
 
 Geometry and its subtypes, MySQL 8.4 `VECTOR`, and every type outside the whitelist are unsupported. A table can proceed only by explicitly pruning an unsupported column, which puts that table alone into Source query mode.
 
