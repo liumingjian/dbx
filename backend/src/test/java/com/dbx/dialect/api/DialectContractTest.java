@@ -242,6 +242,32 @@ class DialectContractTest {
                 "ADR-0008 §Plans: a fingerprint must not depend on the JVM, the machine or the run");
     }
 
+    /**
+     * Pins the encoding of every {@link SqlValue} variant, derived the same independent way as above: the
+     * plan above binds only text and int64, so the other type tags and the bytes length were unpinned.
+     */
+    @Test
+    void everyValueVariantIsPinnedInTheFingerprintEncoding() {
+        SqlPlan everyValue = plan(OperationKind.SOURCE_SAMPLING, "SELECT ?, ?, ?, ?, ?, ?, ?",
+                new SqlValue.Null(SqlValue.Type.BYTES), new SqlValue.Int64(-1), new SqlValue.Decimal(new BigDecimal("1.50")),
+                new SqlValue.Text("订"), new SqlValue.Bool(true), new SqlValue.Bool(false),
+                new SqlValue.Bytes(new byte[] {0x00, (byte) 0xFF, 0x7F}));
+
+        assertEquals("a2bec0697c86eea7296d905f31d1f7bc644b16ed5b5e92f8cdb6afe9849ab2a9",
+                everyValue.fingerprint().sha256Hex(),
+                "ADR-0008 §Plans: every value is encoded as its type tag and its content; a change bumps SqlPlan.ENCODING");
+    }
+
+    @Test
+    void bytesValuesAreEqualByContentNotByArrayIdentity() {
+        SqlValue.Bytes bytes = new SqlValue.Bytes(new byte[] {1, 2});
+
+        assertEquals(new SqlValue.Bytes(new byte[] {1, 2}), bytes, "equal content is an equal value");
+        assertEquals(new SqlValue.Bytes(new byte[] {1, 2}).hashCode(), bytes.hashCode());
+        assertNotEquals(new SqlValue.Bytes(new byte[] {1, 3}), bytes);
+        assertEquals("Bytes[0102]", bytes.toString(), "evidence renders bytes as hex, never as an array address");
+    }
+
     @Test
     void changingAnyContributingFieldChangesTheFingerprint() {
         SqlPlan base = syntheticPlan(Set.of(RequiredPrivilege.TARGET_READ_CATALOG));

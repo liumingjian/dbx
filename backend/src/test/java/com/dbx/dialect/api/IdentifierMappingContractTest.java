@@ -78,6 +78,23 @@ class IdentifierMappingContractTest {
                 "TP §7.1: a 22-character Chinese column name is 66 bytes and overlong");
     }
 
+    @Test
+    void everyUtf8WidthBoundaryIsCountedAtItsOwnWidth() {
+        // The last and first code point of each UTF-8 width: U+007F|U+0080, U+07FF|U+0800, U+FFFF|U+10000.
+        for (int codePoint : new int[] {0x7F, 0x80, 0x7FF, 0x800, 0xFFFF, 0x10000}) {
+            String character = Character.toString(codePoint);
+            int width = utf8Bytes(character);
+            String fits = character.repeat(63 / width) + "a".repeat(63 % width);
+            String overflows = fits + "a";
+            assertEquals(63, utf8Bytes(fits));
+
+            assertInstanceOf(IdentifierMapping.Exact.class, map(new TableCoordinate("shop", fits)),
+                    "TP §7.1: U+%04X is %d UTF-8 bytes, so this name is exactly 63 bytes".formatted(codePoint, width));
+            assertInstanceOf(IdentifierMapping.Renamed.class, map(new TableCoordinate("shop", overflows)),
+                    "TP §7.1: U+%04X is %d UTF-8 bytes, so this name is 64 bytes".formatted(codePoint, width));
+        }
+    }
+
     // --- The rename ------------------------------------------------------------------------------
 
     @Test

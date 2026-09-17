@@ -180,6 +180,40 @@ class NumericMappingContractTest {
     }
 
     @Test
+    void decimalIsKeptAtEveryParameterBoundaryAndRefusedJustPastIt() {
+        for (int[] ps : new int[][] {{1, 0}, {5, 0}, {5, 5}, {65, 0}, {65, 30}}) {
+            String columnType = "decimal(" + ps[0] + "," + ps[1] + ")";
+            assertEquals(new TargetType(TargetTypeName.NUMERIC, List.of(ps[0], ps[1])),
+                    supported(column("decimal", columnType).precision(ps[0], ps[1]), OFF).targetType(),
+                    "TP §6.2: MySQL allows 1 <= p <= 65 and 0 <= s <= min(p, 30); " + columnType + " is kept exactly");
+        }
+        for (int[] ps : new int[][] {{0, 0}, {66, 0}, {65, 31}, {5, -1}}) {
+            SourceColumn outOfRange = column("decimal", "decimal(" + ps[0] + "," + ps[1] + ")").precision(ps[0], ps[1]).build();
+            Unsupported refused = assertInstanceOf(Unsupported.class, PAIR.map(outOfRange, OFF),
+                    "TP §6.1: MySQL cannot report DECIMAL(" + ps[0] + "," + ps[1] + "), so the facts are refused");
+            assertSame(MappingUnsupportedReason.SOURCE_FACTS_INCONSISTENT, refused.reason());
+        }
+    }
+
+    @Test
+    void bitWidthComesFromNumericPrecisionAndFallsBackToTheColumnType() {
+        assertEquals(new TargetType(TargetTypeName.SMALLINT, List.of()),
+                supported(column("bit", "bit").precision(3), OFF).targetType(),
+                "numeric_precision is the BIT width when information_schema reports it");
+        assertEquals(new TargetType(TargetTypeName.SMALLINT, List.of()),
+                supported(column("bit", "bit(3)"), OFF).targetType(),
+                "without numeric_precision the width is the column_type display width");
+        for (SourceColumns impossible : List.of(
+                column("bit", "bit(0)").precision(0),
+                column("bit", "bit(65)").precision(65),
+                column("bit", "bit(3) unsigned").precision(3))) {
+            Unsupported refused = assertInstanceOf(Unsupported.class, PAIR.map(impossible.build(), OFF),
+                    "TP §6.1: MySQL BIT is 1..64 bits wide and never unsigned: " + impossible.build());
+            assertSame(MappingUnsupportedReason.SOURCE_FACTS_INCONSISTENT, refused.reason());
+        }
+    }
+
+    @Test
     void bitBelow8IsSmallintAndBit8OrWiderIsUnsupported() {
         for (int n = 1; n <= 7; n++) {
             assertEquals(new TargetType(TargetTypeName.SMALLINT, List.of()),

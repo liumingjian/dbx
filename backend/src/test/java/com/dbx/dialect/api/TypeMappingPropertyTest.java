@@ -2,6 +2,7 @@ package com.dbx.dialect.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -90,6 +91,30 @@ class TypeMappingPropertyTest {
             if (seen != null && !seen.equals(first)) {
                 fail("two different decisions share a fingerprint:\n" + seen + "\n" + first);
             }
+        }
+    }
+
+    /**
+     * Generated inputs almost never agree on every fact but one, so the sampling above cannot see a fact
+     * the encoding drops. These pairs differ in exactly one numeric fact and are refused either way.
+     */
+    @Test
+    void refusalsThatDifferInOneNumericFactFingerprintDifferently() {
+        List<List<SourceColumns>> pairs = List.of(
+                List.of(SourceColumns.column("decimal", "decimal(5,6)").precision(5, 6),
+                        SourceColumns.column("decimal", "decimal(5,6)").precision(5, 7)),
+                List.of(SourceColumns.column("char", "char(0)").characterLength(0, 0),
+                        SourceColumns.column("char", "char(0)").characterLength(0, 4)),
+                List.of(SourceColumns.column("time", "time(9)").datetimePrecision(8),
+                        SourceColumns.column("time", "time(9)").datetimePrecision(9)));
+        for (List<SourceColumns> pair : pairs) {
+            SourceColumn one = pair.get(0).build();
+            SourceColumn other = pair.get(1).build();
+            Unsupported first = assertInstanceOf(Unsupported.class, PAIR.map(one, MappingOptions.DEFAULTS), one.toString());
+            Unsupported second = assertInstanceOf(Unsupported.class, PAIR.map(other, MappingOptions.DEFAULTS), other.toString());
+
+            assertNotEquals(first.mappingFingerprint(), second.mappingFingerprint(),
+                    "TP §15.1: a refusal's fingerprint covers every fact it was decided from: " + one + " vs " + other);
         }
     }
 

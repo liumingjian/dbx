@@ -79,7 +79,9 @@ class CharacterBinarySpecialMappingContractTest {
     void binaryAndVarbinaryAreBytea() {
         for (SourceColumns bytes : List.of(
                 column("binary", "binary(16)").characterLength(16, 16),
-                column("varbinary", "varbinary(255)").characterLength(255, 255))) {
+                column("varbinary", "varbinary(255)").characterLength(255, 255),
+                column("binary", "binary(16)").characterLength(16, 16).charset("binary", "binary"),
+                column("blob", "blob").characterLength(65535, 65535).charset("binary", "binary"))) {
             Supported decision = supported(bytes, OFF);
             assertEquals(new TargetType(TargetTypeName.BYTEA, List.of()), decision.targetType(), "TP §6.3");
             assertEquals(new ConnectRepresentation(SchemaType.BYTES, Optional.empty()),
@@ -227,6 +229,9 @@ class CharacterBinarySpecialMappingContractTest {
                 column("enum", "enum").charset(UTF8MB4, UTF8MB4_CI),
                 column("enum", "enum('a''").charset(UTF8MB4, UTF8MB4_CI),
                 column("set", "set('a' 'b')").charset(UTF8MB4, UTF8MB4_CI),
+                column("enum", "enum('a',)").charset(UTF8MB4, UTF8MB4_CI),
+                column("enum", "enum('a')"),
+                column("set", "set('a')"),
                 column("json", "json unsigned"))) {
             assertRefused(contradictory, MappingUnsupportedReason.SOURCE_FACTS_INCONSISTENT,
                     "TP §6.1: the decision is a function of the facts; contradictory or missing facts are refused");

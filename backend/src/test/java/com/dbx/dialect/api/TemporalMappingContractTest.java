@@ -186,6 +186,15 @@ class TemporalMappingContractTest {
     }
 
     @Test
+    void aReportedFractionOfZeroOnDateOrYearMeansNoFraction() {
+        for (SourceColumns noFraction : List.of(
+                column("date", "date").datetimePrecision(0), column("year", "year").datetimePrecision(0))) {
+            assertEquals(new TargetType(TargetTypeName.DATE, List.of()), supported(noFraction, OFF).targetType(),
+                    "a datetime_precision of 0 says what an absent one says: " + noFraction.build());
+        }
+    }
+
+    @Test
     void contradictoryFactsAreRefusedNotGuessed() {
         for (SourceColumns contradictory : List.of(
                 column("datetime", "datetime(6)").datetimePrecision(3),
