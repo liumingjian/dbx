@@ -22,11 +22,11 @@ An entry point its slice has not landed throws `NotImplementedInSlice` naming it
 - `catalog/` — the compile-time catalog: endpoint release series and certified pairs, registered separately
 - `pair/` — `MySql80ToPostgres15` composes one class per capability: `PairRegistration` + `DescriptorCodecV1` (2), `TypeMapper` (3), `IdentifierMapper` (4), `PairRequirements` (9)
   - `TypeMapper` dispatches on the sealed `MySqlDataType` (one enum per TP §6 family) to `NumericMapping`, `CharacterBinarySpecialMapping`, `TemporalMapping`; shared fact readings live in `SourceFacts`
-- `mysql/`, `postgres/` — the two endpoint dialects (slices 5–6, 7–8)
+- `mysql/`, `postgres/` — the two endpoint dialects (slices 5–6, 7–8); `mysql.QueryProjection.columnExpression` is the one per-column read expression (projection and slice 6 envelope scan)
 
 ## Contract test
 
-`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting); `NumericMappingContractTest`, `CharacterBinarySpecialMappingContractTest`, `TemporalMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`; `SourceCapabilityPlansContractTest` (read-only capability plans, MySQL quoting). Later slices add `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
+`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting); `NumericMappingContractTest`, `CharacterBinarySpecialMappingContractTest`, `TemporalMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`; `SourceCapabilityPlansContractTest` (read-only capability plans, MySQL quoting); `SourceDialectContractTest` (`queryProjection*`: prune, rename, quoting, rule agreement). Later slices add `TargetDialectContractTest`, `PairContractTest`.
 
 ## Read
 

@@ -85,7 +85,7 @@ public final class MySql80SourceDialect extends SourceDialect {
 
     @Override
     public ProjectionSql queryProjection(List<ApprovedColumn> approvedColumns, List<MappingRule> mappingRules) {
-        throw new NotImplementedInSlice("source.queryProjection", 5);
+        return QueryProjection.render(approvedColumns, mappingRules);
     }
 
     @Override
