@@ -89,7 +89,7 @@ class BoundedReadContractTest {
                         READ.rounding(), READ.largeRecord(), READ.pollInterval(), READ.bulkQuerySuffix(),
                         READ.bulkReadCapBytes()),
                 "ADR-0033: cursor fetch is a mandatory platform policy");
-        assertTrue(failure.getMessage().contains("ADR-0033"), "the failure names its ruling: " + failure.getMessage());
+        assertTrue(failure.getMessage().contains("ADR-0033"), "ADR-0033: the failure names its ruling: " + failure.getMessage());
     }
 
     /** {@code connector.deriveBox} computes from M; nothing reachable from the declaration takes an argument. */

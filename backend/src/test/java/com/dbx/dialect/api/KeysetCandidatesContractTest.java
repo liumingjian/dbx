@@ -101,7 +101,7 @@ class KeysetCandidatesContractTest {
     void uniqueIndexOrderIsRowOrderNotJavaOrder() {
         List<String> serverOrder = List.of("a_created", "B_customer", "c_lower");
         assertNotEquals(serverOrder, serverOrder.stream().sorted(Comparator.naturalOrder()).toList(),
-                "the fixture must be one where String.compareTo disagrees with the server's collation");
+                "ADR-0037 §Choice: the fixture must be one where String.compareTo disagrees with the server's collation");
         SourceTableMetadata orders = table(
                 List.of(notNull("created", "bigint"), notNull("customer", "int"), notNull("lower", "smallint")),
                 unique("a_created", "created"), unique("B_customer", "customer"), unique("c_lower", "lower"));
@@ -118,7 +118,7 @@ class KeysetCandidatesContractTest {
                 unique("c_code_again", "code"));
 
         assertEquals(List.of(pk("id"), uk("code")), SOURCE.keysetCandidates(orders),
-                "ticket #129: a column is offered once, as PRIMARY_KEY when the primary key is on it");
+                "ADR-0037 §Choice (obligation 18): a column is offered once, as PRIMARY_KEY when the primary key is on it");
     }
 
     @Test
@@ -145,7 +145,8 @@ class KeysetCandidatesContractTest {
         }
 
         assertEquals(expected, SOURCE.keysetCandidates(table(cols, indexes.toArray(SourceIndex[]::new))),
-                "ticket #129: tinyint, smallint, mediumint, int and bigint qualify, signed and unsigned");
+                "ADR-0037 §Choice (obligation 18): tinyint, smallint, mediumint, int and bigint qualify, signed and "
+                        + "unsigned");
     }
 
     @Test
@@ -165,7 +166,8 @@ class KeysetCandidatesContractTest {
                 index("n_plain", false, true, "plain"));
 
         assertEquals(List.of(), SOURCE.keysetCandidates(orders),
-                "ticket #129: composite, nullable, varchar, decimal(p,0), tinyint(1), expression and non-unique "
+                "ADR-0037 §Choice (obligation 18): composite, nullable, varchar, decimal(p,0), tinyint(1), expression "
+                        + "and non-unique "
                         + "indexes never offer a keyset column");
     }
 
@@ -174,6 +176,6 @@ class KeysetCandidatesContractTest {
         SourceTableMetadata log = table(List.of(nullable("line", "text")));
 
         assertEquals(List.of(), SOURCE.keysetCandidates(log),
-                "ticket #129: an empty list is a valid answer; the table goes to the bulk path");
+                "ADR-0037 §Bulk path (obligation 18): an empty list is a valid answer; the table goes to the bulk path");
     }
 }

@@ -164,7 +164,8 @@ class SourceMetadataContractTest {
         assertEquals(2, plan.statements().size(), "obligation 19b: the stats-expiry statement, then the read");
         assertEquals("SET SESSION information_schema_stats_expiry = 0", plan.statements().get(0).sql(),
                 "obligation 19b: statistics are read fresh, by a session setting that needs no privilege");
-        assertEquals(List.of(), plan.statements().get(0).parameters());
+        assertEquals(List.of(), plan.statements().get(0).parameters(),
+                "obligation 19b: the stats-expiry statement binds nothing");
         assertEquals(EXPECTED_READ, plan.statements().get(1).sql(),
                 "obligation 15: the read is exactly COLUMNS, STATISTICS, KEY_COLUMN_USAGE + REFERENTIAL_CONSTRAINTS "
                         + "and TABLES, names bound, rows numbered by the server");
@@ -257,7 +258,7 @@ class SourceMetadataContractTest {
             assertTrue(read.parameters().stream().allMatch(value -> value.equals(new SqlValue.Text(name))),
                     "ADR-0008 §Plans: the hostile name travels only as a bound value: " + name);
             if (!benign.statements().get(1).sql().contains(name)) {
-                assertFalse(read.sql().contains(name), "no identifier is spliced into metadata SQL: " + name);
+                assertFalse(read.sql().contains(name), "obligation 15: no identifier is spliced into metadata SQL: " + name);
             }
         }
     }
@@ -279,12 +280,12 @@ class SourceMetadataContractTest {
     @Test
     void aScopeThatCannotBeReadIsRefused() {
         assertThrows(IllegalArgumentException.class, () -> SOURCE.metadataPlan(scope("shop")),
-                "a metadata read of no table is not a plan: IN () is not SQL");
+                "obligation 15: a metadata read of no table is not a plan: IN () is not SQL");
         assertThrows(IllegalArgumentException.class, () -> SOURCE.metadataPlan(new MetadataScope(
                 new SchemaCoordinate("shop"), List.of(new TableCoordinate("other", "orders")))),
-                "a scope covers one database; a table of another is a caller error");
+                "obligation 15: a scope covers one database; a table of another is a caller error");
         assertThrows(IllegalArgumentException.class, () -> SOURCE.metadataPlan(scope("shop", "orders", "orders")),
-                "a table is read once");
+                "obligation 15: a table is read once");
     }
 
     // --- Normalisation (obligations 15, 19b) ------------------------------------------------------
@@ -379,14 +380,14 @@ class SourceMetadataContractTest {
         assertEquals(OptionalLong.empty(), customers.statistics().dataLength(),
                 "ADR-0002 ¶4: a NULL DATA_LENGTH is absent, never 0");
         assertEquals(OptionalLong.of(0), customers.statistics().averageRowLength(),
-                "a reported 0 is a fact and stays 0");
+                "ADR-0002 ¶4: a reported 0 is a fact and stays 0");
     }
 
     @Test
     void indexOrderFollowsRowOrderNotJavaOrder() {
         List<String> serverOrder = List.of("a_created", "B_customer", "c_lower", "PRIMARY", "x_code");
         List<String> javaOrder = serverOrder.stream().sorted(Comparator.naturalOrder()).toList();
-        assertNotEquals(serverOrder, javaOrder, "the fixture must be one where Java's order disagrees");
+        assertNotEquals(serverOrder, javaOrder, "ADR-0037 §Choice: the fixture must be one where Java's order disagrees");
 
         SourceTableMetadata orders = SOURCE.normalizeMetadata(rowsOf(List.of(ordersFixture()))).get(0);
 
@@ -394,9 +395,9 @@ class SourceMetadataContractTest {
                 "ADR-0037 §Choice: index order is the server's collation order as the rows carry it, never "
                         + "re-sorted in Java");
         assertEquals(List.of("fk_customer", "Fk_code"), orders.foreignKeys().stream().map(SourceForeignKey::name).toList(),
-                "foreign keys keep row order too");
+                "obligation 15: foreign keys keep row order too");
         assertEquals(Optional.of("PRIMARY"), orders.primaryKey().map(SourceIndex::name),
-                "the primary key is the index MySQL names PRIMARY");
+                "obligation 15: the primary key is the index MySQL names PRIMARY");
     }
 
     @Test
@@ -405,7 +406,7 @@ class SourceMetadataContractTest {
 
         assertEquals(List.of(CUSTOMERS, ORDERS),
                 SOURCE.normalizeMetadata(rowsOf(reversed)).stream().map(SourceTableMetadata::table).toList(),
-                "normalizeMetadata never re-sorts tables; their order is the server's");
+                "obligation 15: normalizeMetadata never re-sorts tables; their order is the server's");
     }
 
     // --- Contradictory rows (ticket #125) ---------------------------------------------------------
@@ -418,8 +419,9 @@ class SourceMetadataContractTest {
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
                 () -> SOURCE.normalizeMetadata(rows(rows)),
-                "ticket #125: a key part naming an unknown column is a broken read, not an Unsupported");
-        assertTrue(failure.getMessage().contains(orders("ghost").toString()), failure.getMessage());
+                "obligation 15: a key part naming an unknown column is a broken read, not an Unsupported");
+        assertTrue(failure.getMessage().contains(orders("ghost").toString()),
+                "obligation 15: a contradictory row is refused naming its coordinate: " + failure.getMessage());
     }
 
     @Test
@@ -436,9 +438,9 @@ class SourceMetadataContractTest {
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
                 () -> SOURCE.normalizeMetadata(rows(rows)),
-                "ticket #125: a foreign key without its columns is a broken read, not an Unsupported");
+                "obligation 15: a foreign key without its columns is a broken read, not an Unsupported");
         assertTrue(failure.getMessage().contains("fk_orphan") && failure.getMessage().contains(ORDERS.toString()),
-                failure.getMessage());
+                "obligation 15: a contradictory row is refused naming its coordinate: " + failure.getMessage());
     }
 
     @Test
@@ -448,8 +450,10 @@ class SourceMetadataContractTest {
                 .findFirst().orElseThrow().put("fk_column_name", text("ghost"));
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-                () -> SOURCE.normalizeMetadata(rows(rows)));
-        assertTrue(failure.getMessage().contains(orders("ghost").toString()), failure.getMessage());
+                () -> SOURCE.normalizeMetadata(rows(rows)),
+                "obligation 15: a foreign key column outside its table is a broken read, not an Unsupported");
+        assertTrue(failure.getMessage().contains(orders("ghost").toString()),
+                "obligation 15: a contradictory row is refused naming its coordinate: " + failure.getMessage());
     }
 
     @Test
@@ -458,8 +462,24 @@ class SourceMetadataContractTest {
         rows.removeIf(row -> text("TABLE").equals(row.get("fact")));
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-                () -> SOURCE.normalizeMetadata(rows(rows)));
-        assertTrue(failure.getMessage().contains(ORDERS.toString()), failure.getMessage());
+                () -> SOURCE.normalizeMetadata(rows(rows)),
+                "obligation 15: facts of a table without its TABLES row are a broken read, not an Unsupported");
+        assertTrue(failure.getMessage().contains(ORDERS.toString()),
+                "obligation 15: a contradictory row is refused naming its coordinate: " + failure.getMessage());
+    }
+
+    @Test
+    void anUnknownIndexTypeIsRefusedNamingIt() {
+        List<Map<String, SqlValue>> rows = rowMaps(List.of(ordersFixture()));
+        rows.stream().filter(row -> text("B_customer").equals(row.get("index_name")))
+                .forEach(row -> row.put("index_type", text("RTREE")));
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> SOURCE.normalizeMetadata(rows(rows)),
+                "obligation 15: an INDEX_TYPE outside BTREE, HASH, FULLTEXT and SPATIAL is a broken read");
+        assertTrue(failure.getMessage().contains("B_customer") && failure.getMessage().contains(ORDERS.toString())
+                        && failure.getMessage().contains("RTREE"),
+                "obligation 15: the refusal names the index, its table and the type: " + failure.getMessage());
     }
 
     @Test
@@ -468,7 +488,7 @@ class SourceMetadataContractTest {
                 ResultSchema.Cardinality.ANY_NUMBER_OF_ROWS), List.of());
 
         assertThrows(IllegalArgumentException.class, () -> SOURCE.normalizeMetadata(foreign),
-                "only rows read by source.metadataPlan can be normalised: positions are the plan's");
+                "obligation 15: only rows read by source.metadataPlan can be normalised: positions are the plan's");
     }
 
     // --- Rows as the gateway would hand them back -------------------------------------------------

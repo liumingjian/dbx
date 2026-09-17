@@ -56,7 +56,7 @@ class SourceCapabilityPlansContractTest {
     }
 
     private static String sql(SqlPlan plan) {
-        assertEquals(1, plan.statements().size(), "one statement per capability plan");
+        assertEquals(1, plan.statements().size(), "ADR-0006 §Capability checks: one statement per capability plan");
         return plan.statements().get(0).sql();
     }
 
@@ -71,7 +71,8 @@ class SourceCapabilityPlansContractTest {
         assertEquals("SELECT COUNT(*) AS `probed_rows` FROM (SELECT * FROM `shop`.`orders` LIMIT 0) AS `select_probe`",
                 sql(plans.get(1)), "ADR-0006: tables are probed in scope order");
         assertEquals("SELECT COUNT(*) AS `probed_rows` FROM (SELECT * FROM `shop`.`customers` LIMIT 0) AS `select_probe`",
-                sql(plans.get(2)));
+                sql(plans.get(2)),
+                "ADR-0006: tables are probed in scope order");
         assertEquals(List.of(plans.get(0)), plans("shop"),
                 "ADR-0006: an empty table scope still reads the effective settings");
     }
@@ -84,11 +85,13 @@ class SourceCapabilityPlansContractTest {
         assertEquals(TimeoutClass.CAPABILITY_PROBE, probe.timeoutClass(), "obligation 20");
         assertEquals(Set.of(RequiredPrivilege.SOURCE_SELECT), probe.requiredPrivileges(),
                 "ADR-0006: the probe exercises SELECT on the chosen table and needs nothing else");
-        assertEquals(EvidencePolicy.STATEMENT_AND_RESULT, probe.evidencePolicy());
+        assertEquals(EvidencePolicy.STATEMENT_AND_RESULT, probe.evidencePolicy(),
+                "ADR-0006 §Capability checks: a probe keeps its statement and result as evidence");
         assertEquals("SELECT COUNT(*) AS `probed_rows` FROM (SELECT * FROM `shop`.`order``s` LIMIT 0) AS `select_probe`",
                 sql(probe), "ADR-0006: `*` demands SELECT on every column, LIMIT 0 reads no row, and LIMIT keeps "
                         + "the derived table from being merged away");
-        assertEquals(List.of(), probe.statements().get(0).parameters());
+        assertEquals(List.of(), probe.statements().get(0).parameters(),
+                "ADR-0008 §Plans: the probe binds nothing; its only names are quoted identifiers");
         assertEquals(new ResultSchema(List.of(new ResultSchema.Column("probed_rows", "bigint", Nullability.NOT_NULL)),
                         ResultSchema.Cardinality.EXACTLY_ONE_ROW), probe.resultSchema(),
                 "ADR-0008 §Plans: the result is typed without knowing the table's columns, by counting the "
@@ -102,9 +105,11 @@ class SourceCapabilityPlansContractTest {
         assertEquals(OperationKind.SOURCE_CAPABILITY_CHECK, settings.operationKind(), "obligation 20");
         assertEquals(TimeoutClass.CAPABILITY_PROBE, settings.timeoutClass(), "obligation 20");
         assertEquals(Set.of(), settings.requiredPrivileges(), "TP §6.5: reading system variables needs no privilege");
-        assertEquals(EvidencePolicy.STATEMENT_AND_RESULT, settings.evidencePolicy());
+        assertEquals(EvidencePolicy.STATEMENT_AND_RESULT, settings.evidencePolicy(),
+                "TP §6.5: the settings read keeps its statement and result as evidence");
         assertEquals(SETTINGS_SQL, sql(settings), "TP §6.5: settings are read as facts, not trusted from configuration");
-        assertEquals(ResultSchema.Cardinality.EXACTLY_ONE_ROW, settings.resultSchema().cardinality());
+        assertEquals(ResultSchema.Cardinality.EXACTLY_ONE_ROW, settings.resultSchema().cardinality(),
+                "TP §6.5 last paragraph: the settings are one row of facts");
 
         Map<String, String> typed = new TreeMap<>();
         settings.resultSchema().columns().forEach(c -> typed.put(c.label(), c.databaseType() + " " + c.nullability()));
@@ -121,7 +126,7 @@ class SourceCapabilityPlansContractTest {
                 Map.entry("sql_mode", "varchar NOT_NULL"),
                 Map.entry("information_schema_stats_expiry", "bigint unsigned NOT_NULL"))), typed,
                 "TP §6.5 last paragraph: every named setting is a typed result column");
-        assertEquals(11, settings.resultSchema().columns().size(), "no setting is read twice or left untyped");
+        assertEquals(11, settings.resultSchema().columns().size(), "TP §6.5 last paragraph: no setting is read twice or left untyped");
     }
 
     // --- Fingerprints (ADR-0008 §Plans) --------------------------------------------------------------
@@ -151,7 +156,7 @@ class SourceCapabilityPlansContractTest {
             assertNotEquals(base, variant.getValue(),
                     "ADR-0008 §Plans: changing only the scope's " + variant.getKey() + " must change the fingerprints");
         }
-        assertEquals(base, fingerprints(plans("shop", "orders", "customers")), "equal scopes plan equally");
+        assertEquals(base, fingerprints(plans("shop", "orders", "customers")), "ADR-0008 §Plans: equal scopes plan equally");
     }
 
     private static List<PlanFingerprint> fingerprints(List<SqlPlan> plans) {
@@ -164,7 +169,7 @@ class SourceCapabilityPlansContractTest {
                         new SchemaCoordinate("shop"), List.of(new TableCoordinate("other", "orders")))),
                 "a capability scope covers the one selected database (ADR-0006)");
         assertThrows(IllegalArgumentException.class, () -> plans("shop", "orders", "orders"),
-                "a repeated table is a caller error, not a second probe");
+                "ADR-0006: a repeated table is a caller error, not a second probe");
     }
 
     // --- Read-only (obligation 20; ADR-0006 §Capability checks) --------------------------------------
@@ -235,7 +240,8 @@ class SourceCapabilityPlansContractTest {
         assertEquals("SELECT COUNT(*) AS `probed_rows` FROM (SELECT * FROM `s`.`a\"b\\c;--/*\nd` LIMIT 0) AS `select_probe`",
                 sql(plans("s", "a\"b\\c;--/*\nd").get(1)),
                 "TP §7.1: MySQL quoting is not PostgreSQL's — a double quote, backslash, ;, --, /* and newline stay literal");
-        assertEquals(64, "é".repeat(32).getBytes(StandardCharsets.UTF_8).length);
+        assertEquals(64, "é".repeat(32).getBytes(StandardCharsets.UTF_8).length,
+                "TP §7.1: the fixture name is 64 bytes, MySQL's limit in characters and more than PostgreSQL's");
         assertTrue(sql(plans("s", "é".repeat(32)).get(1)).contains("`s`.`" + "é".repeat(32) + "`"),
                 "TP §7.1: a 64-byte name is quoted whole, never cut");
         assertThrows(IllegalArgumentException.class, () -> plans("s", "nul\u0000name"),

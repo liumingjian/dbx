@@ -75,7 +75,8 @@ class SourceDialectContractTest {
     void queryProjectionIsNotChangedByTableRenameOrTargetTypeOverride() {
         List<ApprovedColumn> columns = List.of(approved("id", "id"));
         String plain = projection(columns, List.of());
-        assertEquals("SELECT `id` AS `id` FROM `shop`.`orders`", plain);
+        assertEquals("SELECT `id` AS `id` FROM `shop`.`orders`", plain,
+                "obligation 19a: the projection with no rule is the plain backtick-quoted read");
         assertEquals(plain, projection(columns, List.of(
                         new TableRename(new TableCoordinate("shop", "orders"), new TargetIdentifier("orders_v2"), USER),
                         new TargetTypeOverride(column("id"), new TargetType(TargetTypeName.TEXT, List.of()), USER))),
@@ -151,7 +152,8 @@ class SourceDialectContractTest {
     void queryProjectionRejectsAPruneOfAProjectedColumn() {
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
                 () -> projection(List.of(approved("id", "id"), approved("secret", "secret")),
-                        List.of(new ColumnPrune(column("secret"), AUTO))));
+                        List.of(new ColumnPrune(column("secret"), AUTO))),
+                "contract obligation 8: a prune of a projected column disagrees with the approved columns");
         assertTrue(failure.getMessage().contains("ColumnPrune") && failure.getMessage().contains("secret"),
                 "contract obligation 8: a prune of a projected column names the disagreement: " + failure.getMessage());
     }
@@ -160,7 +162,8 @@ class SourceDialectContractTest {
     void queryProjectionRejectsARenameToAnotherTarget() {
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
                 () -> projection(List.of(approved("id", "order_id")),
-                        List.of(new ColumnRename(column("id"), new TargetIdentifier("orderid"), USER))));
+                        List.of(new ColumnRename(column("id"), new TargetIdentifier("orderid"), USER))),
+                "contract obligation 8: a rename to another target disagrees with the approved columns");
         assertTrue(failure.getMessage().contains("ColumnRename") && failure.getMessage().contains("orderid")
                         && failure.getMessage().contains("order_id"),
                 "contract obligation 8: a rename disagreeing with the approved target names both: " + failure.getMessage());
@@ -171,7 +174,8 @@ class SourceDialectContractTest {
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
                 () -> PAIR.source().queryProjection(List.of(approved("id", "id"),
                         new ApprovedColumn(new ColumnCoordinate("shop", "customers", "name"), new TargetIdentifier("name"))),
-                        List.of()));
+                        List.of()),
+                "obligation 19a: a projection reads one table");
         assertTrue(failure.getMessage().contains("orders") && failure.getMessage().contains("customers"),
                 "obligation 19a: a projection reads one table; the message names both: " + failure.getMessage());
     }
@@ -179,7 +183,8 @@ class SourceDialectContractTest {
     @Test
     void queryProjectionRejectsAnEmptyColumnList() {
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-                () -> projection(List.of(), List.of()));
+                () -> projection(List.of(), List.of()),
+                "obligation 19a: an empty projection is not a query");
         assertTrue(failure.getMessage().contains("at least one approved column"),
                 "obligation 19a: an empty projection is not a query: " + failure.getMessage());
     }

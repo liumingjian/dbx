@@ -159,7 +159,7 @@ class SupplementalStatementsContractTest {
 
         List<String> sql = sql(PAIR.target().supplementalStatements(structures));
 
-        assertEquals(6, sql.size());
+        assertEquals(6, sql.size(), "ADR-0026 §Supplemental SQL: one statement per deferred structure");
         assertTrue(sql.get(0).endsWith("CREATE INDEX ON \"a\".\"a\" (\"code\")")
                         && sql.get(1).startsWith("COMMENT ON TABLE \"a\".\"a\"")
                         && sql.get(2).startsWith("COMMENT ON TABLE \"z\".\"z\""),
@@ -298,7 +298,8 @@ class SupplementalStatementsContractTest {
     void aTargetNameOf63BytesIsKeptAndOf64BytesIsRefused() {
         String bytes63 = "订".repeat(21);
         String bytes64 = bytes63 + "a";
-        assertEquals(63, bytes63.getBytes(StandardCharsets.UTF_8).length);
+        assertEquals(63, bytes63.getBytes(StandardCharsets.UTF_8).length,
+                "TP §7.1: the fixture name is exactly PostgreSQL's 63-byte limit");
 
         String kept = sql(PAIR.target().supplementalStatements(List.of(new DeferredStructure.ColumnCommentText(ORDERS,
                 target(bytes63, bytes63), approved(ORDERS, "c", bytes63), "x")))).get(0);
@@ -498,7 +499,8 @@ class SupplementalStatementsContractTest {
             String sql = statement.sql();
             String executable = executablePart(sql);
             String comments = sql.substring(0, sql.length() - executable.length());
-            assertFalse(comments.contains("\r"), "a CR would end a PostgreSQL comment early: " + sql);
+            assertFalse(comments.contains("\r"),
+                    "ADR-0026 §Supplemental SQL: a CR would end a PostgreSQL comment early: " + sql);
             return statement.disposition() + " " + statement.reason() + " "
                     + (comments.isEmpty() ? "" : "-- _\n") + literals(executable);
         }).toList();

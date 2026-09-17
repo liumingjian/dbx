@@ -223,8 +223,10 @@ class TargetDialectContractTest {
         String bytes63 = "订".repeat(21);
         String other63 = "é".repeat(31) + "a";
         String bytes64 = "订".repeat(21) + "a";
-        assertEquals(63, bytes63.getBytes(StandardCharsets.UTF_8).length);
-        assertEquals(63, other63.getBytes(StandardCharsets.UTF_8).length);
+        assertEquals(63, bytes63.getBytes(StandardCharsets.UTF_8).length,
+                "TP §7.1: the fixture name is exactly PostgreSQL's 63-byte limit");
+        assertEquals(63, other63.getBytes(StandardCharsets.UTF_8).length,
+                "TP §7.1: the fixture name is exactly PostgreSQL's 63-byte limit");
 
         String ddl = String.join("\n", sql(PAIR.target().ddlPlan(named(bytes63, bytes63, "a".repeat(62), other63))));
         for (String kept : List.of(bytes63, other63, "a".repeat(62) + "e")) {
