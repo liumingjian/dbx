@@ -11,7 +11,9 @@ Pure and at the bottom of the graph: depends on no other module, no `JdbcTemplat
 - `SourceDialect` (its only constructor demands a `BoundedReadRequirement`, ADR-0033), `TargetDialect` → the plan, normalisation and settings capabilities of the sub-spec §Interface
 - `DescriptorCodec` → reads and writes only its own `DescriptorVersion`; an unknown version is `Unsupported`
 - `SqlPlan` → immutable, closed `OperationKind`, bound `SqlValue`s, `ResultSchema`, `TimeoutClass`, `RequiredPrivilege`s, `EvidencePolicy`, `fingerprint()`
-- `TargetIdentifier.quoted()` → the one place an identifier becomes SQL text (always double-quoted)
+- `TargetIdentifier.quoted()` → double-quoted text; PostgreSQL SQL takes a name only through `postgres.PostgresIdentifier.quoted`, which first refuses a name over 63 bytes (the one byte limit, shared with `IdentifierMapper`). MySQL SQL takes one only through package-private `mysql.MySqlIdentifier` (backticks)
+- `postgres.PostgresLiteral` → the single literal renderer, for DDL `DEFAULT`/`CHECK` and supplemental SQL only (ADR-0008 §Plans as amended by #123); every other value is bound
+- `ConnectionSemantics`, `SinkSettings` (the single `V1`) → ordered `ConnectorProperty` records, never a map; `BoundedReadRequirement` → M-independent constants only (`connector.deriveBox` applies M)
 - `ProofOutcome` → `PROVEN | INCONCLUSIVE | REJECTED`
 
 An entry point its slice has not landed throws `NotImplementedInSlice` naming itself and the slice; it never returns an empty value.
@@ -22,11 +24,12 @@ An entry point its slice has not landed throws `NotImplementedInSlice` naming it
 - `catalog/` — the compile-time catalog: endpoint release series and certified pairs, registered separately
 - `pair/` — `MySql80ToPostgres15` composes one class per capability: `PairRegistration` + `DescriptorCodecV1` (2), `TypeMapper` (3), `IdentifierMapper` (4), `PairRequirements` (9)
   - `TypeMapper` dispatches on the sealed `MySqlDataType` (one enum per TP §6 family) to `NumericMapping`, `CharacterBinarySpecialMapping`, `TemporalMapping`; shared fact readings live in `SourceFacts`
-- `mysql/`, `postgres/` — the two endpoint dialects (slices 5–6, 7–8)
+- `mysql/`, `postgres/` — the two endpoint dialects (slices 5–6, 7–8); `mysql.QueryProjection.columnExpression` is the one per-column read expression (projection and slice 6 envelope scan)
+  - neither imports the other (ADR-0008): supplemental comments quote source definitions from `postgres.SourceDefinitions`, which the pair wires to `mysql.MySqlDefinitions`
 
 ## Contract test
 
-`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting); `NumericMappingContractTest`, `CharacterBinarySpecialMappingContractTest`, `TemporalMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`. Later slices add `SourceDialectContractTest`, `TargetDialectContractTest`, `PairContractTest`.
+`DialectContractTest` (stubs, closed results, plan shape, fingerprint, hostile names and values, module purity); `DialectCatalogContractTest` (selection, refusals, `list`, codecs, bounded-read precondition); `IdentifierMappingContractTest` (byte-counted limit, rename, quoting); `NumericMappingContractTest`, `CharacterBinarySpecialMappingContractTest`, `TemporalMappingContractTest`, `TypeMappingExhaustiveTest` (fixture `src/test/resources/dialect/`), `TypeMappingPropertyTest`, golden set `type-mapping-matrix`; `ConnectionSemanticsContractTest`, `BoundedReadContractTest`, `SinkSettingsContractTest`; `SourceCapabilityPlansContractTest` (read-only capability plans, MySQL quoting); `SourceMetadataContractTest` (metadata plan text, fresh statistics, bound names, normalisation); `KeysetCandidatesContractTest` (ADR-0037 §Choice order and exclusions); `SourceDialectContractTest` (`queryProjection*`: prune, rename, quoting, rule agreement); `TargetDialectContractTest` (`ddlPlan`: plan shape, exact DDL, fingerprints, hostile names and literals, forbidden tokens, inconsistent tables); `SupplementalStatementsContractTest` (supplemental SQL text and order, reasons, hostile names, foreign keys last). Later slices add `PairContractTest`.
 
 ## Read
 

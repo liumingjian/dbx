@@ -1,32 +1,33 @@
 package com.dbx.dialect.api;
 
+import java.util.List;
+
 /**
- * The JDBC Sink settings obligation 29 fixes. Slice 7 makes the fixed values the only expressible
- * ones; until then this is the shape they are declared in.
+ * The JDBC Sink settings obligation 29 fixes (ADR-0011 §Sink contract; TP §6.5). There is exactly one
+ * value, {@link #V1}, and no constructor outside this type, so no other Sink configuration is expressible.
  */
-public record SinkSettings(
-        boolean autoCreate,
-        boolean autoEvolve,
-        InsertMode insertMode,
-        PrimaryKeyMode primaryKeyMode,
-        boolean deleteEnabled,
-        QuoteIdentifiers quoteIdentifiers) {
+public final class SinkSettings {
 
-    public SinkSettings {
-        Checks.present(insertMode, "insertMode");
-        Checks.present(primaryKeyMode, "primaryKeyMode");
-        Checks.present(quoteIdentifiers, "quoteIdentifiers");
+    /** The only Sink settings v1 has. */
+    public static final SinkSettings V1 = new SinkSettings();
+
+    private SinkSettings() {
     }
 
-    public enum InsertMode {
-        INSERT
+    /** ADR-0011 §Sink contract's properties in its order, then UTC session semantics (TP §6.5). */
+    public List<ConnectorProperty> properties() {
+        return List.of(
+                new ConnectorProperty.Flag("auto.create", false),
+                new ConnectorProperty.Flag("auto.evolve", false),
+                new ConnectorProperty.Text("insert.mode", "insert"),
+                new ConnectorProperty.Text("pk.mode", "none"),
+                new ConnectorProperty.Flag("delete.enabled", false),
+                new ConnectorProperty.Text("quote.sql.identifiers", "always"),
+                new ConnectorProperty.Text("db.timezone", "UTC"));
     }
 
-    public enum PrimaryKeyMode {
-        NONE
-    }
-
-    public enum QuoteIdentifiers {
-        ALWAYS
+    @Override
+    public String toString() {
+        return "SinkSettings" + properties();
     }
 }

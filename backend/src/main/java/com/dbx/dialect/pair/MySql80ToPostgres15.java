@@ -29,6 +29,8 @@ public final class MySql80ToPostgres15 implements DatabasePair {
     /** The catalog's to hand out (slice 2); until then {@code DialectContractTest} reaches it directly. */
     public static final MySql80ToPostgres15 INSTANCE = new MySql80ToPostgres15();
 
+    private static final Postgres15TargetDialect TARGET = new Postgres15TargetDialect(MySqlSourceDefinitions.INSTANCE);
+
     private MySql80ToPostgres15() {
     }
 
@@ -44,7 +46,7 @@ public final class MySql80ToPostgres15 implements DatabasePair {
 
     @Override
     public TargetDialect target() {
-        return Postgres15TargetDialect.INSTANCE;
+        return TARGET;
     }
 
     @Override

@@ -14,7 +14,7 @@ ADR-0036/0018 describe this interface without naming entry points; the names bel
 - `pair.executionRequirements(mappingDecisions) → ExecutionRequirements` (includes bounded read)
 - `pair.validationCapabilities() → ValidationCapabilities`
 - `pair.descriptorCodec(version) → DescriptorCodec | Unsupported`
-- `source.metadataPlan(scope) → SqlPlan`; `source.normalizeMetadata(rows) → SourceTableMetadata`
+- `source.metadataPlan(scope) → SqlPlan`; `source.normalizeMetadata(rows) → SourceTableMetadata` per table, in row order
 - `source.capabilityPlans(scope)`, `source.preflightScanPlan(table, obligations)`, `source.baselinePlan(table, keysetColumn?)`, `source.validationFactPlans(items)`, `source.samplingPlan(key, n) → SqlPlan(s)`
 - `source.keysetCandidates(SourceTableMetadata) → ordered candidates`
 - `source.queryProjection(approvedColumns, mappingRules) → ProjectionSql` (the prune/rename `SELECT … AS …` projection; #92)

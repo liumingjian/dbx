@@ -21,7 +21,7 @@ import com.dbx.dialect.api.ValidationItem;
 import java.util.List;
 import java.util.Optional;
 
-/** The MySQL 8.0 source dialect. Slices 5 and 6 implement it; until then every capability fails. */
+/** The MySQL 8.0 source dialect. Slices 5 and 6 implement it; a capability not yet landed fails. */
 public final class MySql80SourceDialect extends SourceDialect {
 
     /** Stable across releases: a contract snapshot records it (ADR-0008 §Registration). */
@@ -29,13 +29,17 @@ public final class MySql80SourceDialect extends SourceDialect {
 
     private static final long MIB = 1024L * 1024L;
 
-    /**
-     * ADR-0033 §Settings: fetches sized from 4 MiB, {@code LIMIT} keyset chunks and bulk reads within
-     * 64 MiB. The declaration exists here because a source dialect cannot be built without one; slice 5
-     * owns its content and may reshape it.
-     */
-    private static final BoundedReadRequirement BOUNDED_READ =
-            new BoundedReadRequirement(4 * MIB, 64 * MIB, 64 * MIB);
+    /** ADR-0033 §Settings and ADR-0037 §Bulk path: the constants {@code connector.deriveBox} applies to M. */
+    private static final BoundedReadRequirement BOUNDED_READ = new BoundedReadRequirement(
+            true,
+            new BoundedReadRequirement.RowBudget(4 * MIB, 1, 1024),
+            BoundedReadRequirement.BufferSizing.EQUAL_TO_FETCH_ROWS,
+            new BoundedReadRequirement.RowBudget(64 * MIB, 1, 131072),
+            BoundedReadRequirement.Rounding.POWER_OF_TWO_DOWN,
+            new BoundedReadRequirement.LargeRecordOverride(1, 4),
+            new BoundedReadRequirement.PollInterval(100, Integer.MAX_VALUE),
+            "",
+            64 * MIB);
 
     public static final MySql80SourceDialect INSTANCE = new MySql80SourceDialect();
 
@@ -45,17 +49,17 @@ public final class MySql80SourceDialect extends SourceDialect {
 
     @Override
     public SqlPlan metadataPlan(MetadataScope scope) {
-        throw new NotImplementedInSlice("source.metadataPlan", 5);
+        return MetadataRead.plan(scope);
     }
 
     @Override
-    public SourceTableMetadata normalizeMetadata(ResultRows rows) {
-        throw new NotImplementedInSlice("source.normalizeMetadata", 5);
+    public List<SourceTableMetadata> normalizeMetadata(ResultRows rows) {
+        return MetadataNormalizer.normalize(rows);
     }
 
     @Override
     public List<SqlPlan> capabilityPlans(MetadataScope scope) {
-        throw new NotImplementedInSlice("source.capabilityPlans", 5);
+        return CapabilityPlans.of(scope);
     }
 
     @Override
@@ -80,16 +84,18 @@ public final class MySql80SourceDialect extends SourceDialect {
 
     @Override
     public List<KeysetCandidate> keysetCandidates(SourceTableMetadata table) {
-        throw new NotImplementedInSlice("source.keysetCandidates", 5);
+        return KeysetCandidates.of(table);
     }
 
     @Override
     public ProjectionSql queryProjection(List<ApprovedColumn> approvedColumns, List<MappingRule> mappingRules) {
-        throw new NotImplementedInSlice("source.queryProjection", 5);
+        return QueryProjection.render(approvedColumns, mappingRules);
     }
 
     @Override
     public ConnectionSemantics connectionSemantics(MappingOptions options) {
-        throw new NotImplementedInSlice("source.connectionSemantics", 5);
+        return new ConnectionSemantics(options.tinyintOneAsBoolean(), options.zeroDateAsNull()
+                ? ConnectionSemantics.ZeroDateTimeBehavior.CONVERT_TO_NULL
+                : ConnectionSemantics.ZeroDateTimeBehavior.EXCEPTION);
     }
 }
