@@ -54,12 +54,10 @@ class DialectContractTest {
             new Stub("source.baselinePlan", 6, () -> PAIR.source().baselinePlan(null, null)),
             new Stub("source.validationFactPlans", 6, () -> PAIR.source().validationFactPlans(null)),
             new Stub("target.catalogReadPlan", 8, () -> PAIR.target().catalogReadPlan(null)),
-            new Stub("target.capabilityProbePlans", 8, () -> PAIR.target().capabilityProbePlans(null, null)),
             new Stub("target.maintenancePlans", 8, () -> PAIR.target().maintenancePlans(null)),
             new Stub("target.validationFactPlans", 8, () -> PAIR.target().validationFactPlans(null)),
             new Stub("target.samplingLookupPlan", 8, () -> PAIR.target().samplingLookupPlan(null)),
             new Stub("target.normalizeCatalog", 8, () -> PAIR.target().normalizeCatalog(null)),
-            new Stub("target.leastPrivilegeSql", 8, () -> PAIR.target().leastPrivilegeSql(null)),
             new Stub("pair.executionRequirements", 9, () -> PAIR.executionRequirements(null)),
             new Stub("pair.validationCapabilities", 9, PAIR::validationCapabilities));
 
@@ -80,7 +78,9 @@ class DialectContractTest {
             "source.preflightScanPlan",
             "source.queryProjection",
             "source.samplingPlan",
+            "target.capabilityProbePlans",
             "target.ddlPlan",
+            "target.leastPrivilegeSql",
             "target.sinkSettings",
             "target.supplementalStatements");
 
