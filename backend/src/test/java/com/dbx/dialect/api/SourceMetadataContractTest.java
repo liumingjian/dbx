@@ -44,6 +44,7 @@ class SourceMetadataContractTest {
             notNull("fact", "varchar"), notNull("fact_order", "bigint"),
             notNull("table_schema", "varchar"), notNull("table_name", "varchar"),
             nullable("table_rows", "bigint"), nullable("avg_row_length", "bigint"), nullable("data_length", "bigint"),
+            nullable("auto_increment", "bigint"),
             nullable("table_comment", "varchar"), nullable("table_collation", "varchar"),
             nullable("column_name", "varchar"), nullable("data_type", "varchar"), nullable("column_type", "varchar"),
             nullable("character_maximum_length", "bigint"), nullable("character_octet_length", "bigint"),
@@ -82,6 +83,7 @@ class SourceMetadataContractTest {
             CAST(t.TABLE_ROWS AS SIGNED) AS table_rows, \
             CAST(t.AVG_ROW_LENGTH AS SIGNED) AS avg_row_length, \
             CAST(t.DATA_LENGTH AS SIGNED) AS data_length, \
+            CAST(t.AUTO_INCREMENT AS SIGNED) AS auto_increment, \
             CONVERT(t.TABLE_COMMENT USING utf8mb4) COLLATE utf8mb4_bin AS table_comment, \
             CONVERT(t.TABLE_COLLATION USING utf8mb4) COLLATE utf8mb4_bin AS table_collation, \
             NULL AS column_name, NULL AS data_type, NULL AS column_type, NULL AS character_maximum_length, \
@@ -99,7 +101,7 @@ class SourceMetadataContractTest {
             SELECT 'COLUMN', CAST(ROW_NUMBER() OVER (ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION) AS SIGNED), \
             CONVERT(c.TABLE_SCHEMA USING utf8mb4) COLLATE utf8mb4_bin, \
             CONVERT(c.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_bin, \
-            NULL, NULL, NULL, NULL, NULL, \
+            NULL, NULL, NULL, NULL, NULL, NULL, \
             CONVERT(c.COLUMN_NAME USING utf8mb4) COLLATE utf8mb4_bin, \
             CONVERT(c.DATA_TYPE USING utf8mb4) COLLATE utf8mb4_bin, \
             CONVERT(c.COLUMN_TYPE USING utf8mb4) COLLATE utf8mb4_bin, \
@@ -121,7 +123,7 @@ class SourceMetadataContractTest {
             SELECT 'INDEX', CAST(ROW_NUMBER() OVER (ORDER BY s.TABLE_NAME, s.INDEX_NAME, s.SEQ_IN_INDEX) AS SIGNED), \
             CONVERT(s.TABLE_SCHEMA USING utf8mb4) COLLATE utf8mb4_bin, \
             CONVERT(s.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_bin, \
-            NULL, NULL, NULL, NULL, NULL, \
+            NULL, NULL, NULL, NULL, NULL, NULL, \
             NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, \
             CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_bin, \
             CAST(s.NON_UNIQUE AS SIGNED), CAST(s.SEQ_IN_INDEX AS SIGNED), \
@@ -139,7 +141,7 @@ class SourceMetadataContractTest {
             CAST(ROW_NUMBER() OVER (ORDER BY r.TABLE_NAME, r.CONSTRAINT_NAME, k.ORDINAL_POSITION) AS SIGNED), \
             CONVERT(r.CONSTRAINT_SCHEMA USING utf8mb4) COLLATE utf8mb4_bin, \
             CONVERT(r.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_bin, \
-            NULL, NULL, NULL, NULL, NULL, \
+            NULL, NULL, NULL, NULL, NULL, NULL, \
             NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, \
             NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, \
             CONVERT(r.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_bin, \
@@ -227,11 +229,12 @@ class SourceMetadataContractTest {
     /**
      * Derived outside Java from the documented {@code SqlPlan/1} encoding (length-prefixed UTF-8, big-endian
      * ints), with the statement text taken from {@link #EXPECTED_READ} and the schema from
-     * {@link #EXPECTED_COLUMNS}, in a separate Python script quoted on ticket #125.
+     * {@link #EXPECTED_COLUMNS}, in a separate Python script quoted on ticket #125 and re-run on ticket #135,
+     * which added {@code auto_increment} to the {@code TABLES} branch (spec #134 correction 5).
      */
     @Test
     void theRepresentativeFingerprintIsPinned() {
-        assertEquals("6e1eb9bef2dc21bda5ed30a025cb85e3a84bef50f467cfe04bd0b69403f725dc",
+        assertEquals("9e681cdb8298b594af1a8c857d59b98a1c87f235dca13551f08fb4b60ee8342b",
                 SOURCE.metadataPlan(scope("shop", "orders", "客户")).fingerprint().sha256Hex(),
                 "ADR-0008 §Plans: the metadata plan's fingerprint must not depend on the JVM, machine or run");
     }
@@ -340,7 +343,8 @@ class SourceMetadataContractTest {
                         SourceForeignKey.ReferentialAction.SET_NULL, SourceForeignKey.ReferentialAction.RESTRICT));
         return new SourceTableMetadata(ORDERS, columns, comments, indexes, foreignKeys, "订单 'orders'",
                 Optional.of("utf8mb4_0900_ai_ci"),
-                new TableStatistics(OptionalLong.of(1000), OptionalLong.of(128), OptionalLong.of(16384)));
+                new TableStatistics(OptionalLong.of(1000), OptionalLong.of(128), OptionalLong.of(16384),
+                        OptionalLong.of(2048)));
     }
 
     /** A table without keys whose statistics MySQL reports as NULL, next to a zero that stays zero. */
@@ -351,7 +355,7 @@ class SourceMetadataContractTest {
                         OptionalLong.of(52), OptionalInt.empty(), OptionalInt.empty(), OptionalInt.empty(),
                         Optional.of("utf8mb4"), Optional.of("utf8mb4_bin"), Nullability.NULLABLE, Optional.empty(), "", 1)),
                 List.of(new ColumnComment(name, "")), List.of(), List.of(), "", Optional.empty(),
-                new TableStatistics(OptionalLong.empty(), OptionalLong.of(0), OptionalLong.empty()));
+                new TableStatistics(OptionalLong.empty(), OptionalLong.of(0), OptionalLong.empty(), OptionalLong.empty()));
     }
 
     private static SourceIndex.Subject column(String name) {
@@ -626,7 +630,7 @@ class SourceMetadataContractTest {
 
     @Test
     void aNegativeStatisticIsRefusedNamingIt() {
-        for (String statistic : List.of("table_rows", "avg_row_length", "data_length")) {
+        for (String statistic : List.of("table_rows", "avg_row_length", "data_length", "auto_increment")) {
             List<Map<String, SqlValue>> rows = rowMaps(List.of(ordersFixture()));
             first(rows, "fact", "TABLE").put(statistic, integer(-1));
 
@@ -730,6 +734,7 @@ class SourceMetadataContractTest {
             t.put("table_rows", integer(table.statistics().tableRows()));
             t.put("avg_row_length", integer(table.statistics().averageRowLength()));
             t.put("data_length", integer(table.statistics().dataLength()));
+            t.put("auto_increment", integer(table.statistics().autoIncrement()));
             t.put("table_comment", text(table.comment()));
             t.put("table_collation", text(table.collation()));
             tableRows.add(t);

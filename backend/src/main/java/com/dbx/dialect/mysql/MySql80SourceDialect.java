@@ -63,8 +63,9 @@ public final class MySql80SourceDialect extends SourceDialect {
     }
 
     @Override
-    public SqlPlan preflightScanPlan(SourceTableMetadata table, List<PreflightObligation> obligations) {
-        throw new NotImplementedInSlice("source.preflightScanPlan", 6);
+    public SqlPlan preflightScanPlan(SourceTableMetadata table, List<ApprovedColumn> approvedColumns,
+            List<PreflightObligation> obligations) {
+        return PreflightScan.plan(table, approvedColumns, obligations);
     }
 
     @Override
