@@ -310,7 +310,8 @@ class DialectCatalogContractTest {
         }
 
         @Override
-        public SqlPlan preflightScanPlan(SourceTableMetadata table, List<PreflightObligation> obligations) {
+        public SqlPlan preflightScanPlan(SourceTableMetadata table, List<ApprovedColumn> approvedColumns,
+                List<PreflightObligation> obligations) {
             throw new AssertionError("never constructed");
         }
 

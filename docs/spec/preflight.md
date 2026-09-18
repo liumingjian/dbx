@@ -15,7 +15,7 @@ ADR-0036's Interface column reads "Plans and evaluates probes → evidence"; the
 
 ## Consumes
 
-- `dialect.api` (names per the `dialect` sub-spec): `pair.map` (mapping decisions with required preflights), `source.preflightScanPlan(table, obligations)` (combined envelope and type-domain scan, keyset min/max), `source.keysetCandidates`, `source.metadataPlan` (statistics for the byte estimate).
+- `dialect.api` (names per the `dialect` sub-spec): `pair.map` (mapping decisions with required preflights), `source.preflightScanPlan(table, approvedColumns, obligations)` (combined envelope and type-domain scan, keyset min/max; the approved columns are an argument because ADR-0003 ¶2 measures every approved extraction expression and obligations alone do not name them), `source.keysetCandidates`, `source.metadataPlan` (statistics for the byte estimate).
 - Nothing else. `orchestration` executes the plans through `gateway.execute` and passes the facts in (ADR-0036 §Dependencies and purity).
 
 ## Obligations
