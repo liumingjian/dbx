@@ -75,7 +75,7 @@ public final class MySql80SourceDialect extends SourceDialect {
 
     @Override
     public List<SqlPlan> validationFactPlans(List<ValidationItem> items) {
-        throw new NotImplementedInSlice("source.validationFactPlans", 6);
+        return ValidationFacts.plans(items);
     }
 
     @Override
