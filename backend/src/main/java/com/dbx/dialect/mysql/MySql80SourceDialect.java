@@ -70,7 +70,7 @@ public final class MySql80SourceDialect extends SourceDialect {
 
     @Override
     public SqlPlan baselinePlan(SourceTableMetadata table, Optional<KeysetColumn> keysetColumn) {
-        throw new NotImplementedInSlice("source.baselinePlan", 6);
+        return BaselineRead.plan(table, keysetColumn);
     }
 
     @Override
