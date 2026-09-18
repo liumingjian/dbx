@@ -78,8 +78,8 @@ public final class MySql80SourceDialect extends SourceDialect {
     }
 
     @Override
-    public SqlPlan samplingPlan(SamplingKey key, int n) {
-        throw new NotImplementedInSlice("source.samplingPlan", 6);
+    public List<SqlPlan> samplingPlan(SamplingKey key, int n) {
+        return Sampling.plans(key, n);
     }
 
     @Override
