@@ -51,7 +51,6 @@ class DialectContractTest {
      * are null on purpose: a stub has to fail before it looks at them.
      */
     private static final List<Stub> STUBS = List.of(
-            new Stub("source.baselinePlan", 6, () -> PAIR.source().baselinePlan(null, null)),
             new Stub("source.validationFactPlans", 6, () -> PAIR.source().validationFactPlans(null)),
             new Stub("target.validationFactPlans", 8, () -> PAIR.target().validationFactPlans(null)),
             new Stub("target.samplingLookupPlan", 8, () -> PAIR.target().samplingLookupPlan(null)));
@@ -66,6 +65,7 @@ class DialectContractTest {
             "pair.map",
             "pair.mapIdentifier",
             "pair.validationCapabilities",
+            "source.baselinePlan",
             "source.boundedRead",
             "source.capabilityPlans",
             "source.connectionSemantics",
