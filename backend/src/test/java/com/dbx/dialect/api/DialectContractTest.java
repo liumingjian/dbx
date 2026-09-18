@@ -61,9 +61,7 @@ class DialectContractTest {
             new Stub("target.validationFactPlans", 8, () -> PAIR.target().validationFactPlans(null)),
             new Stub("target.samplingLookupPlan", 8, () -> PAIR.target().samplingLookupPlan(null)),
             new Stub("target.normalizeCatalog", 8, () -> PAIR.target().normalizeCatalog(null)),
-            new Stub("target.leastPrivilegeSql", 8, () -> PAIR.target().leastPrivilegeSql(null)),
-            new Stub("pair.executionRequirements", 9, () -> PAIR.executionRequirements(null)),
-            new Stub("pair.validationCapabilities", 9, PAIR::validationCapabilities));
+            new Stub("target.leastPrivilegeSql", 8, () -> PAIR.target().leastPrivilegeSql(null)));
 
     /** Entry points a landed slice implements, one per line. */
     private static final Set<String> IMPLEMENTED = Set.of(
@@ -71,8 +69,10 @@ class DialectContractTest {
             "catalog.list",
             "pair.descriptor",
             "pair.descriptorCodec",
+            "pair.executionRequirements",
             "pair.map",
             "pair.mapIdentifier",
+            "pair.validationCapabilities",
             "source.boundedRead",
             "source.capabilityPlans",
             "source.connectionSemantics",
@@ -87,8 +87,19 @@ class DialectContractTest {
     /** Composition, not capability: they hand out the dialects whose entry points are listed above. */
     private static final Set<String> COMPOSITION = Set.of("pair.source", "pair.target");
 
+    /**
+     * Slice 9 emptied {@link #STUBS} of its own two rows, and the last slice to land empties it entirely.
+     * A {@code @TestFactory} over an empty stream reports no test at all, so the walk would become
+     * silently vacuous rather than red. The replacement is the row below: when nothing is stubbed the
+     * factory still yields one test, which re-states the union invariant that
+     * {@link #everyInterfaceEntryPointIsEitherStubbedOrImplemented} carries from then on.
+     */
     @TestFactory
     Stream<DynamicTest> anUnimplementedEntryPointFailsNamingItsSlice() {
+        if (STUBS.isEmpty()) {
+            return Stream.of(dynamicTest("no entry point is stubbed",
+                    this::everyInterfaceEntryPointIsEitherStubbedOrImplemented));
+        }
         return STUBS.stream().map(stub -> dynamicTest(stub.capability(), () -> {
             NotImplementedInSlice failure = assertThrows(
                     NotImplementedInSlice.class,
@@ -103,6 +114,12 @@ class DialectContractTest {
         }));
     }
 
+    /**
+     * Stated as a union rather than as {@code IMPLEMENTED == declared} on purpose: the union form is true
+     * at every stage of the slices and stays non-vacuous once {@link #STUBS} is empty, because {@code
+     * declared} is reflected from {@code dialect.api} itself. An entry point added later without a slice
+     * lands in neither set and fails here.
+     */
     @Test
     void everyInterfaceEntryPointIsEitherStubbedOrImplemented() {
         Set<String> declared = new TreeSet<>();
