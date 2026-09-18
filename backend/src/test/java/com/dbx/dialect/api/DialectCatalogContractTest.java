@@ -326,7 +326,7 @@ class DialectCatalogContractTest {
         }
 
         @Override
-        public SqlPlan samplingPlan(SamplingKey key, int n) {
+        public List<SqlPlan> samplingPlan(SamplingKey key, int n) {
             throw new AssertionError("never constructed");
         }
 
