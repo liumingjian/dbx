@@ -43,7 +43,7 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public SqlPlan catalogReadPlan(List<TargetTableCoordinate> coordinates) {
-        throw new NotImplementedInSlice("target.catalogReadPlan", 8);
+        return CatalogRead.plan(Objects.requireNonNull(coordinates, "coordinates are required"));
     }
 
     @Override
@@ -68,8 +68,8 @@ public final class Postgres15TargetDialect implements TargetDialect {
     }
 
     @Override
-    public TargetTableFacts normalizeCatalog(ResultRows rows) {
-        throw new NotImplementedInSlice("target.normalizeCatalog", 8);
+    public List<TargetTableFacts> normalizeCatalog(List<TargetTableCoordinate> coordinates, ResultRows rows) {
+        return CatalogNormalizer.normalize(coordinates, rows);
     }
 
     @Override
