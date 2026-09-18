@@ -26,8 +26,11 @@ public non-sealed interface DatabasePair extends PairSelection {
     /** Typed execution requirements, bounded read included (ADR-0033; slice 9). */
     ExecutionRequirements executionRequirements(List<Supported> mappingDecisions);
 
-    /** Which comparisons validation may make (ADR-0040; slice 9). */
-    ValidationCapabilities validationCapabilities();
+    /**
+     * Which comparisons validation may make, decided per column (ADR-0040; slice 9). It reads only
+     * {@code dataType} and {@code characterSetName}, and answers every column given, in input order.
+     */
+    ValidationCapabilities validationCapabilities(List<SourceColumn> columns);
 
     /** A codec that reads its own version and never upgrades it silently (slice 2). */
     CodecSelection descriptorCodec(DescriptorVersion version);
