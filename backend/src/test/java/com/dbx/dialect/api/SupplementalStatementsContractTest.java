@@ -337,6 +337,11 @@ class SupplementalStatementsContractTest {
                 sourceIndex("i", false, IndexType.BTREE, code), List.of(approved(ORDERS, "note", "note"))));
         inconsistent.put("a column of another table", () -> new DeferredStructure.OnUpdate(ORDERS, APP_ORDERS,
                 approved(CUSTOMERS, "code", "code"), "CURRENT_TIMESTAMP"));
+        inconsistent.put("an index key part in another table, mapped consistently", () -> index(ORDERS, APP_ORDERS,
+                sourceIndex("i", false, IndexType.BTREE, columnPart(1, CUSTOMERS, "code", Direction.ASCENDING)),
+                List.of(approved(CUSTOMERS, "code", "code"))));
+        inconsistent.put("a collation on a column of another table", () -> new DeferredStructure.Collation(ORDERS,
+                APP_ORDERS, Optional.of(approved(CUSTOMERS, "code", "code")), "utf8mb4_bin"));
         inconsistent.put("a referenced column mapping of another column", () -> foreignKey(ORDERS, APP_ORDERS, "fk",
                 "customer_id", CUSTOMERS, "id", List.of(approved(ORDERS, "customer_id", "customer_id")),
                 new ReferencedTable.InScope(APP_CUSTOMERS, List.of(approved(CUSTOMERS, "email", "email")))));
@@ -348,6 +353,32 @@ class SupplementalStatementsContractTest {
                     "ADR-0026 §Timing: a deferred structure contradicting its own metadata is refused: "
                             + entry.getKey());
         }
+    }
+
+    @Test
+    void aTableCollationNamesTheTableAndAColumnCollationTheColumn() {
+        List<String> sql = sql(PAIR.target().supplementalStatements(List.of(
+                new DeferredStructure.Collation(ORDERS, APP_ORDERS, Optional.empty(), "utf8mb4_bin"),
+                new DeferredStructure.Collation(ORDERS, APP_ORDERS, Optional.of(approved(ORDERS, "code", "code")),
+                        "utf8mb4_0900_ai_ci"))));
+
+        assertEquals(List.of(
+                        "-- requires manual handling (COLLATION): `shop`.`orders` COLLATE utf8mb4_bin",
+                        "-- requires manual handling (COLLATION): `shop`.`orders`.`code` COLLATE utf8mb4_0900_ai_ci"),
+                sql,
+                "ADR-0026: a collation is comment-only, and a table collation quotes MySQL's own name for the "
+                        + "table where a column collation quotes the column");
+    }
+
+    @Test
+    void nonForeignKeyStatementsAreOrderedBySchemaBeforeTableName() {
+        List<String> sql = sql(PAIR.target().supplementalStatements(List.of(
+                new DeferredStructure.TableComment(ORDERS, target("z", "t"), "in z"),
+                new DeferredStructure.TableComment(CUSTOMERS, target("a", "t"), "in a"))));
+
+        assertEquals(List.of("COMMENT ON TABLE \"a\".\"t\" IS E'in a'", "COMMENT ON TABLE \"z\".\"t\" IS E'in z'"),
+                sql, "ADR-0026: target tables sharing a name are ordered by their schema, so the script's order is "
+                        + "stable whatever the input order");
     }
 
     // --- Fixtures -------------------------------------------------------------------------------------

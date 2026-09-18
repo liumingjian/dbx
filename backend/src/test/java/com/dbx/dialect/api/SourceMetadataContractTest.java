@@ -241,8 +241,8 @@ class SourceMetadataContractTest {
     @Test
     void hostileNamesAreOnlyEverBoundValues() {
         List<String> hostile = List.of(
-                "'", "\\", "$$", "`", "a`b`", "x'); DROP TABLE t; --", "?", "new\nline", "adjacent",
-                "￿", "emoji😀", "客户订单", "x".repeat(63), "x".repeat(64), "订".repeat(21),
+                "'", "\\", "$$", "`", "a`b`", "x'); DROP TABLE t; --", "?", "new\nline", "\u0001adjacent\u007F",
+                "￿\u0001", "emoji😀", "客户订单", "x".repeat(63), "x".repeat(64), "订".repeat(21),
                 "订".repeat(21) + "x");
         SqlPlan benign = SOURCE.metadataPlan(scope("shop", "orders"));
         for (String name : hostile) {
@@ -480,6 +480,195 @@ class SourceMetadataContractTest {
         assertTrue(failure.getMessage().contains("B_customer") && failure.getMessage().contains(ORDERS.toString())
                         && failure.getMessage().contains("RTREE"),
                 "obligation 15: the refusal names the index, its table and the type: " + failure.getMessage());
+    }
+
+    /** The one row whose {@code column} holds {@code value}; the fixture has exactly one. */
+    private static Map<String, SqlValue> first(List<Map<String, SqlValue>> rows, String column, String value) {
+        return rows.stream().filter(row -> text(value).equals(row.get(column))).findFirst().orElseThrow();
+    }
+
+    /** Every row whose {@code column} holds {@code value}, in row order. */
+    private static List<Map<String, SqlValue>> all(List<Map<String, SqlValue>> rows, String column, String value) {
+        return rows.stream().filter(row -> text(value).equals(row.get(column))).toList();
+    }
+
+    private static IllegalArgumentException refused(List<Map<String, SqlValue>> rows, String why) {
+        return assertThrows(IllegalArgumentException.class, () -> SOURCE.normalizeMetadata(rows(rows)), why);
+    }
+
+    @Test
+    void aValueOfTheWrongSqlTypeIsRefusedNamingTheColumn() {
+        List<Map<String, SqlValue>> textIsANumber = rowMaps(List.of(ordersFixture()));
+        first(textIsANumber, "fact", "TABLE").put("table_comment", integer(7));
+        List<Map<String, SqlValue>> numberIsText = rowMaps(List.of(ordersFixture()));
+        first(numberIsText, "fact", "TABLE").put("table_rows", text("1000"));
+
+        assertTrue(refused(textIsANumber, "obligation 15: a varchar column holding a number is a broken read, "
+                        + "not an Unsupported").getMessage().contains("table_comment"),
+                "obligation 15: the refusal names the column whose declared type the value contradicts");
+        assertTrue(refused(numberIsText, "obligation 15: a bigint column holding text is a broken read")
+                        .getMessage().contains("table_rows"),
+                "obligation 15: the refusal names the column whose declared type the value contradicts");
+    }
+
+    @Test
+    void aTypedNullInARequiredColumnIsRefusedNamingTheFactAndTheTable() {
+        List<Map<String, SqlValue>> nullComment = rowMaps(List.of(ordersFixture()));
+        first(nullComment, "fact", "TABLE").put("table_comment", new SqlValue.Null(SqlValue.Type.TEXT));
+        List<Map<String, SqlValue>> nullOrdinal = rowMaps(List.of(ordersFixture()));
+        first(nullOrdinal, "column_name", "code").put("ordinal_position", new SqlValue.Null(SqlValue.Type.INT64));
+
+        String comment = refused(nullComment, "obligation 15: TABLE_COMMENT is '' when empty, never NULL, so a NULL "
+                + "is a broken read").getMessage();
+        assertTrue(comment.contains("table_comment") && comment.contains("TABLE") && comment.contains("orders")
+                        && comment.contains("shop"),
+                "obligation 15: a NULL in a required column is refused naming the column, the fact and the table: "
+                        + comment);
+        assertTrue(refused(nullOrdinal, "obligation 15: ORDINAL_POSITION is never NULL on a COLUMNS row")
+                        .getMessage().contains("ordinal_position"),
+                "obligation 15: the refusal names the required column that was NULL");
+    }
+
+    @Test
+    void anIntegerFactOutsideIntRangeIsRefusedAndTheEdgesAreKept() {
+        List<Map<String, SqlValue>> edges = rowMaps(List.of(ordersFixture()));
+        first(edges, "column_name", "id").put("numeric_precision", integer(Integer.MAX_VALUE));
+        first(edges, "column_name", "id").put("numeric_scale", integer(Integer.MIN_VALUE));
+        List<Map<String, SqlValue>> tooHigh = rowMaps(List.of(ordersFixture()));
+        first(tooHigh, "column_name", "id").put("numeric_precision", integer(Integer.MAX_VALUE + 1L));
+        List<Map<String, SqlValue>> tooLow = rowMaps(List.of(ordersFixture()));
+        first(tooLow, "column_name", "id").put("numeric_scale", integer(Integer.MIN_VALUE - 1L));
+
+        SourceColumn id = SOURCE.normalizeMetadata(rows(edges)).get(0).columns().get(0);
+        assertEquals(OptionalInt.of(Integer.MAX_VALUE), id.numericPrecision(),
+                "obligation 15: a fact at the int edge is a fact and is kept; only what cannot be held is refused");
+        assertEquals(OptionalInt.of(Integer.MIN_VALUE), id.numericScale(),
+                "obligation 15: a fact at the other int edge is kept too");
+        assertTrue(refused(tooHigh, "obligation 15: a SIGNED value above int range does not fit the fact it describes")
+                        .getMessage().contains("numeric_precision"),
+                "obligation 15: the refusal names the column that does not fit");
+        assertTrue(refused(tooLow, "obligation 15: a SIGNED value below int range does not fit either")
+                        .getMessage().contains("numeric_scale"),
+                "obligation 15: the refusal names the column that does not fit");
+    }
+
+    @Test
+    void keyPartsOfOneIndexMustAgreeOnUniquenessVisibilityAndType() {
+        Map<String, SqlValue> uniqueness = second("B_customer");
+        uniqueness.put("non_unique", integer(1));
+        Map<String, SqlValue> visibility = second("B_customer");
+        visibility.put("is_visible", text("NO"));
+        Map<String, SqlValue> type = second("B_customer");
+        type.put("index_type", text("HASH"));
+
+        for (Map<String, SqlValue> broken : List.of(uniqueness, visibility, type)) {
+            List<Map<String, SqlValue>> rows = rowsWith(broken, "B_customer", 2);
+            assertTrue(refused(rows, "obligation 15: STATISTICS reports one index's uniqueness, visibility and type "
+                            + "on every key-part row, so rows that disagree are a broken read")
+                            .getMessage().contains("B_customer"),
+                    "obligation 15: the refusal names the index whose key parts disagree");
+        }
+    }
+
+    @Test
+    void aKeyPartNamesExactlyOneOfAColumnOrAnExpression() {
+        Map<String, SqlValue> both = second("B_customer");
+        both.put("expression", text("lower(`code`)"));
+        Map<String, SqlValue> neither = second("B_customer");
+        neither.put("index_column_name", new SqlValue.Null(SqlValue.Type.TEXT));
+
+        assertTrue(refused(rowsWith(both, "B_customer", 2), "obligation 15: STATISTICS fills COLUMN_NAME or "
+                        + "EXPRESSION, never both").getMessage().contains("both"),
+                "obligation 15: the refusal says the key part names both");
+        assertTrue(refused(rowsWith(neither, "B_customer", 2), "obligation 15: a key part with neither is a broken "
+                        + "read").getMessage().contains("neither"),
+                "obligation 15: the refusal says the key part names neither");
+    }
+
+    @Test
+    void foreignKeyRowsMustAgreeOnTheReferencedTableAndTheRules() {
+        Map<String, SqlValue> table = secondForeignKey();
+        table.put("referenced_table_name", text("others"));
+        Map<String, SqlValue> update = secondForeignKey();
+        update.put("update_rule", text("CASCADE"));
+        Map<String, SqlValue> delete = secondForeignKey();
+        delete.put("delete_rule", text("CASCADE"));
+
+        for (Map<String, SqlValue> broken : List.of(table, update, delete)) {
+            List<Map<String, SqlValue>> rows = foreignKeyRowsWith(broken);
+            assertTrue(refused(rows, "obligation 15: one constraint's referenced table and referential rules repeat "
+                            + "on every KEY_COLUMN_USAGE row, so rows that disagree are a broken read")
+                            .getMessage().contains("Fk_code"),
+                    "obligation 15: the refusal names the foreign key whose rows disagree");
+        }
+    }
+
+    @Test
+    void foreignKeyColumnsMustArriveInOrdinalPositionOrder() {
+        Map<String, SqlValue> outOfOrder = secondForeignKey();
+        outOfOrder.put("fk_ordinal_position", integer(3));
+
+        String failure = refused(foreignKeyRowsWith(outOfOrder), "obligation 15: a foreign key's columns arrive one "
+                + "per ORDINAL_POSITION from 1; a gap would silently reorder the constraint").getMessage();
+        assertTrue(failure.contains("ORDINAL_POSITION 3") && failure.contains("2 comes next"),
+                "obligation 15: the refusal names the position it got and the one it expected: " + failure);
+    }
+
+    @Test
+    void aForeignKeyPartReferencingNoColumnIsRefusedNamingTheColumn() {
+        Map<String, SqlValue> noReference = secondForeignKey();
+        noReference.put("referenced_column_name", new SqlValue.Null(SqlValue.Type.TEXT));
+
+        assertTrue(refused(foreignKeyRowsWith(noReference), "obligation 15: a KEY_COLUMN_USAGE row of a foreign key "
+                        + "always names the referenced column").getMessage().contains("created"),
+                "obligation 15: the refusal names the referencing column that references nothing");
+    }
+
+    @Test
+    void aNegativeStatisticIsRefusedNamingIt() {
+        for (String statistic : List.of("table_rows", "avg_row_length", "data_length")) {
+            List<Map<String, SqlValue>> rows = rowMaps(List.of(ordersFixture()));
+            first(rows, "fact", "TABLE").put(statistic, integer(-1));
+
+            assertTrue(refused(rows, "ADR-0002 ¶4: a statistic is a count of rows or bytes, so a negative one is a "
+                            + "broken read rather than a fact preflight could judge")
+                            .getMessage().contains("cannot be negative"),
+                    "ADR-0002 ¶4: the refusal says a count cannot be negative: " + statistic);
+        }
+    }
+
+    @Test
+    void aTableWithTwoTablesRowsIsRefusedNamingIt() {
+        List<Map<String, SqlValue>> rows = rowMaps(List.of(ordersFixture()));
+        rows.add(new HashMap<>(first(rows, "fact", "TABLE")));
+
+        assertTrue(refused(rows, "obligation 15: TABLES has one row per table, so two are a broken read")
+                        .getMessage().contains(ORDERS.toString()),
+                "obligation 15: the refusal names the table read twice");
+    }
+
+    /** The second key-part row of {@code index}, detached from the fixture so a test can break it. */
+    private static Map<String, SqlValue> second(String index) {
+        return new HashMap<>(all(rowMaps(List.of(ordersFixture())), "index_name", index).get(1));
+    }
+
+    /** The second row of foreign key {@code Fk_code}, detached from the fixture. */
+    private static Map<String, SqlValue> secondForeignKey() {
+        return new HashMap<>(all(rowMaps(List.of(ordersFixture())), "constraint_name", "Fk_code").get(1));
+    }
+
+    /** The fixture's rows with {@code index}'s key part number {@code sequence} replaced by {@code broken}. */
+    private static List<Map<String, SqlValue>> rowsWith(Map<String, SqlValue> broken, String index, int sequence) {
+        List<Map<String, SqlValue>> rows = rowMaps(List.of(ordersFixture()));
+        rows.set(rows.indexOf(all(rows, "index_name", index).get(sequence - 1)), broken);
+        return rows;
+    }
+
+    /** The fixture's rows with {@code Fk_code}'s second row replaced by {@code broken}. */
+    private static List<Map<String, SqlValue>> foreignKeyRowsWith(Map<String, SqlValue> broken) {
+        List<Map<String, SqlValue>> rows = rowMaps(List.of(ordersFixture()));
+        rows.set(rows.indexOf(all(rows, "constraint_name", "Fk_code").get(1)), broken);
+        return rows;
     }
 
     @Test

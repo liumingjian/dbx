@@ -244,8 +244,11 @@ class SourceCapabilityPlansContractTest {
                 "TP §7.1: the fixture name is 64 bytes, MySQL's limit in characters and more than PostgreSQL's");
         assertTrue(sql(plans("s", "é".repeat(32)).get(1)).contains("`s`.`" + "é".repeat(32) + "`"),
                 "TP §7.1: a 64-byte name is quoted whole, never cut");
-        assertThrows(IllegalArgumentException.class, () -> plans("s", "nul\u0000name"),
-                "TP §7.1: MySQL permits no U+0000 in an identifier, so such a name is refused rather than quoted");
+        for (String nul : List.of("nul\u0000name", "\u0000leading", "trailing\u0000")) {
+            assertThrows(IllegalArgumentException.class, () -> plans("s", nul),
+                    "TP §7.1: MySQL permits no U+0000 anywhere in an identifier — first, middle or last character "
+                            + "— so such a name is refused rather than quoted");
+        }
     }
 
     /** The statement with every backtick-quoted identifier replaced by a marker; an independent reader. */

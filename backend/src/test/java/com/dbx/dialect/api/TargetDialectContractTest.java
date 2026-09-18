@@ -119,6 +119,82 @@ class TargetDialectContractTest {
                 "TP §6.4: a microsecond default is not expressible; it arrives at min(n,3)");
     }
 
+    /**
+     * Every TP §6.2–6.4 target type with the modifier count it takes, written from TP rather than from the
+     * renderer's output. The modifier values are arbitrary; that they reach the text unchanged is the point.
+     */
+    private static Map<TargetTypeName, TargetType> everyTargetType() {
+        Map<TargetTypeName, TargetType> types = new LinkedHashMap<>();
+        for (TargetTypeName name : TargetTypeName.values()) {
+            types.put(name, new TargetType(name, switch (name) {
+                case SMALLINT, INTEGER, BIGINT, REAL, DOUBLE_PRECISION, BOOLEAN, TEXT, BYTEA, JSON, JSONB, DATE ->
+                        List.of();
+                case NUMERIC -> List.of(10, 2);
+                case CHAR, VARCHAR -> List.of(8);
+                case TIME, TIMESTAMP, TIMESTAMPTZ -> List.of(3);
+            }));
+        }
+        return types;
+    }
+
+    @Test
+    void everyTargetTypeIsSpelledAsTpWritesIt() {
+        Map<TargetTypeName, String> expected = new LinkedHashMap<>();
+        expected.put(TargetTypeName.SMALLINT, "smallint");
+        expected.put(TargetTypeName.INTEGER, "integer");
+        expected.put(TargetTypeName.BIGINT, "bigint");
+        expected.put(TargetTypeName.NUMERIC, "numeric(10,2)");
+        expected.put(TargetTypeName.REAL, "real");
+        expected.put(TargetTypeName.DOUBLE_PRECISION, "double precision");
+        expected.put(TargetTypeName.BOOLEAN, "boolean");
+        expected.put(TargetTypeName.CHAR, "char(8)");
+        expected.put(TargetTypeName.VARCHAR, "varchar(8)");
+        expected.put(TargetTypeName.TEXT, "text");
+        expected.put(TargetTypeName.BYTEA, "bytea");
+        expected.put(TargetTypeName.JSON, "json");
+        expected.put(TargetTypeName.JSONB, "jsonb");
+        expected.put(TargetTypeName.DATE, "date");
+        expected.put(TargetTypeName.TIME, "time(3) without time zone");
+        expected.put(TargetTypeName.TIMESTAMP, "timestamp(3) without time zone");
+        expected.put(TargetTypeName.TIMESTAMPTZ, "timestamptz(3)");
+        assertEquals(Set.of(TargetTypeName.values()), expected.keySet(),
+                "TP §6.2–6.4: every target type slice 3 can map to has a pinned DDL spelling here");
+
+        for (Map.Entry<TargetTypeName, TargetType> type : everyTargetType().entrySet()) {
+            TargetTable table = table(List.of(new TargetColumn(id("c"), type.getValue(), Nullability.NULLABLE)),
+                    List.of());
+
+            assertEquals(List.of("CREATE TABLE \"shop\".\"orders\" (\"c\" " + expected.get(type.getKey()) + ")"),
+                    sql(PAIR.target().ddlPlan(table)),
+                    "TP §6.2–6.4: " + type.getKey() + " is spelled as TP writes it, with its modifiers verbatim");
+        }
+    }
+
+    @Test
+    void aTypeCarryingTheWrongModifierCountIsRefusedNamingIt() {
+        for (Map.Entry<TargetTypeName, TargetType> type : everyTargetType().entrySet()) {
+            List<Integer> modifiers = type.getValue().modifiers();
+            List<Integer> tooMany = new ArrayList<>(modifiers);
+            tooMany.add(1);
+            List<List<Integer>> wrong = new ArrayList<>();
+            wrong.add(tooMany);
+            if (!modifiers.isEmpty()) {
+                wrong.add(modifiers.subList(0, modifiers.size() - 1));
+            }
+            for (List<Integer> count : wrong) {
+                TargetTable table = table(List.of(new TargetColumn(id("c"),
+                        new TargetType(type.getKey(), count), Nullability.NULLABLE)), List.of());
+
+                IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                        () -> PAIR.target().ddlPlan(table),
+                        "TP §6.2–6.4: " + type.getKey() + " takes exactly " + modifiers.size() + " modifiers, so "
+                                + count.size() + " is a mapping the DDL must refuse rather than render");
+                assertTrue(failure.getMessage().contains(type.getKey().toString()),
+                        "TP §6.2–6.4: the refusal names the type: " + failure.getMessage());
+            }
+        }
+    }
+
     // --- Fingerprints (ADR-0008 §Plans; #123 Testing Decisions) --------------------------------------
 
     @Test
@@ -203,8 +279,8 @@ class TargetDialectContractTest {
     // --- Hostile identifiers and values (ADR-0008 §Plans; TP §7.1) -----------------------------------
 
     private static final List<String> HOSTILE = List.of(
-            "it's", "back\\slash", "$$dollar$$", "`tick`", "new\nline", "cr\rtab\t", "a\"b", "?", "soh",
-            "del", "客户订单", "emoji😀", "x\"; DROP TABLE t; --", "'); DROP TABLE t; --", "a''b", "e\\'");
+            "it's", "back\\slash", "$$dollar$$", "`tick`", "new\nline", "cr\rtab\t", "a\"b", "?", "\u0001soh",
+            "\u007Fdel", "客户订单", "emoji😀", "x\"; DROP TABLE t; --", "'); DROP TABLE t; --", "a''b", "e\\'");
 
     @Test
     void hostileIdentifiersNeverChangeStatementStructure() {
@@ -249,7 +325,7 @@ class TargetDialectContractTest {
         expected.put(new SqlValue.Text("$$dollar$$"), "E'$$dollar$$'");
         expected.put(new SqlValue.Text("`tick`\"q\"?"), "E'`tick`\"q\"?'");
         expected.put(new SqlValue.Text("new\nline\r\t"), "E'new\\u000Aline\\u000D\\u0009'");
-        expected.put(new SqlValue.Text(""), "E'\\u0001\\u007F\\u0085'");
+        expected.put(new SqlValue.Text("\u0001\u007F\u0085"), "E'\\u0001\\u007F\\u0085'");
         expected.put(new SqlValue.Text("客户😀"), "E'客户😀'");
         expected.put(new SqlValue.Text(""), "E''");
         expected.put(new SqlValue.Int64(Long.MIN_VALUE), "-9223372036854775808");
@@ -273,7 +349,7 @@ class TargetDialectContractTest {
 
     @Test
     void aTextValuePostgresCannotHoldIsRefusedRatherThanAltered() {
-        for (String unstorable : List.of("nul inside", "lone\uD800surrogate", "low\uDC00first")) {
+        for (String unstorable : List.of("nul\u0000inside", "lone\uD800surrogate", "low\uDC00first")) {
             assertThrows(IllegalArgumentException.class, () -> PAIR.target().ddlPlan(enumTable(unstorable, "b")),
                     "ADR-0008 §Plans: PostgreSQL text holds no U+0000 or lone surrogate, so the renderer refuses it");
         }

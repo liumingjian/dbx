@@ -172,6 +172,19 @@ class KeysetCandidatesContractTest {
     }
 
     @Test
+    void aKeyPartOverAColumnPrefixOffersNothing() {
+        SourceIndex prefix = new SourceIndex("u_prefix", true, true, SourceIndex.IndexType.BTREE,
+                List.of(new SourceIndex.KeyPart(1, new SourceIndex.Subject.Column(at("code")), OptionalLong.of(4),
+                        SourceIndex.Direction.ASCENDING)));
+        SourceTableMetadata orders = table(List.of(notNull("code", "int")), prefix);
+
+        assertEquals(List.of(), SOURCE.keysetCandidates(orders),
+                "ADR-0037 §Choice: a unique index over a prefix of a column does not make the whole column unique, "
+                        + "so it offers no keyset column; MySQL allows a prefix only on a string column, but "
+                        + "SourceIndex.KeyPart carries SUB_PART whatever the column is");
+    }
+
+    @Test
     void aTableWithoutACandidateGetsAnEmptyList() {
         SourceTableMetadata log = table(List.of(nullable("line", "text")));
 

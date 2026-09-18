@@ -170,6 +170,22 @@ class SourceDialectContractTest {
     }
 
     @Test
+    void queryProjectionRejectsAnAutoRenameNoUserRenameOverrode() {
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> projection(List.of(approved("id", "order_id")),
+                        List.of(new ColumnRename(column("id"), new TargetIdentifier("orderid"), AUTO))),
+                "contract obligation 8: an AUTO rename is only left uncompared when a USER rename overrode it, so "
+                        + "an AUTO rename standing alone must agree with the approved target");
+        assertTrue(failure.getMessage().contains("AUTO") && failure.getMessage().contains("orderid")
+                        && failure.getMessage().contains("order_id"),
+                "contract obligation 8: the refusal names the origin and both targets: " + failure.getMessage());
+        assertEquals("SELECT `id` AS `order_id` FROM `shop`.`orders`",
+                projection(List.of(approved("id", "order_id")),
+                        List.of(new ColumnRename(column("id"), new TargetIdentifier("order_id"), AUTO))),
+                "contract obligation 8: an AUTO rename agreeing with the approved target is no disagreement");
+    }
+
+    @Test
     void queryProjectionRejectsColumnsSpanningTwoTables() {
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
                 () -> PAIR.source().queryProjection(List.of(approved("id", "id"),
