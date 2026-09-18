@@ -53,7 +53,7 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public List<SqlPlan> maintenancePlans(List<MaintenanceAction> actions) {
-        throw new NotImplementedInSlice("target.maintenancePlans", 8);
+        return Maintenance.plans(Objects.requireNonNull(actions, "actions are required"));
     }
 
     @Override
