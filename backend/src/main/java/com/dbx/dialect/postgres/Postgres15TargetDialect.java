@@ -48,7 +48,8 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public List<SqlPlan> capabilityProbePlans(TargetIdentifier schema, TargetIdentifier probeName) {
-        throw new NotImplementedInSlice("target.capabilityProbePlans", 8);
+        return CapabilityProbe.plans(Objects.requireNonNull(schema, "schema is required"),
+                Objects.requireNonNull(probeName, "probeName is required"));
     }
 
     @Override
@@ -78,7 +79,7 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public String leastPrivilegeSql(Set<RequiredPrivilege> missing) {
-        throw new NotImplementedInSlice("target.leastPrivilegeSql", 8);
+        return LeastPrivilege.sql(Objects.requireNonNull(missing, "missing is required"));
     }
 
     @Override
