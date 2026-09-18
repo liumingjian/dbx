@@ -46,13 +46,17 @@ class DialectContractTest {
     // --- Stubs fail, they do not return empty (ADR-0008 §Ownership) --------------------------------
 
     /**
-     * Every entry point of {@code docs/spec/dialect.md} §Interface with the slice that implements it.
-     * A slice that implements one deletes its row and adds the name to {@link #IMPLEMENTED}. Arguments
-     * are null on purpose: a stub has to fail before it looks at them.
+     * Every entry point of {@code docs/spec/dialect.md} §Interface that is still a stub, with the slice that
+     * owns it. A slice that implements one deletes its row and adds the name to {@link #IMPLEMENTED};
+     * arguments are null on purpose, because a stub has to fail before it looks at them.
+     *
+     * <p><strong>Empty since slice 8 landed its last two entry points.</strong> Every entry point
+     * {@code dialect.api} declares is implemented, which is what
+     * {@link #everyInterfaceEntryPointIsEitherStubbedOrImplemented} now asserts on its own. The list and the
+     * {@link Stub} record stay because the next capability added to the api is added here first, red, before
+     * it is written — ADR-0008 §Ownership bans landing it as a default-success answer.
      */
-    private static final List<Stub> STUBS = List.of(
-            new Stub("target.validationFactPlans", 8, () -> PAIR.target().validationFactPlans(null)),
-            new Stub("target.samplingLookupPlan", 8, () -> PAIR.target().samplingLookupPlan(null)));
+    private static final List<Stub> STUBS = List.of();
 
     /** Entry points a landed slice implements, one per line. */
     private static final Set<String> IMPLEMENTED = Set.of(
@@ -81,8 +85,10 @@ class DialectContractTest {
             "target.catalogReadPlan",
             "target.normalizeCatalog",
             "target.maintenancePlans",
+            "target.samplingLookupPlan",
             "target.sinkSettings",
-            "target.supplementalStatements");
+            "target.supplementalStatements",
+            "target.validationFactPlans");
 
     /** Composition, not capability: they hand out the dialects whose entry points are listed above. */
     private static final Set<String> COMPOSITION = Set.of("pair.source", "pair.target");

@@ -1,6 +1,5 @@
 package com.dbx.dialect.postgres;
 
-import com.dbx.dialect.NotImplementedInSlice;
 import com.dbx.dialect.api.DeferredStructure;
 import com.dbx.dialect.api.DialectId;
 import com.dbx.dialect.api.MaintenanceAction;
@@ -21,7 +20,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The PostgreSQL 15 target dialect. Slices 7 and 8 implement it; a capability not yet landed fails. A directed pair
+ * The PostgreSQL 15 target dialect, implemented in full by slices 7 and 8. A directed pair
  * constructs it with its source side's {@link SourceDefinitions}, the only source text supplemental SQL quotes.
  */
 public final class Postgres15TargetDialect implements TargetDialect {
@@ -59,12 +58,12 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public List<SqlPlan> validationFactPlans(List<ValidationItem> items) {
-        throw new NotImplementedInSlice("target.validationFactPlans", 8);
+        return ValidationFacts.plans(Objects.requireNonNull(items, "items are required"));
     }
 
     @Override
-    public SqlPlan samplingLookupPlan(SamplingLookupKeys keys) {
-        throw new NotImplementedInSlice("target.samplingLookupPlan", 8);
+    public List<SqlPlan> samplingLookupPlan(SamplingLookupKeys keys) {
+        return SamplingLookup.plans(Objects.requireNonNull(keys, "keys are required"));
     }
 
     @Override

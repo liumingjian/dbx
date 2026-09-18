@@ -19,7 +19,7 @@ ADR-0036/0018 describe this interface without naming entry points; the names bel
 - `source.keysetCandidates(SourceTableMetadata) → ordered candidates`
 - `source.queryProjection(approvedColumns, mappingRules) → ProjectionSql` (the prune/rename `SELECT … AS …` projection; #92)
 - `source.connectionSemantics(MappingOptions) → ConnectionSemantics`
-- `target.ddlPlan(TargetTable)`, `target.catalogReadPlan(coordinates)`, `target.capabilityProbePlans(schema, probeName)`, `target.maintenancePlans(...)`, `target.validationFactPlans(items)`, `target.samplingLookupPlan(keys) → SqlPlan(s)` (TP §9.3; lookup added at reconciliation for `validation`)
+- `target.ddlPlan(TargetTable)`, `target.catalogReadPlan(coordinates)`, `target.capabilityProbePlans(schema, probeName)`, `target.maintenancePlans(...)`, `target.validationFactPlans(items)`, `target.samplingLookupPlan(keys) → List<SqlPlan>` (TP §9.3, one plan per key tuple; lookup added at reconciliation for `validation`)
 - `target.normalizeCatalog(coordinates, rows) → TargetTableFacts` per table, in row order (the coordinates the read asked for come in too: "a row set holding a table nobody asked for is a broken read" is not expressible from rows alone)
 - `target.supplementalStatements(deferredStructures) → Statement[]`; `target.leastPrivilegeSql(missing) → text`
 - `target.sinkSettings() → SinkSettings`

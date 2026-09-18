@@ -1,6 +1,5 @@
 package com.dbx.dialect.mysql;
 
-import com.dbx.dialect.NotImplementedInSlice;
 import com.dbx.dialect.api.ApprovedColumn;
 import com.dbx.dialect.api.BoundedReadRequirement;
 import com.dbx.dialect.api.ConnectionSemantics;
