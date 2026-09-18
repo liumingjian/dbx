@@ -24,8 +24,12 @@ public interface TargetDialect {
     /** Target-side validation facts (TP §9.2; slice 8). */
     List<SqlPlan> validationFactPlans(List<ValidationItem> items);
 
-    /** Typed key lookups for sampled keys (TP §9.3; slice 8). */
-    SqlPlan samplingLookupPlan(SamplingLookupKeys keys);
+    /**
+     * Typed key lookups for sampled keys, one plan per key tuple in key order (TP §9.3; slice 8). A plan
+     * per tuple rather than one plan for the sample, so every lookup keeps one cardinality and one
+     * fingerprint (spec #134 correction 4).
+     */
+    List<SqlPlan> samplingLookupPlan(SamplingLookupKeys keys);
 
     /**
      * The rows of one {@link #catalogReadPlan} as one {@link TargetTableFacts} per table, in the order the
