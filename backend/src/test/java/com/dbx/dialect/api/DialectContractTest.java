@@ -55,6 +55,7 @@ class DialectContractTest {
             new Stub("source.validationFactPlans", 6, () -> PAIR.source().validationFactPlans(null)),
             new Stub("target.catalogReadPlan", 8, () -> PAIR.target().catalogReadPlan(null)),
             new Stub("target.maintenancePlans", 8, () -> PAIR.target().maintenancePlans(null)),
+            new Stub("target.capabilityProbePlans", 8, () -> PAIR.target().capabilityProbePlans(null, null)),
             new Stub("target.validationFactPlans", 8, () -> PAIR.target().validationFactPlans(null)),
             new Stub("target.samplingLookupPlan", 8, () -> PAIR.target().samplingLookupPlan(null)),
             new Stub("target.normalizeCatalog", 8, () -> PAIR.target().normalizeCatalog(null)),
@@ -90,6 +91,7 @@ class DialectContractTest {
             "target.catalogReadPlan",
             "target.ddlPlan",
             "target.normalizeCatalog",
+            "target.maintenancePlans",
             "target.sinkSettings",
             "target.supplementalStatements");
 
