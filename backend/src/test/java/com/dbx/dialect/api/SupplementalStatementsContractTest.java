@@ -290,7 +290,7 @@ class SupplementalStatementsContractTest {
 
     @Test
     void anExpressionDefaultIsNeverTranslatedIntoTheExecutableScript() {
-        for (String mysqlOnly : List.of("uuid()", "now()", "curdate()", "(rand() * 100)", "json_object('a', 1)")) {
+        for (String mysqlOnly : List.of("uuid()", "now()", "curdate()", "rand() * 100", "json_object('a', 1)")) {
             Statement statement = PAIR.target().supplementalStatements(List.of(new DeferredStructure.ColumnDefault(
                     ORDERS, APP_ORDERS, approved(ORDERS, "c", "c"), expression(mysqlOnly)))).get(0);
 

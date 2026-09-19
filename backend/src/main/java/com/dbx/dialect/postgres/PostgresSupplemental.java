@@ -81,17 +81,16 @@ final class PostgresSupplemental {
             case DeferredStructure.ColumnDefault.Value.Constant constant -> PostgresLiteral.render(constant.value());
             case DeferredStructure.ColumnDefault.Value.Expression expression -> "(" + expression.expression() + ")";
         };
-        if (deferred.column() instanceof MappedColumn.Pruned pruned) {
-            return commentOnly(SupplementalCommentReason.PRUNED_COLUMN,
+        return switch (deferred.column()) {
+            case MappedColumn.Pruned pruned -> commentOnly(SupplementalCommentReason.PRUNED_COLUMN,
                     source.column(pruned.source()) + " DEFAULT " + value);
-        }
-        if (deferred.value() instanceof DeferredStructure.ColumnDefault.Value.Expression) {
-            return commentOnly(SupplementalCommentReason.EXPRESSION_DEFAULT,
-                    source.column(deferred.column().source()) + " DEFAULT " + value);
-        }
-        return Statement.executable("ALTER TABLE " + relation(deferred.target()) + " ALTER COLUMN "
-                + PostgresIdentifier.quoted(((MappedColumn.Approved) deferred.column()).target())
-                + " SET DEFAULT " + value);
+            case MappedColumn.Approved approved ->
+                    deferred.value() instanceof DeferredStructure.ColumnDefault.Value.Expression
+                            ? commentOnly(SupplementalCommentReason.EXPRESSION_DEFAULT,
+                                    source.column(approved.source()) + " DEFAULT " + value)
+                            : Statement.executable("ALTER TABLE " + relation(deferred.target()) + " ALTER COLUMN "
+                                    + PostgresIdentifier.quoted(approved.target()) + " SET DEFAULT " + value);
+        };
     }
 
     /**

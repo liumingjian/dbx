@@ -175,7 +175,7 @@ public sealed interface DeferredStructure {
         public sealed interface Value {
 
             /** A constant PostgreSQL can hold. A typed {@code NULL} is no default at all. */
-            public record Constant(SqlValue value) implements Value {
+            record Constant(SqlValue value) implements Value {
 
                 public Constant {
                     Checks.present(value, "value");
@@ -186,8 +186,12 @@ public sealed interface DeferredStructure {
                 }
             }
 
-            /** MySQL's {@code DEFAULT (expression)} text, exactly as the source reports it, never translated. */
-            public record Expression(String expression) implements Value {
+            /**
+             * The expression of a MySQL {@code DEFAULT (expression)}, alone, as
+             * {@code information_schema.COLUMNS.COLUMN_DEFAULT} reports it: without the parentheses MySQL's
+             * syntax puts around it, which a renderer supplies. Kept exactly, never translated.
+             */
+            record Expression(String expression) implements Value {
 
                 public Expression {
                     Checks.nonEmpty(expression, "expression");
