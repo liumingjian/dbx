@@ -30,6 +30,7 @@ import java.util.TreeSet;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -41,11 +42,12 @@ import org.junit.jupiter.api.io.TempDir;
  * ruling of {@code docs/spec/connection.md} and cites it in its failure message; everything is driven
  * through the api with values.
  *
- * <p>Slice 1 declares the shape and encrypts nothing, so the cases of groups B, C, D and E are written
- * here and {@code @Disabled} with the slice that enables them named in the reason. They are written
- * rather than deferred so that slice 2 enables a test somebody already argued about, instead of
+ * <p>Slice 1 declared the shape and encrypted nothing, so the cases of groups B, C, D and E were
+ * written here and {@code @Disabled} with the slice that enables them named in the reason — written
+ * rather than deferred so that each slice enables a test somebody already argued about, instead of
  * inventing one that happens to pass against whatever it built ({@code docs/spec/connection.md}
- * §Slices; #149).
+ * §Slices; #149). Slice 2 enables groups B and C as they stand (#150); groups D and E wait for slices
+ * 3 and 4.
  *
  * <p>Nothing here is deferred to a higher rung: {@code connection} has no L2, and its one side effect —
  * reading the master-key file — is covered by a temporary {@code secrets/} directory (§Verification).
@@ -67,15 +69,26 @@ class ConnectionContractTest {
      * them.
      */
     private static final List<Stub> STUBS = List.of(
-            new Stub("encrypt", 2, () -> stubCrypto().encrypt(null)),
-            new Stub("decrypt", 2, () -> stubCrypto().decrypt(null)),
-            new Stub("fingerprint", 2, () -> stubCrypto().fingerprint()),
             new Stub("wrap", 3, () -> stubCrypto().wrap(null)),
             new Stub("unwrap", 3, () -> stubCrypto().unwrap(null)),
             new Stub("erase", 3, () -> stubCrypto().erase(null)));
 
-    /** Entry points a landed slice implements, one per line. Slice 1 lands none. */
-    private static final Set<String> IMPLEMENTED = Set.of();
+    /** Entry points a landed slice implements, one per line. Slice 2 lands three. */
+    private static final Set<String> IMPLEMENTED = Set.of("encrypt", "decrypt", "fingerprint");
+
+    /**
+     * A mounted key for the stub ledger. Obligation 9 holds for every entry point, so the capabilities
+     * slice 3 owns read the key before they refuse: with {@code secrets/} empty they would fail with
+     * {@link MasterKeyUnavailable}, which says nothing about whether the capability exists. The ledger
+     * gives them a key, so what it observes is the refusal itself (#150).
+     */
+    @TempDir
+    static Path stubSecrets;
+
+    @BeforeAll
+    static void mountAKeyForTheStubLedger() throws IOException {
+        writeMasterKey(stubSecrets, key(256));
+    }
 
     @TestFactory
     Stream<DynamicTest> anUnimplementedEntryPointFailsNamingItsSlice() {
@@ -134,7 +147,8 @@ class ConnectionContractTest {
      */
     @Test
     void theNotImplementedFailureIsConnectionsOwnTypeAndNotDialects() {
-        NotImplementedInSlice failure = assertThrows(NotImplementedInSlice.class, () -> stubCrypto().fingerprint());
+        NotImplementedInSlice failure =
+                assertThrows(NotImplementedInSlice.class, () -> stubCrypto().wrap(new BackupId("backup-1")));
 
         assertEquals(
                 "com.dbx.connection",
@@ -285,7 +299,6 @@ class ConnectionContractTest {
     // --- Master key (B7–B11; ADR-0035 §Master key) -------------------------------------------------
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns the master-key loader to slice 2 (#150)")
     void theMasterKeyIsReadOnlyFromTheMountedFile(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
 
@@ -302,9 +315,10 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns the master-key loader to slice 2 (#150)")
     void aKeyFileThatIsNot256BitsIsRejectedRatherThanPaddedOrTruncated(@TempDir Path secrets) throws IOException {
-        for (int bits : new int[] {128, 255, 257, 512}) {
+        // A file holds whole bytes, so 248 and 264 are the nearest lengths on either side of 256 that a
+        // DBA can actually mount; 255 and 257 bits cannot be written at all (#150).
+        for (int bits : new int[] {128, 248, 264, 512}) {
             writeMasterKey(secrets, key(bits));
 
             MasterKeyMalformed failure = assertThrows(
@@ -316,7 +330,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns the master-key loader to slice 2 (#150)")
     void aMissingKeyFileFailsEveryEntryPointAndGeneratesNothing(@TempDir Path secrets) {
         ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
 
@@ -337,7 +350,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns obligation 7 to slice 2 (#150)")
     void noEnvironmentVariableCanStandInForTheKeyFile() {
         JavaClasses connection = new ClassFileImporter()
                 .withImportOption(new ImportOption.DoNotIncludeTests())
@@ -362,7 +374,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns obligation 10 to slice 2 (#150)")
     void theSecretsDirectoryIsUnchangedAfterEveryCall(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
         List<String> before = listing(secrets);
@@ -379,7 +390,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns the key loader to slice 2 (#150)")
     void keyBytesNeverAppearInAnExceptionOrAToString(@TempDir Path secrets) throws IOException {
         byte[] keyBytes = key(256);
         writeMasterKey(secrets, keyBytes);
@@ -395,7 +405,6 @@ class ConnectionContractTest {
     // --- Credential encryption (C12–C15; ADR-0006 §Connection and credential model) ----------------
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns AES-256-GCM to slice 2 (#150)")
     void decryptOfEncryptIsTheMaterialItStartedFrom(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
         ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
@@ -411,7 +420,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns obligation 13 to slice 2 (#150)")
     void anAlteredOrTruncatedCiphertextGivesCorruptCiphertextAndNeverPlaintext(@TempDir Path secrets)
             throws IOException {
         writeMasterKey(secrets, key(256));
@@ -432,7 +440,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns obligation 14 to slice 2 (#150)")
     void aForeignMasterKeyGivesWrongOrLostKeyAndTheTwoFailuresStayDistinct(@TempDir Path mine, @TempDir Path theirs)
             throws IOException {
         writeMasterKey(mine, key(256));
@@ -452,7 +459,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns obligation 15 to slice 2 (#150)")
     void eachCiphertextIsSelfContainedAndTheModuleKeepsNoState(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
         SecretMaterial material = new SecretMaterial(PASSWORD);
@@ -616,9 +622,9 @@ class ConnectionContractTest {
 
     // --- Fixtures ----------------------------------------------------------------------------------
 
-    /** A module over a directory that is never touched: the stubs fail before they look at it. */
+    /** A module over the ledger's mounted key, so a stub fails because of its slice and nothing else. */
     private static ConnectionCrypto stubCrypto() {
-        return ConnectionCrypto.overSecretsDirectory(Path.of("secrets"));
+        return ConnectionCrypto.overSecretsDirectory(stubSecrets);
     }
 
     private static Set<String> entryPoints(Class<?> api) {
