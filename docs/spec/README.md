@@ -4,9 +4,11 @@ The v1 spec compiles ADR-0001–0039 and `CONTEXT.md` into one sub-spec per modu
 
 ## How to use it
 
-1. Read this index, then only the sub-spec of the module you are changing, then the ADRs its **Read first** line names. Root `CONTEXT.md` defines every term.
-2. One session implements one slice from one sub-spec's **Slices** section. Its blocking slices must be merged first.
-3. A slice is done when the obligations it covers are proved by the tests its **Verification** section names, at the ladder rung it names (ADR-0022), run on the mac through `rexec`.
+1. Read this index, then the sub-spec of every module your slice touches, then the ADRs their **Read first** lines name. Root `CONTEXT.md` defines every term.
+2. **A slice is a tracer-bullet vertical slice** (ADR-0041): it cuts a narrow but complete path through every layer it needs — schema, module `api`, implementation, adapter, UI, tests — and is demoable on its own. One session implements one slice. A slice may touch several modules, seeing each only through its `api`. Its blocking slices must be merged first.
+3. A slice is done when the obligations it covers are proved by the tests the touched sub-specs' **Verification** sections name, at the ladder rung they name (ADR-0022), run on the mac through `rexec`.
+
+**A sub-spec's Slices section is not the unit of a session.** Each sub-spec owns its module's obligations, ownership and verification — that is what a slice consults it for. The §Slices sections written before ADR-0041 are module-horizontal; they are recut as vertical slices when that module's work is next planned, never in one sweep. `dialect`'s and `connection`'s landed slices are not reopened. A module with no user-observable surface of its own, such as `connection`, gets no slices of its own: its capabilities arrive inside the vertical paths that consume them.
 
 **Precedence.** ADRs hold every rationale and win over the spec: a sub-spec that disagrees with an ADR is a spec bug, fixed in the sub-spec. `docs/technical-plan.md` is background reading, not a source of obligations. [`conflicts.md`](conflicts.md) records which text lost where the corpus disagreed; every winning ruling is already an obligation, so it is provenance you need only when tracing one.
 
@@ -43,7 +45,9 @@ Dependencies point downward: `web → orchestration → deep modules → dialect
 
 ## Where to start
 
-The cross-module slice graph is acyclic. Every blocking edge points to an earlier module in this order, which is also a safe build order:
+**Written before ADR-0041, and kept as a dependency reference rather than a plan.** A vertical slice starts at the user's surface and reaches down, so it does not enter at the front of a module build order. What survives below is which module depends on which — still true, and still what tells a slice whose `api` it will consume. The per-initiative slice graph is cut when that initiative is planned.
+
+The cross-module dependency order is acyclic. Every dependency edge points to an earlier module in this order:
 
 `dialect` → `connection` → `condition` → `scheduling` → `gateway` → `preflight` → `contract` → `connector` → `validation` → `diagnosis` → `environment` → `workflow` → `orchestration` → `frontend` → `web` → `release`
 
