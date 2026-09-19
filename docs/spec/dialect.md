@@ -56,11 +56,11 @@ None: `dialect` is the bottom of the dependency graph (ADR-0018 §Dependency dir
 15. The metadata plan reads types, keys, indexes, defaults, auto-increment, comments, charset, and collation, keeping the raw `information_schema` facts (TP §4 step 3; TP §6.1).
 16. Preflight obligations per table merge into minimal bounded scans, with one aggregate query for the envelope using `COALESCE(OCTET_LENGTH(CAST(E AS BINARY)),0)` per value and per row sum (ADR-0003; TP §6.6 checks 1–7).
 17. That scan also yields each keyset candidate's min and max plus the row-length facts for check 8 (ADR-0037; TP §6.6).
-18. Keyset candidates are single integer, `NOT NULL`, unique columns: the primary key first, then the unique index with the lowest name in the source collation (ADR-0037 §Choice).
+18. Keyset candidates are single integer, `NOT NULL`, unique columns: the primary key first, then the unique index with the lowest name in the source collation. `tinyint(1)` never qualifies, signed or unsigned (ADR-0037 §The keyset column as amended by #133).
 19. The baseline plan reads the exact `COUNT(*)` and the keyset column's min and max (ADR-0037; TP §4 step 8).
 19a. `queryProjection` renders the prune and rename projection, `SELECT <expr> AS <alias>, …`, from approved typed identifiers under obligation 5's quoting rules. It is the **only** renderer of that projection: `preflight`'s envelope scan measures these expressions (`preflight` `plan`) and `connector.deriveBox` places the same text into the Source `query` and `query.mode` properties and fingerprints it. It renders no `FROM`-clause filter, no `WHERE`, and no value transform (TP §7.1; ADR-0036 §Amended by #92).
 19b. The metadata plan's statistics carry the 预估行数 and `DATA_LENGTH` that `preflight` uses for the bulk cap and the byte estimate; the projection and the envelope scan both cover exactly the approved selected columns (ADR-0002 ¶4, ADR-0037 as amended by #92).
-20. Capability plans need only ADR-0006's read-only privileges (ADR-0006 §Capability checks).
+20. Capability plans need only ADR-0006's read-only privileges, and prove nothing about a column the account cannot see: a table-level source `SELECT` is a stated requirement, not a probed one, because an `INVISIBLE` column missing from the grant escapes both `*` and `information_schema.COLUMNS` (ADR-0006 §Capability checks as amended by #133).
 21. Connection semantics are the fingerprinted TP §6.5 Connector/J settings, including `useCursorFetch=true` and no `defaultFetchSize` (TP §6.5; ADR-0033).
 22. The bounded-read requirement declares cursor fetch, byte-derived fetch sizing, `LIMIT` keyset chunks, and bulk reads only within the 64 MiB cap (ADR-0033 §Settings; ADR-0037 §Bulk path).
 23. Validation and sampling plans, including the target key lookups, follow TP §9.2–9.3 (at most 300 numeric columns per batch, key-order rules, typed key lookups).
@@ -69,7 +69,7 @@ None: `dialect` is the bottom of the dependency graph (ADR-0018 §Dependency dir
 
 **Target plans**
 24. `ddlPlan` builds only the minimal writable table: exact types; `NOT NULL` except the approved relaxation; the primary key or the approved candidate; identity, or an owned sequence for `numeric(20,0)`; `CHECK` for `ENUM`; whitelisted defaults (`CURRENT_TIMESTAMP(n)` → `LOCALTIMESTAMP(n)`) (ADR-0011 §DDL; TP §7.3).
-25. Supplemental statements are executable, with foreign keys last. `ON UPDATE CURRENT_TIMESTAMP` and collation appear as comments only. Pruned or out-of-scope objects are commented out with a reason (ADR-0026 §Supplemental SQL).
+25. Supplemental statements are executable, with foreign keys last. `ON UPDATE CURRENT_TIMESTAMP`, collation, an ordinary `INVISIBLE` index, and an expression default appear as comments only; a **unique** `INVISIBLE` index stays executable, because MySQL still enforces it. Pruned or out-of-scope objects are commented out with a reason (ADR-0026 §Supplemental SQL as amended by #133).
 26. `normalizeCatalog` returns everything structural proof compares, plus the `pg_class` OID (TP §7.4; ADR-0023).
 27. Probe plans use an isolated, uniquely named object. Least-privilege SQL is text for the DBA, never a plan (ADR-0006 §Capability checks).
 28. Maintenance plans:
