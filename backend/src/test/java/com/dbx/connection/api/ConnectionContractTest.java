@@ -31,6 +31,7 @@ import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Supplier;
@@ -62,6 +63,19 @@ class ConnectionContractTest {
 
     /** Material that is recognisable in output, so a leak is visible rather than inferred. */
     private static final byte[] PASSWORD = "hunter2-do-not-print".getBytes(UTF_8);
+
+    /**
+     * The six failures of obligations 8, 9, 13, 14 and 18, in one place: the two cases below make
+     * different claims about the same list, and a list written twice is one a later obligation gets added
+     * to once (#148 review).
+     */
+    private static final List<Class<?>> TYPED_FAILURES = List.of(
+            MasterKeyUnavailable.class,
+            MasterKeyMalformed.class,
+            WrongOrLostKey.class,
+            CorruptCiphertext.class,
+            MasterKeyWrongOrMissing.class,
+            WrappedFormCorruptOrErased.class);
 
     // --- Stubs fail, they do not return empty (ADR-0008 §Ownership) ---------------------------------
 
@@ -169,13 +183,7 @@ class ConnectionContractTest {
      */
     @Test
     void theTypedFailuresAreSixDistinctTypes() {
-        List<Class<?>> failures = List.of(
-                MasterKeyUnavailable.class,
-                MasterKeyMalformed.class,
-                WrongOrLostKey.class,
-                CorruptCiphertext.class,
-                MasterKeyWrongOrMissing.class,
-                WrappedFormCorruptOrErased.class);
+        List<Class<?>> failures = TYPED_FAILURES;
 
         assertEquals(
                 6,
@@ -203,15 +211,7 @@ class ConnectionContractTest {
      */
     @Test
     void noFailureTypeCarriesMaterialOrAReasonString() {
-        List<Class<?>> failures = List.of(
-                MasterKeyUnavailable.class,
-                MasterKeyMalformed.class,
-                WrongOrLostKey.class,
-                CorruptCiphertext.class,
-                MasterKeyWrongOrMissing.class,
-                WrappedFormCorruptOrErased.class);
-
-        for (Class<?> failure : failures) {
+        for (Class<?> failure : TYPED_FAILURES) {
             for (Field field : failure.getDeclaredFields()) {
                 if (Modifier.isStatic(field.getModifiers())) {
                     continue;
@@ -327,21 +327,42 @@ class ConnectionContractTest {
         }
     }
 
+    /**
+     * Obligation 9's "every entry point", over all six. Five throw and {@code unwrap} returns, because
+     * obligation 18 caps its outcomes at two; the entry points are keyed by name and the set is compared
+     * with §Interface's, so an entry point left out of this case fails here rather than going uncovered —
+     * which is what happened to {@code unwrap} and {@code erase} until the #148 review.
+     */
     @Test
     void aMissingKeyFileFailsEveryEntryPointAndGeneratesNothing(@TempDir Path secrets) {
         ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
+        WrappedKey someForm = new WrappedKey(new byte[ENVELOPE_OVERHEAD_BYTES]);
 
-        for (Runnable call : List.<Runnable>of(
-                () -> crypto.encrypt(new SecretMaterial(PASSWORD)),
-                () -> crypto.decrypt(new Ciphertext(new byte[] {1, 2, 3})),
-                () -> crypto.wrap(new BackupId("backup-1")),
-                crypto::fingerprint)) {
-            assertThrows(
-                    MasterKeyUnavailable.class,
-                    call::run,
-                    "obligation 9: every entry point fails with the typed failure when secrets/master.key is "
-                            + "absent");
-        }
+        Map<String, Runnable> thatThrow = Map.of(
+                "encrypt", () -> crypto.encrypt(new SecretMaterial(PASSWORD)),
+                "decrypt", () -> crypto.decrypt(new Ciphertext(new byte[] {1, 2, 3})),
+                "wrap", () -> crypto.wrap(new BackupId("backup-1")),
+                "erase", () -> crypto.erase(someForm),
+                "fingerprint", crypto::fingerprint);
+
+        thatThrow.forEach((entryPoint, call) -> assertThrows(
+                MasterKeyUnavailable.class,
+                call::run,
+                "obligation 9: " + entryPoint + " fails with the typed failure when secrets/master.key is "
+                        + "absent"));
+        assertInstanceOf(
+                MasterKeyWrongOrMissing.class,
+                crypto.unwrap(someForm),
+                "obligation 9 reaches unwrap too, in the words obligation 18 leaves it: with no key mounted it "
+                        + "returns the key failure — never a DEK, and never the corrupt-or-erased outcome, which "
+                        + "would send the DBA to abandon a backup his own key would have opened");
+
+        Set<String> covered = new TreeSet<>(thatThrow.keySet());
+        covered.add("unwrap");
+        assertEquals(
+                new TreeSet<>(ConnectionBoundaryRules.ENTRY_POINTS),
+                covered,
+                "obligation 9 says every entry point, so this case calls all six of §Interface");
         assertFalse(
                 Files.exists(secrets.resolve("master.key")),
                 "obligation 9: connection never generates a key — the release script owns it (ADR-0035)");
@@ -373,11 +394,19 @@ class ConnectionContractTest {
 
     @Test
     void theSecretsDirectoryIsUnchangedAfterEveryCall(@TempDir Path secrets) throws IOException {
-        writeMasterKey(secrets, key(256));
+        byte[] master = key(256);
+        writeMasterKey(secrets, master);
         List<String> before = listing(secrets);
         ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
 
-        crypto.encrypt(new SecretMaterial(PASSWORD));
+        // All six entry points: wrap, unwrap and erase are the three a key store would be tempted to write
+        // for — a register of issued keys, a tombstone, a shredded form — so leaving them out of "after
+        // every call" left the name of this case untested (#148 review).
+        Ciphertext ciphertext = crypto.encrypt(new SecretMaterial(PASSWORD));
+        crypto.decrypt(ciphertext);
+        IssuedBackupKey issued = crypto.wrap(new BackupId("backup-1"));
+        crypto.unwrap(issued.wrappedForm());
+        crypto.erase(issued.wrappedForm());
         crypto.fingerprint();
 
         assertEquals(
@@ -385,19 +414,56 @@ class ConnectionContractTest {
                 listing(secrets),
                 "obligation 10: connection never writes to secrets/ — ADR-0035 §Master key forbids it even to "
                         + "upgrade and rollback");
+        assertArrayEquals(
+                master,
+                Files.readAllBytes(secrets.resolve("master.key")),
+                "obligation 10: not even the key file's own bytes change, so no call can re-key an installation "
+                        + "while leaving the directory listing identical");
     }
 
+    /**
+     * Obligation 11 for the master key itself, over every value the api hands back and the failure it
+     * throws.
+     *
+     * <p>The key is looked for as hex and as its own bytes. {@code new String(key, UTF_8)} — what this case
+     * used to search for — collapses non-UTF-8 bytes into replacement characters, so it matched nothing a
+     * module could plausibly print and the case passed over a {@code toString} that printed the key in full
+     * (#148 review). Hex is the form a leak actually takes, which is what
+     * {@link #noEntryPointOfTheApiIsASecondWayBackToAnErasedKey} already compares; ISO-8859-1 is the
+     * byte-preserving form, for a leak that concatenated the raw array.
+     */
     @Test
-    void keyBytesNeverAppearInAnExceptionOrAToString(@TempDir Path secrets) throws IOException {
+    void noPrintedValueOfTheApiCarriesTheMasterKey(@TempDir Path secrets) throws IOException {
         byte[] keyBytes = key(256);
         writeMasterKey(secrets, keyBytes);
         ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
+        IssuedBackupKey issued = crypto.wrap(new BackupId("backup-1"));
 
-        String key = new String(keyBytes, UTF_8);
-        assertFalse(crypto.toString().contains(key), "obligation 11: the module does not print its key");
-        assertFalse(
-                crypto.fingerprint().value().contains(key),
-                "ADR-0035 §Master key: the fingerprint reveals nothing about the key");
+        List<Object> printed = List.of(
+                crypto,
+                crypto.fingerprint(),
+                crypto.fingerprint().value(),
+                crypto.encrypt(new SecretMaterial(PASSWORD)),
+                crypto.decrypt(new Ciphertext(new byte[] {1, 2, 3})),
+                issued,
+                issued.key(),
+                issued.wrappedForm(),
+                crypto.unwrap(issued.wrappedForm()),
+                crypto.erase(issued.wrappedForm()),
+                assertThrows(
+                        MasterKeyUnavailable.class,
+                        () -> ConnectionCrypto.overSecretsDirectory(secrets.resolve("gone")).fingerprint(),
+                        "the failure a DBA reads is one of the values that must not carry the key"));
+
+        for (String form : List.of(HexFormat.of().formatHex(keyBytes), new String(keyBytes, ISO_8859_1))) {
+            for (Object value : printed) {
+                assertFalse(
+                        String.valueOf(value).contains(form),
+                        "obligation 11 and ADR-0035 §Master key: " + value.getClass().getSimpleName()
+                                + " prints the master key, so a log line or a diagnostic package carries it: "
+                                + value);
+            }
+        }
     }
 
     // --- Credential encryption (C12–C15; ADR-0006 §Connection and credential model) ----------------
@@ -473,6 +539,29 @@ class ConnectionContractTest {
                             ConnectionCrypto.overSecretsDirectory(secrets).decrypt(ciphertext),
                             "obligation 15: each output is self-contained, so a new instance reads it"),
                     "obligation 15: connection keeps no state between calls");
+        }
+    }
+
+    /**
+     * What the envelope costs, which is the one place the sizes {@link #ENVELOPE_PREFIX_BYTES} and
+     * {@link #ENVELOPE_OVERHEAD_BYTES} restate are compared with the envelope itself. Without it those
+     * constants agree with {@code MasterKeyCrypto}'s private ones by coincidence, and a changed key id or
+     * tag size would quietly mis-slice every comparison built on them instead of failing (#148 review).
+     *
+     * <p>It also pins the envelope as additive: overhead that grew with the plaintext would mean a second
+     * copy of the material riding along.
+     */
+    @Test
+    void theEnvelopeCostsExactlyTheOverheadTheseConstantsDescribe(@TempDir Path secrets) throws IOException {
+        writeMasterKey(secrets, key(256));
+        ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
+
+        for (int length : new int[] {0, 1, 32, 4096}) {
+            assertEquals(
+                    length + ENVELOPE_OVERHEAD_BYTES,
+                    crypto.encrypt(new SecretMaterial(passwordOfLength(length))).bytes().length,
+                    "the envelope is version, key id, nonce, ciphertext and tag, so it costs "
+                            + ENVELOPE_OVERHEAD_BYTES + " bytes over a plaintext of " + length);
         }
     }
 
@@ -574,6 +663,38 @@ class ConnectionContractTest {
                 "obligation 19a: decrypt is not a second way in — a wrapped form is not a credential ciphertext");
     }
 
+    /**
+     * What {@code erase} does not check, stated rather than left incidental: a wrapped form from another
+     * master key yields its instruction like any other. What is validated is that a well-formed key is
+     * mounted, not that this form opens under it — obligation 19b's idempotence is the same behaviour seen
+     * from the side of a form that has already been shredded, and an {@code erase} that refused what it
+     * could not open would refuse exactly the inputs a retried cleanup is most likely to hold (#148
+     * review).
+     */
+    @Test
+    void eraseOfAFormFromAForeignMasterKeyStillYieldsItsInstruction(@TempDir Path mine, @TempDir Path theirs)
+            throws IOException {
+        writeMasterKey(mine, key(256));
+        writeMasterKey(theirs, other(256));
+        WrappedKey theirForm =
+                ConnectionCrypto.overSecretsDirectory(theirs).wrap(new BackupId("backup-1")).wrappedForm();
+        ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(mine);
+
+        ErasureInstruction instruction = crypto.erase(theirForm);
+
+        assertEquals(
+                theirForm,
+                instruction.wrappedForm(),
+                "obligation 19b: erase validates that the master key is mounted and well formed, and does not "
+                        + "open the form — the wanted end state of a form this key never wrapped is the same as "
+                        + "of one it did: these bytes gone");
+        assertInstanceOf(
+                MasterKeyWrongOrMissing.class,
+                crypto.unwrap(theirForm),
+                "and the form really is foreign, which is what makes the claim above one about erase rather than "
+                        + "about an ordinary wrapped form");
+    }
+
     @Test
     void eraseIsIdempotentForAnAlreadyErasedKey(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
@@ -667,49 +788,6 @@ class ConnectionContractTest {
 
     // --- TLS material (E20; ADR-0005 "private keys") -----------------------------------------------
 
-    /**
-     * What one TLS mode (TLS 模式) hands DBX. The three modes are {@code CONTEXT.md} §TLS mode's: TLS
-     * disabled (不启用 TLS) hands over nothing, Server authenticated (校验服务端证书) the authority that
-     * signs the server's certificate, and Mutual (双向证书校验) that plus the client certificate, the
-     * client private key and the passphrase that unlocks the key. Obligation 20 is about every row
-     * travelling the one road, not only about the two secret rows of the last mode.
-     */
-    private record TlsMode(String mode, List<SecretMaterial> material) {
-    }
-
-    private static final SecretMaterial SERVER_CA =
-            new SecretMaterial("-----BEGIN CERTIFICATE-----\nthe-authority".getBytes(UTF_8));
-
-    private static final SecretMaterial CLIENT_CERTIFICATE =
-            new SecretMaterial("-----BEGIN CERTIFICATE-----\nthe-client".getBytes(UTF_8));
-
-    private static final SecretMaterial CLIENT_PRIVATE_KEY =
-            new SecretMaterial("-----BEGIN PRIVATE KEY-----\nthe-most-dangerous-value-in-the-install".getBytes(UTF_8));
-
-    private static final SecretMaterial CLIENT_KEY_PASSPHRASE =
-            new SecretMaterial("passphrase-that-unlocks-the-client-key".getBytes(UTF_8));
-
-    private static final List<TlsMode> TLS_MODES = List.of(
-            new TlsMode("TLS disabled (不启用 TLS)", List.of()),
-            new TlsMode("Server authenticated (校验服务端证书)", List.of(SERVER_CA)),
-            new TlsMode(
-                    "Mutual (双向证书校验)",
-                    List.of(SERVER_CA, CLIENT_CERTIFICATE, CLIENT_PRIVATE_KEY, CLIENT_KEY_PASSPHRASE)));
-
-    /**
-     * Every purpose label this module seals under, and the whole list: a credential (slice 2), a wrapped
-     * DEK (slice 3), and the fingerprint's fixed label. TLS material adds none — it travels under the
-     * credential label, which is "no seventh entry point" one layer further down.
-     */
-    private static final Set<String> PURPOSE_LABELS =
-            Set.of("dbx:credential:v1", "dbx:wrapped-dek:v1", "dbx:master-key-fingerprint:v1");
-
-    /**
-     * How much of an envelope two values sealed under one master key share: the version byte and the key
-     * id. The nonce after it is fresh per call, so a comparison stops there.
-     */
-    private static final int ENVELOPE_PREFIX_BYTES = 1 + 8;
-
     @Test
     void tlsClientKeyAndPassphraseTravelThroughEncryptLikeAnyCredential(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
@@ -778,7 +856,7 @@ class ConnectionContractTest {
                                 + "material is: " + mode.mode());
 
                 String inTheClear = new String(plaintext, UTF_8);
-                byte[] shredded = Arrays.copyOf(sealed, ENVELOPE_PREFIX_BYTES + 12 + 16);
+                byte[] shredded = Arrays.copyOf(sealed, ENVELOPE_OVERHEAD_BYTES);
                 for (Object printed :
                         List.of(new Ciphertext(sealed), material, crypto.decrypt(new Ciphertext(shredded)))) {
                     assertFalse(
@@ -843,6 +921,66 @@ class ConnectionContractTest {
     }
 
     // --- Fixtures ----------------------------------------------------------------------------------
+
+    /**
+     * The envelope's own bytes around a plaintext, restating {@code MasterKeyCrypto}'s private
+     * {@code KEY_ID_BYTES}, {@code NONCE_BYTES} and {@code TAG_BITS} rather than reading them: they are
+     * that class's implementation decision (§Implementer decides) and widening their visibility for a test
+     * would make them api. {@link #theEnvelopeCostsExactlyTheOverheadTheseConstantsDescribe} is what keeps
+     * the restatement honest — it compares these numbers with a real envelope, so a changed production
+     * constant fails there instead of silently mis-slicing the comparisons below (#148 review).
+     */
+    private static final int VERSION_BYTES = 1;
+    private static final int KEY_ID_BYTES = 8;
+    private static final int NONCE_BYTES = 12;
+    private static final int TAG_BYTES = 16;
+
+    /**
+     * How much of an envelope two values sealed under one master key share: the version byte and the key
+     * id. The nonce after it is fresh per call, so a comparison stops there.
+     */
+    private static final int ENVELOPE_PREFIX_BYTES = VERSION_BYTES + KEY_ID_BYTES;
+
+    /** Everything but the plaintext: the header, and the tag GCM appends to it. */
+    private static final int ENVELOPE_OVERHEAD_BYTES = ENVELOPE_PREFIX_BYTES + NONCE_BYTES + TAG_BYTES;
+
+    /**
+     * What one TLS mode (TLS 模式) hands DBX. The three modes are {@code CONTEXT.md} §TLS mode's: TLS
+     * disabled (不启用 TLS) hands over nothing, Server authenticated (校验服务端证书) the authority that
+     * signs the server's certificate, and Mutual (双向证书校验) that plus the client certificate, the
+     * client private key and the passphrase that unlocks the key. Obligation 20 is about every row
+     * travelling the one road, not only about the two secret rows of the last mode.
+     */
+    private record TlsMode(String mode, List<SecretMaterial> material) {
+    }
+
+    private static final SecretMaterial SERVER_CA =
+            new SecretMaterial("-----BEGIN CERTIFICATE-----\nthe-authority".getBytes(UTF_8));
+
+    private static final SecretMaterial CLIENT_CERTIFICATE =
+            new SecretMaterial("-----BEGIN CERTIFICATE-----\nthe-client".getBytes(UTF_8));
+
+    private static final SecretMaterial CLIENT_PRIVATE_KEY =
+            new SecretMaterial("-----BEGIN PRIVATE KEY-----\nthe-most-dangerous-value-in-the-install".getBytes(UTF_8));
+
+    private static final SecretMaterial CLIENT_KEY_PASSPHRASE =
+            new SecretMaterial("passphrase-that-unlocks-the-client-key".getBytes(UTF_8));
+
+    private static final List<TlsMode> TLS_MODES = List.of(
+            new TlsMode("TLS disabled (不启用 TLS)", List.of()),
+            new TlsMode("Server authenticated (校验服务端证书)", List.of(SERVER_CA)),
+            new TlsMode(
+                    "Mutual (双向证书校验)",
+                    List.of(SERVER_CA, CLIENT_CERTIFICATE, CLIENT_PRIVATE_KEY, CLIENT_KEY_PASSPHRASE)));
+
+    /**
+     * Every purpose label this module seals under, and the whole list: a credential (slice 2), a wrapped
+     * DEK (slice 3), and the fingerprint's fixed label. TLS material adds none — it travels under the
+     * credential label, which is "no seventh entry point" one layer further down.
+     */
+    private static final Set<String> PURPOSE_LABELS =
+            Set.of("dbx:credential:v1", "dbx:wrapped-dek:v1", "dbx:master-key-fingerprint:v1");
+
 
     /**
      * Whether a {@link DataEncryptionKey} can travel inside a value of this type: the type itself, any

@@ -77,6 +77,13 @@ class ConnectionBoundaryRuleFixtureTest {
         assertTrue(
                 failure.contains("WritesTheKeyFile") && failure.contains("Files.writeString writes"),
                 "the rule names the class that wrote and the call it wrote with: " + failure);
+        // The four ways the fixture writes, one per entry on the rule's lists: a rule that named only the
+        // writer classes reported the first and passed over the rest (#148 review).
+        assertTrue(failure.contains("RandomAccessFile"), "the rule names the RandomAccessFile: " + failure);
+        assertTrue(
+                failure.contains("Files.newByteChannel writes"),
+                "the rule names the channel the module opened to write: " + failure);
+        assertTrue(failure.contains("File.delete writes"), "the rule names the File.delete: " + failure);
     }
 
     @Test

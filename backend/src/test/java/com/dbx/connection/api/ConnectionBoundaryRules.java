@@ -16,6 +16,7 @@ import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -71,24 +72,71 @@ final class ConnectionBoundaryRules {
             "okhttp3.",
             "org.apache.kafka.");
 
-    /** Writing types obligations 10 and 19 keep out; reading the master key is the one side effect. */
-    private static final List<String> WRITING_TYPES =
-            List.of("java.io.FileOutputStream", "java.io.FileWriter", "java.io.PrintWriter");
+    /**
+     * Writing types obligations 10 and 19 keep out; reading the master key is the one side effect.
+     *
+     * <p>A type is here when holding it is enough to write: a stream and a writer say so in their names,
+     * and the channels say it in their methods. {@code RandomAccessFile} and the file channels are the
+     * ways round a list of writer classes — {@code new RandomAccessFile(f, "rw").write(b)} names no
+     * {@code OutputStream} and calls no {@code Files} method — so a rule that named only the writers
+     * would have read as "connection writes nothing" while the one way it might came in unseen. None of
+     * them is needed to read a 32-byte key file, which {@code Files.readAllBytes} does, so the type is
+     * banned outright rather than filtered by method.
+     */
+    private static final List<String> WRITING_TYPES = List.of(
+            "java.io.FileOutputStream",
+            "java.io.FileWriter",
+            "java.io.PrintWriter",
+            "java.io.RandomAccessFile",
+            "java.nio.channels.FileChannel",
+            "java.nio.channels.AsynchronousFileChannel",
+            "java.nio.channels.SeekableByteChannel",
+            "java.nio.channels.WritableByteChannel");
 
-    /** {@code java.nio.file.Files} both reads and writes, so it is filtered by method name. */
-    private static final List<String> WRITING_FILES_METHODS = List.of(
-            "write",
-            "writeString",
-            "newOutputStream",
-            "newBufferedWriter",
-            "createFile",
-            "createDirectory",
-            "createDirectories",
-            "createTempFile",
-            "copy",
-            "move",
-            "delete",
-            "deleteIfExists");
+    /**
+     * {@code java.nio.file.Files} and {@code java.io.File} both read and write, so they are filtered by
+     * method name: the owner is one this module legitimately names ({@code Files.readAllBytes}), and the
+     * verb is what decides. {@code newByteChannel} is on the list because with a {@code WRITE} or
+     * {@code CREATE} option it hands back a writable handle through the one type this module already
+     * imports, and reading a key file never needs one.
+     */
+    private static final Map<String, List<String>> WRITING_METHODS = Map.of(
+            "java.nio.file.Files",
+            List.of(
+                    "write",
+                    "writeString",
+                    "newOutputStream",
+                    "newBufferedWriter",
+                    "newByteChannel",
+                    "createFile",
+                    "createDirectory",
+                    "createDirectories",
+                    "createTempFile",
+                    "createTempDirectory",
+                    "createLink",
+                    "createSymbolicLink",
+                    "setAttribute",
+                    "setLastModifiedTime",
+                    "setOwner",
+                    "setPosixFilePermissions",
+                    "copy",
+                    "move",
+                    "delete",
+                    "deleteIfExists"),
+            "java.io.File",
+            List.of(
+                    "createNewFile",
+                    "createTempFile",
+                    "mkdir",
+                    "mkdirs",
+                    "delete",
+                    "deleteOnExit",
+                    "renameTo",
+                    "setExecutable",
+                    "setLastModified",
+                    "setReadable",
+                    "setReadOnly",
+                    "setWritable"));
 
     private ConnectionBoundaryRules() {
     }
@@ -196,11 +244,13 @@ final class ConnectionBoundaryRules {
                             }
                         }
                         for (JavaMethodCall call : item.getMethodCallsFromSelf()) {
-                            if (call.getTargetOwner().getFullName().equals("java.nio.file.Files")
-                                    && WRITING_FILES_METHODS.contains(call.getTarget().getName())) {
+                            String owner = call.getTargetOwner().getFullName();
+                            String method = call.getTarget().getName();
+                            if (WRITING_METHODS.getOrDefault(owner, List.of()).contains(method)) {
                                 events.add(SimpleConditionEvent.violated(
-                                        item, call.getDescription() + " — Files." + call.getTarget().getName()
-                                                + " writes"));
+                                        item,
+                                        call.getDescription() + " — " + call.getTargetOwner().getSimpleName() + "."
+                                                + method + " writes"));
                             }
                         }
                     }

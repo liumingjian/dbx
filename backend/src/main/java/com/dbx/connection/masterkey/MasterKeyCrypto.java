@@ -163,7 +163,7 @@ public final class MasterKeyCrypto implements ConnectionCrypto {
             // The two failures of obligation 14 are the two ways an envelope can refuse, read through
             // this union: a foreign key sends the DBA to secrets/, a broken value to a new password.
             return switch (open(key, CREDENTIAL_PURPOSE, ciphertext.bytes())) {
-                case Opened.Value value -> new SecretMaterial(value.bytes());
+                case Opened.Value value -> theMaterial(value);
                 case Opened.SealedByAnotherKey ignored -> new WrongOrLostKey();
                 case Opened.NotThisEnvelope ignored -> new CorruptCiphertext();
             };
@@ -210,6 +210,11 @@ public final class MasterKeyCrypto implements ConnectionCrypto {
      * key did not wrap this"; telling them apart would also let a reader probe which key a wrapped form
      * belongs to. Erasure and corruption are the other outcome and never this one: a form that no
      * longer opens is not evidence about the key.
+     *
+     * <p>A key file of the wrong length therefore arrives here as {@link MasterKeyWrongOrMissing} and
+     * obligation 8's length is not reported from this one entry point. That is obligation 18's cap being
+     * honoured rather than a detail lost: every other entry point still throws {@link MasterKeyMalformed},
+     * so the DBA learns the length from the first call DBX makes that is not a restore.
      */
     @Override
     public Unwrapping unwrap(WrappedKey wrapped) {
@@ -358,6 +363,22 @@ public final class MasterKeyCrypto implements ConnectionCrypto {
             // header, the purpose and the ciphertext together and one of them is not what was sealed.
             // No partial plaintext exists to return, and the exception is dropped (obligation 11).
             return new Opened.NotThisEnvelope();
+        }
+    }
+
+    /**
+     * The decrypted material, with the opened bytes zeroed: the copy inside the value is the only one
+     * left. {@link SecretMaterial} copies on the way in, so zeroing the array it was built from cannot
+     * blind its holder — and leaving it unzeroed would keep the one plaintext this module produces alive in
+     * the heap after the call that asked for it returned, which is the discipline this class's comment
+     * states and {@link #theKey} already keeps for a DEK (#148 review).
+     */
+    private static SecretMaterial theMaterial(Opened.Value value) {
+        byte[] plaintext = value.bytes();
+        try {
+            return new SecretMaterial(plaintext);
+        } finally {
+            Arrays.fill(plaintext, (byte) 0);
         }
     }
 

@@ -64,14 +64,26 @@ public interface ConnectionCrypto {
      * two failures stay distinct because they send the DBA to different places: restore
      * {@code secrets/} from the copy kept off the machine, versus abandon this backup and choose
      * another (obligation 18).
+     *
+     * <p>This is the one entry point that does not throw {@link MasterKeyFailure}: obligation 18 caps
+     * the outcomes at two, so an absent or wrong-length master-key file is returned as
+     * {@link MasterKeyWrongOrMissing} together with a form the mounted key did not wrap — obligation 8's
+     * length detail is not reported here. A caller restoring a backup can act on only one thing, which
+     * is that {@code secrets/} is not the directory this form was wrapped under; and telling the three
+     * apart would let a reader probe which key a wrapped form belongs to.
      */
     Unwrapping unwrap(WrappedKey wrapped);
 
     /**
-     * Validates that a wrapped key belongs to the present master key and returns the instruction that
-     * makes it unrecoverable (obligation 19). It erases nothing itself: {@code connection} persists
-     * nothing, so {@code workflow} carries the instruction out. Producing one for an already-erased
-     * key succeeds, because cleanup is retried (obligation 19b).
+     * The instruction that makes a wrapped key unrecoverable (obligation 19), having checked only that a
+     * well-formed master key is mounted. It does not check that this form opens under that key: by
+     * obligation 19b cleanup is retried, and the end state wanted of a form that no longer opens is the
+     * same as of an intact one — these bytes gone — so a form wrapped under a foreign master key, or
+     * already erased, yields its instruction like any other. What a caller gets is therefore "the DBA's
+     * key is mounted and here is what to destroy", not "these bytes are yours".
+     *
+     * <p>It erases nothing itself: {@code connection} persists nothing, so {@code workflow} carries the
+     * instruction out.
      */
     ErasureInstruction erase(WrappedKey wrapped);
 
