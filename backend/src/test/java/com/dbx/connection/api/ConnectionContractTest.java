@@ -24,13 +24,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -46,8 +46,8 @@ import org.junit.jupiter.api.io.TempDir;
  * written here and {@code @Disabled} with the slice that enables them named in the reason — written
  * rather than deferred so that each slice enables a test somebody already argued about, instead of
  * inventing one that happens to pass against whatever it built ({@code docs/spec/connection.md}
- * §Slices; #149). Slice 2 enables groups B and C as they stand (#150); groups D and E wait for slices
- * 3 and 4.
+ * §Slices; #149). Slice 2 enabled groups B and C as they stand (#150) and slice 3 group D (#151);
+ * group E waits for slice 4.
  *
  * <p>Nothing here is deferred to a higher rung: {@code connection} has no L2, and its one side effect —
  * reading the master-key file — is covered by a temporary {@code secrets/} directory (§Verification).
@@ -65,30 +65,18 @@ class ConnectionContractTest {
     /**
      * Every entry point of {@code docs/spec/connection.md} §Interface that is still a stub, with the
      * slice that owns it. A slice that implements one deletes its row and adds the name to
-     * {@link #IMPLEMENTED}; arguments are null on purpose, because a stub has to fail before it looks at
-     * them.
+     * {@link #IMPLEMENTED}. Slice 3 deleted the last three rows, and the ledger stays empty rather than
+     * being deleted: it is what makes a capability added later account for itself.
      */
-    private static final List<Stub> STUBS = List.of(
-            new Stub("wrap", 3, () -> stubCrypto().wrap(null)),
-            new Stub("unwrap", 3, () -> stubCrypto().unwrap(null)),
-            new Stub("erase", 3, () -> stubCrypto().erase(null)));
-
-    /** Entry points a landed slice implements, one per line. Slice 2 lands three. */
-    private static final Set<String> IMPLEMENTED = Set.of("encrypt", "decrypt", "fingerprint");
+    private static final List<Stub> STUBS = List.of();
 
     /**
-     * A mounted key for the stub ledger. Obligation 9 holds for every entry point, so the capabilities
-     * slice 3 owns read the key before they refuse: with {@code secrets/} empty they would fail with
-     * {@link MasterKeyUnavailable}, which says nothing about whether the capability exists. The ledger
-     * gives them a key, so what it observes is the refusal itself (#150).
+     * Entry points a landed slice implements, one per line. Slice 3 lands the last three, so the ledger
+     * above is empty and the factory below asserts that instead of a refusal — the row stays because a
+     * later slice adding a capability must account for it here before it can be reviewed.
      */
-    @TempDir
-    static Path stubSecrets;
-
-    @BeforeAll
-    static void mountAKeyForTheStubLedger() throws IOException {
-        writeMasterKey(stubSecrets, key(256));
-    }
+    private static final Set<String> IMPLEMENTED =
+            Set.of("encrypt", "decrypt", "wrap", "unwrap", "erase", "fingerprint");
 
     @TestFactory
     Stream<DynamicTest> anUnimplementedEntryPointFailsNamingItsSlice() {
@@ -144,11 +132,15 @@ class ConnectionContractTest {
      * Obligation 1 and ADR-0018 rule 1, at the one place they are easiest to break: the not-implemented
      * marker. {@code dialect}'s lives outside {@code dialect.api}, so importing it would make this module
      * name another module — the leaf violation slice 1 exists to catch.
+     *
+     * <p>Slice 3 landed the last capability, so no entry point throws the marker any longer and the case
+     * asks the type directly instead of through a call. The ruling was never about a particular stub: it
+     * is about which package the marker this module names lives in, and the marker is still here for the
+     * next module-local capability that has to refuse before it is written (#151).
      */
     @Test
     void theNotImplementedFailureIsConnectionsOwnTypeAndNotDialects() {
-        NotImplementedInSlice failure =
-                assertThrows(NotImplementedInSlice.class, () -> stubCrypto().wrap(new BackupId("backup-1")));
+        NotImplementedInSlice failure = new NotImplementedInSlice("a capability no slice has landed", 3);
 
         assertEquals(
                 "com.dbx.connection",
@@ -481,7 +473,6 @@ class ConnectionContractTest {
     // --- Per-backup DEKs (D16–D19b; ADR-0006 as amended by #97) ------------------------------------
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns wrap to slice 3 (#151)")
     void eachWrapIssuesAKeyDistinctFromEveryKeyBefore(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
         ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
@@ -495,7 +486,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns unwrap to slice 3 (#151)")
     void unwrapOfWrapIsTheSameKeyUnderTheSameMasterKey(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
         ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
@@ -511,7 +501,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns obligation 18 to slice 3 (#151)")
     void unwrapsTwoFailuresStayDistinctAndAnErasedKeyIsNeverAKeyProblem(@TempDir Path mine, @TempDir Path theirs)
             throws IOException {
         writeMasterKey(mine, key(256));
@@ -537,7 +526,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns erase to slice 3 (#151)")
     void eraseReturnsAnInstructionAndWritesNothing(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
         List<String> before = listing(secrets);
@@ -554,7 +542,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns obligation 19a to slice 3 (#151)")
     void anErasedKeyIsUnrecoverableThroughEveryPathOfTheApi(@TempDir Path secrets, @TempDir Path backupOfSecrets)
             throws IOException {
         byte[] master = key(256);
@@ -582,7 +569,6 @@ class ConnectionContractTest {
     }
 
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns obligation 19b to slice 3 (#151)")
     void eraseIsIdempotentForAnAlreadyErasedKey(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
         ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
@@ -593,6 +579,84 @@ class ConnectionContractTest {
                 crypto.erase(wrapped),
                 "obligation 19b: cleanup is retried, so producing the instruction twice succeeds and says the "
                         + "same thing (ADR-0006 §Recovery)");
+    }
+
+    /**
+     * Obligation 19a is a negative claim about the whole interface, so it is checked against the whole
+     * interface rather than against one method's failure code: a DEK whose wrapped form has been shredded
+     * is unreachable through every one of the six entry points, holding the mounted master key and its
+     * separately protected copy.
+     *
+     * <p>Two of the six can return a DEK at all — {@code wrap} and {@code unwrap} — and those are checked
+     * by behaviour. The other four cannot: no result type of {@code encrypt}, {@code decrypt},
+     * {@code erase} or {@code fingerprint} can hold a {@link DataEncryptionKey}, which the last assertion
+     * establishes over the declared types so that adding such a result later lands here as a failure.
+     * {@code decrypt} is checked by behaviour anyway, because a wrapped form is bytes a reader can hand
+     * it and the only thing keeping it from opening is the purpose label in the associated data.
+     */
+    @Test
+    void noEntryPointOfTheApiIsASecondWayBackToAnErasedKey(@TempDir Path secrets, @TempDir Path offMachineCopy)
+            throws IOException {
+        byte[] master = key(256);
+        writeMasterKey(secrets, master);
+        writeMasterKey(offMachineCopy, master);
+        ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
+        IssuedBackupKey issued = crypto.wrap(new BackupId("backup-1"));
+        DataEncryptionKey erasedKey = issued.key();
+        String keyInHex = HexFormat.of().formatHex(erasedKey.bytes());
+
+        // What is left after workflow carries the instruction out: the wrapped bytes are gone, zeroed, or
+        // half-overwritten. These are the inputs a reader can still get hold of.
+        List<WrappedKey> remains = List.of(
+                new WrappedKey(new byte[0]),
+                new WrappedKey(new byte[issued.wrappedForm().bytes().length]),
+                new WrappedKey(Arrays.copyOf(issued.wrappedForm().bytes(), 12)));
+
+        crypto.erase(issued.wrappedForm());
+
+        for (ConnectionCrypto reader : List.of(crypto, ConnectionCrypto.overSecretsDirectory(offMachineCopy))) {
+            for (WrappedKey remain : remains) {
+                assertInstanceOf(
+                        WrappedFormCorruptOrErased.class,
+                        reader.unwrap(remain),
+                        "obligation 19a: unwrap never returns the DEK once the wrapped form is shredded — not "
+                                + "under the mounted master key and not under its separately protected copy");
+                assertEquals(
+                        remain,
+                        crypto.erase(remain).wrappedForm(),
+                        "obligation 19b: erase of an already-erased form succeeds, and its instruction carries the "
+                                + "wrapped form only");
+                assertInstanceOf(
+                        CorruptCiphertext.class,
+                        reader.decrypt(new Ciphertext(remain.bytes())),
+                        "obligation 19a: decrypt is not a second way in either");
+            }
+        }
+        assertInstanceOf(
+                CorruptCiphertext.class,
+                crypto.decrypt(new Ciphertext(issued.wrappedForm().bytes())),
+                "obligation 19a: even an intact wrapped form does not open through decrypt — a wrapped key and a "
+                        + "credential ciphertext are sealed for different purposes, so neither opens as the other");
+        for (int i = 0; i < 8; i++) {
+            assertNotEquals(
+                    erasedKey,
+                    crypto.wrap(new BackupId("backup-after-erasure-" + i)).key(),
+                    "obligation 19a: wrap issues keys, it never re-issues one (obligation 16 is what makes this "
+                            + "true of every wrap, not only of these eight)");
+        }
+        assertFalse(
+                crypto.fingerprint().value().contains(keyInHex),
+                "obligation 19a: the fingerprint is a function of the master key and says nothing of any DEK");
+
+        assertEquals(
+                new TreeSet<>(Set.of("unwrap", "wrap")),
+                Arrays.stream(ConnectionCrypto.class.getDeclaredMethods())
+                        .filter(method -> !Modifier.isStatic(method.getModifiers()))
+                        .filter(method -> canHoldAKey(method.getReturnType()))
+                        .map(Method::getName)
+                        .collect(Collectors.toCollection(TreeSet::new)),
+                "obligation 19a: only wrap and unwrap have a result a DEK can travel in at all, so the four "
+                        + "checked above by type are the rest of the api — a seventh path would show up here");
     }
 
     // --- TLS material (E20; ADR-0005 "private keys") -----------------------------------------------
@@ -622,9 +686,24 @@ class ConnectionContractTest {
 
     // --- Fixtures ----------------------------------------------------------------------------------
 
-    /** A module over the ledger's mounted key, so a stub fails because of its slice and nothing else. */
-    private static ConnectionCrypto stubCrypto() {
-        return ConnectionCrypto.overSecretsDirectory(stubSecrets);
+    /**
+     * Whether a {@link DataEncryptionKey} can travel inside a value of this type: the type itself, any
+     * member of a sealed union, or any component of a record. It is reachability through the declared
+     * types, which is what obligation 19a's "no path through the api" means for the four entry points
+     * whose results cannot carry a key.
+     */
+    private static boolean canHoldAKey(Class<?> type) {
+        if (type.equals(DataEncryptionKey.class)) {
+            return true;
+        }
+        if (type.isSealed()) {
+            return Arrays.stream(type.getPermittedSubclasses()).anyMatch(ConnectionContractTest::canHoldAKey);
+        }
+        if (type.isRecord()) {
+            return Arrays.stream(type.getRecordComponents())
+                    .anyMatch(component -> canHoldAKey(component.getType()));
+        }
+        return false;
     }
 
     private static Set<String> entryPoints(Class<?> api) {
