@@ -24,11 +24,23 @@ public interface TargetDialect {
     /** Target-side validation facts (TP §9.2; slice 8). */
     List<SqlPlan> validationFactPlans(List<ValidationItem> items);
 
-    /** Typed key lookups for sampled keys (TP §9.3; slice 8). */
-    SqlPlan samplingLookupPlan(SamplingLookupKeys keys);
+    /**
+     * Typed key lookups for sampled keys, one plan per key tuple in key order (TP §9.3; slice 8). A plan
+     * per tuple rather than one plan for the sample, so every lookup keeps one cardinality and one
+     * fingerprint (spec #134 correction 4).
+     */
+    List<SqlPlan> samplingLookupPlan(SamplingLookupKeys keys);
 
-    /** Everything structural proof compares, plus the {@code pg_class} OID (slice 8). */
-    TargetTableFacts normalizeCatalog(ResultRows rows);
+    /**
+     * The rows of one {@link #catalogReadPlan} as one {@link TargetTableFacts} per table, in the order the
+     * server returned them: everything structural proof compares, plus the {@code pg_class} OID (TP §7.4;
+     * ADR-0023; slice 8). It compares nothing — {@code prove} is {@code contract}'s.
+     *
+     * <p>It takes the coordinates the plan asked for as well as the rows, because the guard the sub-spec
+     * demands — a row set holding a table nobody asked for is a broken read, not a difference — is not
+     * expressible from rows alone.
+     */
+    List<TargetTableFacts> normalizeCatalog(List<TargetTableCoordinate> coordinates, ResultRows rows);
 
     /** Executable supplemental SQL, foreign keys last (ADR-0026; slice 7). */
     List<Statement> supplementalStatements(List<DeferredStructure> deferredStructures);

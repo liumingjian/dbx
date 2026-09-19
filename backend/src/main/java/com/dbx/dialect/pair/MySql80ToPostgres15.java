@@ -61,12 +61,12 @@ public final class MySql80ToPostgres15 implements DatabasePair {
 
     @Override
     public ExecutionRequirements executionRequirements(List<Supported> mappingDecisions) {
-        return PairRequirements.executionRequirements(mappingDecisions);
+        return PairRequirements.executionRequirements(source().boundedRead(), mappingDecisions);
     }
 
     @Override
-    public ValidationCapabilities validationCapabilities() {
-        return PairRequirements.validationCapabilities();
+    public ValidationCapabilities validationCapabilities(List<SourceColumn> columns) {
+        return PairRequirements.validationCapabilities(columns);
     }
 
     @Override

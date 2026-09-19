@@ -1,6 +1,5 @@
 package com.dbx.dialect.postgres;
 
-import com.dbx.dialect.NotImplementedInSlice;
 import com.dbx.dialect.api.DeferredStructure;
 import com.dbx.dialect.api.DialectId;
 import com.dbx.dialect.api.MaintenanceAction;
@@ -21,7 +20,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The PostgreSQL 15 target dialect. Slices 7 and 8 implement it; a capability not yet landed fails. A directed pair
+ * The PostgreSQL 15 target dialect, implemented in full by slices 7 and 8. A directed pair
  * constructs it with its source side's {@link SourceDefinitions}, the only source text supplemental SQL quotes.
  */
 public final class Postgres15TargetDialect implements TargetDialect {
@@ -43,32 +42,33 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public SqlPlan catalogReadPlan(List<TargetTableCoordinate> coordinates) {
-        throw new NotImplementedInSlice("target.catalogReadPlan", 8);
+        return CatalogRead.plan(Objects.requireNonNull(coordinates, "coordinates are required"));
     }
 
     @Override
     public List<SqlPlan> capabilityProbePlans(TargetIdentifier schema, TargetIdentifier probeName) {
-        throw new NotImplementedInSlice("target.capabilityProbePlans", 8);
+        return CapabilityProbe.plans(Objects.requireNonNull(schema, "schema is required"),
+                Objects.requireNonNull(probeName, "probeName is required"));
     }
 
     @Override
     public List<SqlPlan> maintenancePlans(List<MaintenanceAction> actions) {
-        throw new NotImplementedInSlice("target.maintenancePlans", 8);
+        return Maintenance.plans(Objects.requireNonNull(actions, "actions are required"));
     }
 
     @Override
     public List<SqlPlan> validationFactPlans(List<ValidationItem> items) {
-        throw new NotImplementedInSlice("target.validationFactPlans", 8);
+        return ValidationFacts.plans(Objects.requireNonNull(items, "items are required"));
     }
 
     @Override
-    public SqlPlan samplingLookupPlan(SamplingLookupKeys keys) {
-        throw new NotImplementedInSlice("target.samplingLookupPlan", 8);
+    public List<SqlPlan> samplingLookupPlan(SamplingLookupKeys keys) {
+        return SamplingLookup.plans(Objects.requireNonNull(keys, "keys are required"));
     }
 
     @Override
-    public TargetTableFacts normalizeCatalog(ResultRows rows) {
-        throw new NotImplementedInSlice("target.normalizeCatalog", 8);
+    public List<TargetTableFacts> normalizeCatalog(List<TargetTableCoordinate> coordinates, ResultRows rows) {
+        return CatalogNormalizer.normalize(coordinates, rows);
     }
 
     @Override
@@ -78,7 +78,7 @@ public final class Postgres15TargetDialect implements TargetDialect {
 
     @Override
     public String leastPrivilegeSql(Set<RequiredPrivilege> missing) {
-        throw new NotImplementedInSlice("target.leastPrivilegeSql", 8);
+        return LeastPrivilege.sql(Objects.requireNonNull(missing, "missing is required"));
     }
 
     @Override

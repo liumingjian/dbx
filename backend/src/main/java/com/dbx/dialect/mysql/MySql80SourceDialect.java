@@ -1,6 +1,5 @@
 package com.dbx.dialect.mysql;
 
-import com.dbx.dialect.NotImplementedInSlice;
 import com.dbx.dialect.api.ApprovedColumn;
 import com.dbx.dialect.api.BoundedReadRequirement;
 import com.dbx.dialect.api.ConnectionSemantics;
@@ -63,23 +62,24 @@ public final class MySql80SourceDialect extends SourceDialect {
     }
 
     @Override
-    public SqlPlan preflightScanPlan(SourceTableMetadata table, List<PreflightObligation> obligations) {
-        throw new NotImplementedInSlice("source.preflightScanPlan", 6);
+    public SqlPlan preflightScanPlan(SourceTableMetadata table, List<ApprovedColumn> approvedColumns,
+            List<PreflightObligation> obligations) {
+        return PreflightScan.plan(table, approvedColumns, obligations);
     }
 
     @Override
     public SqlPlan baselinePlan(SourceTableMetadata table, Optional<KeysetColumn> keysetColumn) {
-        throw new NotImplementedInSlice("source.baselinePlan", 6);
+        return BaselineRead.plan(table, keysetColumn);
     }
 
     @Override
     public List<SqlPlan> validationFactPlans(List<ValidationItem> items) {
-        throw new NotImplementedInSlice("source.validationFactPlans", 6);
+        return ValidationFacts.plans(items);
     }
 
     @Override
-    public SqlPlan samplingPlan(SamplingKey key, int n) {
-        throw new NotImplementedInSlice("source.samplingPlan", 6);
+    public List<SqlPlan> samplingPlan(SamplingKey key, int n) {
+        return Sampling.plans(key, n);
     }
 
     @Override

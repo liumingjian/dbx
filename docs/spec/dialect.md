@@ -12,15 +12,15 @@ ADR-0036/0018 describe this interface without naming entry points; the names bel
 - `pair.map(SourceColumn, MappingOptions) → Supported | Unsupported` (`TypeMapper`)
 - `pair.mapIdentifier(sourceCoordinate, mappingRule?) → Exact | Renamed | Unsupported`
 - `pair.executionRequirements(mappingDecisions) → ExecutionRequirements` (includes bounded read)
-- `pair.validationCapabilities() → ValidationCapabilities`
+- `pair.validationCapabilities(SourceColumn[]) → ValidationCapabilities` (one answer per column, in input order; ADR-0040 decides comparability per column, so a no-argument call cannot)
 - `pair.descriptorCodec(version) → DescriptorCodec | Unsupported`
 - `source.metadataPlan(scope) → SqlPlan`; `source.normalizeMetadata(rows) → SourceTableMetadata` per table, in row order
-- `source.capabilityPlans(scope)`, `source.preflightScanPlan(table, obligations)`, `source.baselinePlan(table, keysetColumn?)`, `source.validationFactPlans(items)`, `source.samplingPlan(key, n) → SqlPlan(s)`
+- `source.capabilityPlans(scope)`, `source.preflightScanPlan(table, approvedColumns, obligations)`, `source.baselinePlan(table, keysetColumn?)`, `source.validationFactPlans(items)`, `source.samplingPlan(key, n) → List<SqlPlan>` (one plan per statement; seek thresholds present → one per threshold, absent → first ⌈n/2⌉ ascending and last ⌊n/2⌋ descending)
 - `source.keysetCandidates(SourceTableMetadata) → ordered candidates`
 - `source.queryProjection(approvedColumns, mappingRules) → ProjectionSql` (the prune/rename `SELECT … AS …` projection; #92)
 - `source.connectionSemantics(MappingOptions) → ConnectionSemantics`
-- `target.ddlPlan(TargetTable)`, `target.catalogReadPlan(coordinates)`, `target.capabilityProbePlans(schema, probeName)`, `target.maintenancePlans(...)`, `target.validationFactPlans(items)`, `target.samplingLookupPlan(keys) → SqlPlan(s)` (TP §9.3; lookup added at reconciliation for `validation`)
-- `target.normalizeCatalog(rows) → TargetTableFacts`
+- `target.ddlPlan(TargetTable)`, `target.catalogReadPlan(coordinates)`, `target.capabilityProbePlans(schema, probeName)`, `target.maintenancePlans(...)`, `target.validationFactPlans(items)`, `target.samplingLookupPlan(keys) → List<SqlPlan>` (TP §9.3, one plan per key tuple; lookup added at reconciliation for `validation`)
+- `target.normalizeCatalog(coordinates, rows) → TargetTableFacts` per table, in row order (the coordinates the read asked for come in too: "a row set holding a table nobody asked for is a broken read" is not expressible from rows alone)
 - `target.supplementalStatements(deferredStructures) → Statement[]`; `target.leastPrivilegeSql(missing) → text`
 - `target.sinkSettings() → SinkSettings`
 

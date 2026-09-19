@@ -42,8 +42,19 @@ public abstract class SourceDialect {
     /** Read-only capability checks (ADR-0006; slice 5). */
     public abstract List<SqlPlan> capabilityPlans(MetadataScope scope);
 
-    /** One table's obligations merged into minimal bounded scans (ADR-0003; slice 6). */
-    public abstract SqlPlan preflightScanPlan(SourceTableMetadata table, List<PreflightObligation> obligations);
+    /**
+     * One table's whole preflight merged into one bounded aggregate scan (ADR-0003 ¶2; TP §6.6; slice 6).
+     *
+     * <p>{@code approvedColumns} is an argument because neither {@code table} nor {@code obligations} implies
+     * it: ADR-0003 ¶2 measures every approved extraction expression, and a numeric column carries no
+     * {@code LARGE_RECORD_ENVELOPE} obligation yet still counts toward the row payload (spec #134 correction 1).
+     *
+     * <p>Returns facts, never findings: every threshold is compared in {@code preflight}. An obligation naming
+     * a column that is not in {@code approvedColumns}, or not in {@code table}, throws
+     * {@link IllegalArgumentException} naming the coordinate.
+     */
+    public abstract SqlPlan preflightScanPlan(SourceTableMetadata table, List<ApprovedColumn> approvedColumns,
+            List<PreflightObligation> obligations);
 
     /** Exact {@code COUNT(*)} and the keyset column's min and max (ADR-0037; slice 6). */
     public abstract SqlPlan baselinePlan(SourceTableMetadata table, Optional<KeysetColumn> keysetColumn);
@@ -51,8 +62,13 @@ public abstract class SourceDialect {
     /** Source-side validation facts (TP §9.2; slice 6). */
     public abstract List<SqlPlan> validationFactPlans(List<ValidationItem> items);
 
-    /** Deterministic sampling of {@code n} keys (TP §9.3; slice 6). */
-    public abstract SqlPlan samplingPlan(SamplingKey key, int n);
+    /**
+     * Deterministic sampling of {@code n} keys, one plan per statement so every plan keeps one honest
+     * cardinality (TP §9.3; slice 6). Seek thresholds present: one seek plan per threshold, in threshold
+     * order. Absent: the first ⌈n/2⌉ rows ascending and the last ⌊n/2⌋ rows descending. A non-positive
+     * {@code n} throws {@link IllegalArgumentException}.
+     */
+    public abstract List<SqlPlan> samplingPlan(SamplingKey key, int n);
 
     /** Single integer, {@code NOT NULL}, unique columns in ADR-0037 §Choice order (slice 5). */
     public abstract List<KeysetCandidate> keysetCandidates(SourceTableMetadata table);

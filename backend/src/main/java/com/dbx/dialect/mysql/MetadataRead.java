@@ -92,6 +92,7 @@ final class MetadataRead {
         TABLE_ROWS("table_rows", Type.INT, Fact.TABLE, "t.TABLE_ROWS"),
         AVG_ROW_LENGTH("avg_row_length", Type.INT, Fact.TABLE, "t.AVG_ROW_LENGTH"),
         DATA_LENGTH("data_length", Type.INT, Fact.TABLE, "t.DATA_LENGTH"),
+        AUTO_INCREMENT("auto_increment", Type.INT, Fact.TABLE, "t.AUTO_INCREMENT"),
         TABLE_COMMENT("table_comment", Type.TEXT, Fact.TABLE, "t.TABLE_COMMENT"),
         TABLE_COLLATION("table_collation", Type.TEXT, Fact.TABLE, "t.TABLE_COLLATION"),
 

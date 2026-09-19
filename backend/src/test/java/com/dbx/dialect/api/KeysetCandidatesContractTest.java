@@ -75,7 +75,8 @@ class KeysetCandidatesContractTest {
             comments.add(new ColumnComment(at(col.name()), ""));
         }
         return new SourceTableMetadata(TABLE, columns, comments, List.of(indexes), List.of(), "", Optional.empty(),
-                new TableStatistics(OptionalLong.empty(), OptionalLong.empty(), OptionalLong.empty()));
+                new TableStatistics(OptionalLong.empty(), OptionalLong.empty(), OptionalLong.empty(),
+                        OptionalLong.empty()));
     }
 
     private static KeysetCandidate pk(String column) {

@@ -101,7 +101,8 @@ final class MetadataNormalizer {
             this.comment = row.text(Column.TABLE_COMMENT);
             this.collation = row.optionalText(Column.TABLE_COLLATION);
             this.statistics = new TableStatistics(row.optionalLong(Column.TABLE_ROWS),
-                    row.optionalLong(Column.AVG_ROW_LENGTH), row.optionalLong(Column.DATA_LENGTH));
+                    row.optionalLong(Column.AVG_ROW_LENGTH), row.optionalLong(Column.DATA_LENGTH),
+                    row.optionalLong(Column.AUTO_INCREMENT));
         }
 
         void column(Values row) {
