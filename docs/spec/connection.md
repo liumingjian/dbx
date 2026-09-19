@@ -6,7 +6,9 @@ Credential crypto for DBX: AES-256-GCM encryption of credential material, per-ba
 
 ## Interface (`connection.api`)
 
-Names follow ADR-0036's Interface column ("Encrypt, decrypt, wrap, erase"), plus `fingerprint` and `unwrap`. Parameter shapes are fixed by slice 1's `ConnectionContractTest`, within the bounds below.
+Names follow ADR-0036's Interface column ("Encrypt, decrypt, wrap, erase"), plus `fingerprint` and `unwrap`.
+
+**Every type these six name is owned by `connection.api`**, including the backup identity `wrap` takes and the wrapped form `unwrap` and `erase` take. None is a `workflow`, `orchestration` or `gateway` type, which is what keeps obligation 1's one-way `workflow → connection` edge true at the level of shapes and not only of imports. The backup identity is **an identity and not a location**: an opaque value this module never interprets and never resolves to a file, because `connection` never opens `backups/` (obligation 19). `unwrap` and `erase` take the wrapped form alone — no identity — since nothing about which backup a key belongs to may affect whether it opens. These shapes are fixed here, not by a slice or a contract test (ADR-0041, [#154](https://github.com/liumingjian/dbx/issues/154)); what slice 1 fixes is their Java spelling.
 
 - `encrypt(secret material) → ciphertext`: AES-256-GCM under the master key. Effectful, because it reads the master-key file.
 - `decrypt(ciphertext) → secret material | typed failure`: the inverse of `encrypt`. Effectful for the same reason.

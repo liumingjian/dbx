@@ -1,10 +1,10 @@
 # Backend module boundaries and the agent working surface
 
-> **Status: module table and pure-core list superseded by [ADR-0036](0036-module-table-owns-every-v1-obligation.md)** (#83); **session rule superseded by [ADR-0041](0041-tracer-bullet-vertical-slices-outrank-the-one-module-session-rule.md)** (#154). Read ADR-0036 for the current modules and ADR-0041 for what a session's scope is; enforcement, module context, and abstractions not drawn below still hold.
+> **Status: module table and pure-core list superseded by [ADR-0036](0036-module-table-owns-every-v1-obligation.md)** (#83); **the session rule's premise and §Enforcement's rule-change clause amended by [ADR-0041](0041-module-horizontal-slices-and-sub-spec-owned-cross-module-shapes.md)** (#154). Read ADR-0036 for the current modules; enforcement, module context, the session rule, and abstractions not drawn below still hold.
 
-DBX is built by agents whose sessions must face one narrow interface at a time rather than the whole repository. The backend is therefore split into modules with one-way dependencies, a pure core, and boundaries that tests enforce. A convention an agent can quietly break is no boundary at all.
+Each session should face one deep module through its narrow interface plus the interfaces it consumes, never the whole repository. The backend is therefore split into eleven modules with one-way dependencies, a pure core, and boundaries that tests enforce. A convention an agent can quietly break is no boundary at all.
 
-This ADR was written when those sessions held 100K tokens, and the session rule below derived its scope from that figure. The figure has since expired — `connection` was implemented in a 1M-token session — so ADR-0041 replaces the session rule. **Enforcement is unaffected**: the ArchUnit rules constrain dependency direction and `api`-only access, never how many modules one session touches.
+This ADR originally opened "DBX is built entirely by agents working in 100K-token sessions" and derived the session rule from that figure. The figure has expired — `connection` was implemented in a 1M-token session — so ADR-0041 (#154) re-grounds the rule: one module is the unit whose obligations, contract test and consumed `api` can be held at once **at any context size**. A larger window buys a session more room inside its module; it does not make the repository a sound working surface.
 
 ## Enforcement
 
@@ -16,6 +16,8 @@ The backend stays one Gradle module. Each module is one top-level package; only 
 - a caller other than `orchestration` referencing `workflow.api.command`.
 
 When an ArchUnit rule goes red, fix the code. Changing a rule is an architectural decision recorded in an ADR, never a way to make a change pass.
+
+That clause governs a rule stating an **architectural** constraint — the four above, which constrain dependency direction, `api`-only access and purity. A rule that merely **transcribes a sub-spec obligation** is different: its authority is the obligation, not itself, so it is amended together with the obligation, in that module's own session, and the sub-spec amendment is the record (ADR-0041, #154). `ConnectionBoundaryTest`'s check that `connection.api` declares exactly six entry points is one: it restates `docs/spec/connection.md` obligation 6. Neither kind may be relaxed to make a change pass.
 
 ## Modules
 
@@ -61,9 +63,9 @@ Each module carries its own context so an agent can change it after reading only
 
 ## Session rule
 
-**Superseded by [ADR-0041](0041-tracer-bullet-vertical-slices-outrank-the-one-module-session-rule.md) (#154).** One session implements one slice, and a slice may touch several modules; it sees each one only through its `api`.
+One session changes one module. A cross-module change is split: first change the depended-on module's `api` and its contract test, then update each consumer in its own session. `orchestration` naturally spans modules but sees only their `api`.
 
-The rule this replaces read "one session changes one module", and split a cross-module change into an interface-first session followed by one session per consumer. That is the interface-first horizontal pattern ADR-0041 rejects: it freezes a module's `api` before any consumer can contradict it. Its premise was the 100K-token session noted above.
+The reason is module context, not a token budget (see the opening paragraph). ADR-0041 records this as a deliberate override of the vertical-slice default that `mattpocock-skills:to-tickets` states, together with the costs it accepts.
 
 ## Abstractions deliberately not drawn in v1
 
