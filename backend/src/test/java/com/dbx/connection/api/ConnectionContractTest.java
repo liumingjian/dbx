@@ -1,10 +1,13 @@
 package com.dbx.connection.api;
 
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
@@ -16,6 +19,7 @@ import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -26,12 +30,14 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
@@ -46,8 +52,8 @@ import org.junit.jupiter.api.io.TempDir;
  * written here and {@code @Disabled} with the slice that enables them named in the reason — written
  * rather than deferred so that each slice enables a test somebody already argued about, instead of
  * inventing one that happens to pass against whatever it built ({@code docs/spec/connection.md}
- * §Slices; #149). Slice 2 enabled groups B and C as they stand (#150) and slice 3 group D (#151);
- * group E waits for slice 4.
+ * §Slices; #149). Slice 2 enabled groups B and C as they stand (#150), slice 3 group D (#151) and
+ * slice 4 group E (#152), so nothing here is switched off any more and the module is finished.
  *
  * <p>Nothing here is deferred to a higher rung: {@code connection} has no L2, and its one side effect —
  * reading the master-key file — is covered by a temporary {@code secrets/} directory (§Verification).
@@ -661,8 +667,50 @@ class ConnectionContractTest {
 
     // --- TLS material (E20; ADR-0005 "private keys") -----------------------------------------------
 
+    /**
+     * What one TLS mode (TLS 模式) hands DBX. The three modes are {@code CONTEXT.md} §TLS mode's: TLS
+     * disabled (不启用 TLS) hands over nothing, Server authenticated (校验服务端证书) the authority that
+     * signs the server's certificate, and Mutual (双向证书校验) that plus the client certificate, the
+     * client private key and the passphrase that unlocks the key. Obligation 20 is about every row
+     * travelling the one road, not only about the two secret rows of the last mode.
+     */
+    private record TlsMode(String mode, List<SecretMaterial> material) {
+    }
+
+    private static final SecretMaterial SERVER_CA =
+            new SecretMaterial("-----BEGIN CERTIFICATE-----\nthe-authority".getBytes(UTF_8));
+
+    private static final SecretMaterial CLIENT_CERTIFICATE =
+            new SecretMaterial("-----BEGIN CERTIFICATE-----\nthe-client".getBytes(UTF_8));
+
+    private static final SecretMaterial CLIENT_PRIVATE_KEY =
+            new SecretMaterial("-----BEGIN PRIVATE KEY-----\nthe-most-dangerous-value-in-the-install".getBytes(UTF_8));
+
+    private static final SecretMaterial CLIENT_KEY_PASSPHRASE =
+            new SecretMaterial("passphrase-that-unlocks-the-client-key".getBytes(UTF_8));
+
+    private static final List<TlsMode> TLS_MODES = List.of(
+            new TlsMode("TLS disabled (不启用 TLS)", List.of()),
+            new TlsMode("Server authenticated (校验服务端证书)", List.of(SERVER_CA)),
+            new TlsMode(
+                    "Mutual (双向证书校验)",
+                    List.of(SERVER_CA, CLIENT_CERTIFICATE, CLIENT_PRIVATE_KEY, CLIENT_KEY_PASSPHRASE)));
+
+    /**
+     * Every purpose label this module seals under, and the whole list: a credential (slice 2), a wrapped
+     * DEK (slice 3), and the fingerprint's fixed label. TLS material adds none — it travels under the
+     * credential label, which is "no seventh entry point" one layer further down.
+     */
+    private static final Set<String> PURPOSE_LABELS =
+            Set.of("dbx:credential:v1", "dbx:wrapped-dek:v1", "dbx:master-key-fingerprint:v1");
+
+    /**
+     * How much of an envelope two values sealed under one master key share: the version byte and the key
+     * id. The nonce after it is fresh per call, so a comparison stops there.
+     */
+    private static final int ENVELOPE_PREFIX_BYTES = 1 + 8;
+
     @Test
-    @Disabled("docs/spec/connection.md §Slices assigns TLS material to slice 4 (#152)")
     void tlsClientKeyAndPassphraseTravelThroughEncryptLikeAnyCredential(@TempDir Path secrets) throws IOException {
         writeMasterKey(secrets, key(256));
         ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
@@ -682,6 +730,116 @@ class ConnectionContractTest {
                     material.toString().contains("PRIVATE KEY") || material.toString().contains("passphrase"),
                     "obligation 11: neither the private key nor its passphrase can print itself");
         }
+    }
+
+    /**
+     * Obligation 20 for all three TLS modes, by behaviour: what a mode hands over round-trips through
+     * {@code encrypt}/{@code decrypt}, and its ciphertext is the same kind of value as a password's.
+     *
+     * <p>A round trip alone would also pass for an implementation that recognised a PEM header and gave
+     * it its own treatment, so the envelopes are compared as well: a private key of n bytes seals to the
+     * same length, the same envelope version and the same key id as a password of n bytes. An extra flag
+     * byte, a second cipher, a note about what the value is, or a clear copy riding along all land here.
+     */
+    @Test
+    void everyTlsModesMaterialSealsIntoTheSameEnvelopeAsAPassword(@TempDir Path secrets) throws IOException {
+        writeMasterKey(secrets, key(256));
+        ConnectionCrypto crypto = ConnectionCrypto.overSecretsDirectory(secrets);
+
+        for (TlsMode mode : TLS_MODES) {
+            for (SecretMaterial material : mode.material()) {
+                byte[] plaintext = material.bytes();
+                byte[] sealed = crypto.encrypt(material).bytes();
+                byte[] asAPassword = crypto.encrypt(new SecretMaterial(passwordOfLength(plaintext.length))).bytes();
+
+                assertEquals(
+                        material,
+                        assertInstanceOf(
+                                SecretMaterial.class,
+                                crypto.decrypt(new Ciphertext(sealed)),
+                                "obligation 20: " + mode.mode() + " material enters only through encrypt/decrypt "
+                                        + "and comes back out of them (ADR-0005 \"private keys\")"),
+                        "obligation 20: it round-trips like credential material, because it is credential material");
+                assertFalse(
+                        containsBytes(sealed, plaintext),
+                        "obligations 20, 11: no clear copy of the material travels in the ciphertext — the failure "
+                                + "this forecloses is the most sensitive value in the install being the one thing "
+                                + "left in the clear: " + mode.mode());
+                assertEquals(
+                        asAPassword.length,
+                        sealed.length,
+                        "obligation 20: nothing new happens for " + mode.mode() + " — the same envelope as a "
+                                + "password of the same length, so no second cipher and no metadata about what "
+                                + "the value is");
+                assertArrayEquals(
+                        Arrays.copyOf(asAPassword, ENVELOPE_PREFIX_BYTES),
+                        Arrays.copyOf(sealed, ENVELOPE_PREFIX_BYTES),
+                        "obligation 20: the envelope version and the master key it names do not depend on what the "
+                                + "material is: " + mode.mode());
+
+                String inTheClear = new String(plaintext, UTF_8);
+                byte[] shredded = Arrays.copyOf(sealed, ENVELOPE_PREFIX_BYTES + 12 + 16);
+                for (Object printed :
+                        List.of(new Ciphertext(sealed), material, crypto.decrypt(new Ciphertext(shredded)))) {
+                    assertFalse(
+                            printed.toString().contains(inTheClear),
+                            "obligation 11: neither the material, its ciphertext nor the failure it produces prints "
+                                    + "a TLS private key or its passphrase: " + printed);
+                }
+            }
+        }
+
+        MasterKeyFailure noKey = assertThrows(
+                MasterKeyUnavailable.class,
+                () -> ConnectionCrypto.overSecretsDirectory(secrets.resolve("gone")).encrypt(CLIENT_PRIVATE_KEY),
+                "obligation 9 holds for TLS material like for anything else: a missing key is the typed failure");
+        assertFalse(
+                String.valueOf(noKey.getMessage()).contains("PRIVATE KEY"),
+                "obligation 11: the exception a DBA reads names the file to fix and nothing of the material: "
+                        + noKey.getMessage());
+    }
+
+    /**
+     * Obligation 20's negative half, which no round trip can observe: there is no second door and no
+     * second cipher for TLS material to arrive through.
+     *
+     * <p>Two claims that pass vacuously otherwise. {@code ConnectionBoundaryTest}'s E20 check counts entry
+     * point <em>names</em>, so an {@code encrypt(SecretMaterial, ...)} overload beside the real one — a
+     * TLS-shaped door in everything but name — leaves it at six; here the signatures are compared, so it
+     * cannot. And a TLS-specific purpose label read by a decrypt that tries both labels round-trips exactly
+     * as this module does, so the labels it seals under are read out of its bytecode and compared against
+     * the whole list: a third label for TLS is the separate cipher path, one layer below the api.
+     */
+    @Test
+    void tlsMaterialHasNoEntryPointAndNoPurposeLabelOfItsOwn() throws IOException {
+        Set<String> signatures = Arrays.stream(ConnectionCrypto.class.getDeclaredMethods())
+                .filter(method -> !Modifier.isStatic(method.getModifiers()))
+                .map(ConnectionContractTest::signature)
+                .collect(Collectors.toCollection(TreeSet::new));
+
+        assertEquals(
+                new TreeSet<>(Set.of(
+                        "decrypt(Ciphertext)",
+                        "encrypt(SecretMaterial)",
+                        "erase(WrappedKey)",
+                        "fingerprint()",
+                        "unwrap(WrappedKey)",
+                        "wrap(BackupId)")),
+                signatures,
+                "obligation 20: encrypt takes the material and decrypt the ciphertext, with nothing beside them and "
+                        + "no overload — an overloaded entry point keeps E20's name count at six");
+        for (String signature : signatures) {
+            String lowercase = signature.toLowerCase(Locale.ROOT);
+            assertFalse(
+                    Stream.of("tls", "cert", "passphrase", "privatekey").anyMatch(lowercase::contains),
+                    "obligation 20: no entry point is named for TLS material, because none is about it: " + signature);
+        }
+
+        assertEquals(
+                new TreeSet<>(PURPOSE_LABELS),
+                new TreeSet<>(purposeLabelsSealedUnder("com.dbx.connection")),
+                "obligation 20: TLS material travels under the credential label — a label of its own would be a "
+                        + "separate cipher path under an api that shows none");
     }
 
     // --- Fixtures ----------------------------------------------------------------------------------
@@ -704,6 +862,55 @@ class ConnectionContractTest {
                     .anyMatch(component -> canHoldAKey(component.getType()));
         }
         return false;
+    }
+
+    /** A password of a given length, so a TLS envelope can be compared with a credential envelope. */
+    private static byte[] passwordOfLength(int length) {
+        byte[] password = new byte[length];
+        Arrays.fill(password, (byte) 'p');
+        return password;
+    }
+
+    /** Whether {@code needle} appears in {@code haystack} verbatim — a clear copy of material, if it does. */
+    private static boolean containsBytes(byte[] haystack, byte[] needle) {
+        for (int at = 0; at + needle.length <= haystack.length; at++) {
+            if (Arrays.equals(Arrays.copyOfRange(haystack, at, at + needle.length), needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String signature(Method method) {
+        return method.getName()
+                + Arrays.stream(method.getParameterTypes())
+                        .map(Class::getSimpleName)
+                        .collect(Collectors.joining(", ", "(", ")"));
+    }
+
+    /**
+     * Every {@code dbx:}-prefixed label in the compiled bytecode of a package, which is where this module's
+     * purpose labels live. Reading the class files is deliberate: what a value is sealed under is invisible
+     * from the api — a second label with a reader that tries both round-trips exactly like one label does —
+     * so the only place obligation 20's "no separate cipher" can be checked is the code that seals.
+     */
+    private static Set<String> purposeLabelsSealedUnder(String packageName) throws IOException {
+        Set<String> labels = new TreeSet<>();
+        JavaClasses classes = new ClassFileImporter()
+                .withImportOption(new ImportOption.DoNotIncludeTests())
+                .importPackages(packageName);
+        Pattern label = Pattern.compile("dbx:[a-z0-9:.\\-]+");
+        for (JavaClass type : classes) {
+            String resource = type.getName().replace('.', '/') + ".class";
+            try (InputStream bytecode = ConnectionContractTest.class.getClassLoader().getResourceAsStream(resource)) {
+                assertNotNull(bytecode, "the compiled class of " + type.getName() + " is on the test classpath");
+                Matcher found = label.matcher(new String(bytecode.readAllBytes(), ISO_8859_1));
+                while (found.find()) {
+                    labels.add(found.group());
+                }
+            }
+        }
+        return labels;
     }
 
     private static Set<String> entryPoints(Class<?> api) {

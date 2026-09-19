@@ -43,6 +43,12 @@ import javax.crypto.spec.SecretKeySpec;
  * so all six entry points of §Interface now do their work and nothing throws
  * {@link com.dbx.connection.NotImplementedInSlice} any more.
  *
+ * <p>Slice 4 (TLS material, obligation 20) added no code here, which is its whole ruling: a mutual-TLS
+ * client private key and the passphrase that unlocks it are {@link SecretMaterial}, so they travel
+ * through {@link #encrypt} and {@link #decrypt} under {@link #CREDENTIAL_PURPOSE} like a database
+ * password. A label of their own, a branch on what the material looks like, or a path beside the
+ * envelope would make the most dangerous value in an install the one value this class protects least.
+ *
  * <p>The key is read on every call and zeroed before the call returns. Nothing about it is cached:
  * obligation 15 says the module keeps no state between calls, and a cached key would also let a
  * running DBX keep working with a key the DBA has already replaced — the one situation the

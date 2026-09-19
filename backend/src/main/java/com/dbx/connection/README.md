@@ -22,11 +22,11 @@ An entry point its slice has not landed throws `NotImplementedInSlice` naming it
 ## Layout
 
 - `api/` — every public type, one file per type
-- `masterkey/` — `MasterKeyCrypto`, the one implementation: the key-file loader (slice 2), credential crypto (slice 2), per-backup keys (slice 3)
+- `masterkey/` — `MasterKeyCrypto`, the one implementation: the key-file loader (slice 2), credential crypto (slice 2), per-backup keys (slice 3). TLS material added no code in slice 4: a client private key and its passphrase are credential material, sealed under the credential label like a password (obligation 20)
 
 ## Contract test
 
-`ConnectionContractTest` (`src/test/java/com/dbx/connection/api/`) is the primary documentation of these entry points: the not-implemented ledger, the distinct failure types, structural redaction, and the master-key, credential, DEK and TLS cases — the ones a later slice owns are written and `@Disabled` with the slice named. `ConnectionBoundaryTest` holds obligations 1–5 and the exactly-six check; `ConnectionBoundaryRuleFixtureTest` watches each of those rules fail against `com.dbx.archfixture`.
+`ConnectionContractTest` (`src/test/java/com/dbx/connection/api/`) is the primary documentation of these entry points: the not-implemented ledger, the distinct failure types, structural redaction, and the master-key, credential, DEK and TLS cases — every one of them live, since the module is finished. `ConnectionBoundaryTest` holds obligations 1–5 and the exactly-six check; `ConnectionBoundaryRuleFixtureTest` watches each of those rules fail against `com.dbx.archfixture`.
 
 ## Read
 
