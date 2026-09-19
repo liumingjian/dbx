@@ -156,10 +156,12 @@ public sealed interface DeferredStructure {
     }
 
     /**
-     * A source default outside ADR-0011's whitelist that PostgreSQL can still hold as a constant, set after the
-     * migration with {@code ALTER COLUMN … SET DEFAULT} (ADR-0026). A typed {@code NULL} is no default.
+     * A source default outside ADR-0011's whitelist, delivered after the migration (ADR-0026). A
+     * {@link Value.Constant} PostgreSQL can hold is set with {@code ALTER COLUMN … SET DEFAULT}; a
+     * {@link Value.Expression} is not, because DBX cannot prove a translated MySQL expression means the same
+     * thing there (ADR-0026 as amended by #133).
      */
-    record ColumnDefault(TableCoordinate source, TargetTableCoordinate target, MappedColumn column, SqlValue value)
+    record ColumnDefault(TableCoordinate source, TargetTableCoordinate target, MappedColumn column, Value value)
             implements DeferredStructure {
 
         public ColumnDefault {
@@ -167,8 +169,29 @@ public sealed interface DeferredStructure {
             Checks.present(target, "target");
             requireColumn(source, column);
             Checks.present(value, "value");
-            if (value instanceof SqlValue.Null) {
-                throw new IllegalArgumentException("ADR-0026: a NULL default is no default and is not deferred");
+        }
+
+        /** What the source default holds: a constant, or a MySQL expression kept verbatim. */
+        public sealed interface Value {
+
+            /** A constant PostgreSQL can hold. A typed {@code NULL} is no default at all. */
+            public record Constant(SqlValue value) implements Value {
+
+                public Constant {
+                    Checks.present(value, "value");
+                    if (value instanceof SqlValue.Null) {
+                        throw new IllegalArgumentException(
+                                "ADR-0026: a NULL default is no default and is not deferred");
+                    }
+                }
+            }
+
+            /** MySQL's {@code DEFAULT (expression)} text, exactly as the source reports it, never translated. */
+            public record Expression(String expression) implements Value {
+
+                public Expression {
+                    Checks.nonEmpty(expression, "expression");
+                }
             }
         }
     }
