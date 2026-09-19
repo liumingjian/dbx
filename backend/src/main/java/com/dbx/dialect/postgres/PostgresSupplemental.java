@@ -67,21 +67,38 @@ final class PostgresSupplemental {
                             ? SupplementalCommentReason.PRUNED_COLUMN
                             : SupplementalCommentReason.ON_UPDATE_CURRENT_TIMESTAMP,
                     source.column(onUpdate.column().source()) + " ON UPDATE " + onUpdate.definition());
-            case DeferredStructure.ColumnDefault columnDefault -> switch (columnDefault.column()) {
-                case MappedColumn.Pruned pruned -> commentOnly(SupplementalCommentReason.PRUNED_COLUMN,
-                        source.column(pruned.source()) + " DEFAULT " + PostgresLiteral.render(columnDefault.value()));
-                case MappedColumn.Approved approved -> Statement.executable("ALTER TABLE "
-                        + relation(columnDefault.target()) + " ALTER COLUMN "
-                        + PostgresIdentifier.quoted(approved.target())
-                        + " SET DEFAULT " + PostgresLiteral.render(columnDefault.value()));
-            };
+            case DeferredStructure.ColumnDefault columnDefault -> columnDefault(columnDefault);
+        };
+    }
+
+    /**
+     * One reason per column default, the first that applies: a pruned column (the target lacks it), an
+     * expression. Only a constant is executable: a MySQL expression is kept verbatim in a comment, because DBX
+     * cannot prove a translation means the same thing in PostgreSQL (ADR-0026 as amended by #133).
+     */
+    private Statement columnDefault(DeferredStructure.ColumnDefault deferred) {
+        String value = switch (deferred.value()) {
+            case DeferredStructure.ColumnDefault.Value.Constant constant -> PostgresLiteral.render(constant.value());
+            case DeferredStructure.ColumnDefault.Value.Expression expression -> "(" + expression.expression() + ")";
+        };
+        return switch (deferred.column()) {
+            case MappedColumn.Pruned pruned -> commentOnly(SupplementalCommentReason.PRUNED_COLUMN,
+                    source.column(pruned.source()) + " DEFAULT " + value);
+            case MappedColumn.Approved approved ->
+                    deferred.value() instanceof DeferredStructure.ColumnDefault.Value.Expression
+                            ? commentOnly(SupplementalCommentReason.EXPRESSION_DEFAULT,
+                                    source.column(approved.source()) + " DEFAULT " + value)
+                            : Statement.executable("ALTER TABLE " + relation(deferred.target()) + " ALTER COLUMN "
+                                    + PostgresIdentifier.quoted(approved.target()) + " SET DEFAULT " + value);
         };
     }
 
     /**
      * One reason per index, the first that applies: a pruned column (the target lacks it), a FULLTEXT or SPATIAL
-     * index, an expression key part, a prefix key part. Otherwise every key part is an approved column, one
-     * {@code columns} entry each in key-part order.
+     * index, an expression key part, a prefix key part, an ordinary invisible index. Invisibility comes last
+     * because the causes before it are structures PostgreSQL cannot express at all, where an invisible index is
+     * one it merely must not reproduce. Otherwise every key part is an approved column, one {@code columns} entry
+     * each in key-part order.
      */
     private Statement index(DeferredStructure.Index deferred) {
         SourceIndex index = deferred.index();
@@ -124,6 +141,10 @@ final class PostgresSupplemental {
         }
         if (parts.stream().anyMatch(part -> part.prefixLength().isPresent())) {
             return Optional.of(SupplementalCommentReason.PREFIX_KEY_PART);
+        }
+        // A unique invisible index is a constraint MySQL still enforces, so it stays executable (#133).
+        if (!deferred.index().visible() && !deferred.index().unique()) {
+            return Optional.of(SupplementalCommentReason.INVISIBLE_INDEX);
         }
         return Optional.empty();
     }

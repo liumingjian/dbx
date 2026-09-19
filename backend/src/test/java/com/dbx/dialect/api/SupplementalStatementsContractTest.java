@@ -63,6 +63,10 @@ class SupplementalStatementsContractTest {
                         "-- requires manual handling (FULLTEXT_OR_SPATIAL_INDEX): CREATE FULLTEXT INDEX `ft_note` ON "
                                 + "`shop`.`orders` (`note`)",
                         "-- requires manual handling (PRUNED_COLUMN): `shop`.`orders`.`legacy` COMMENT E'old'",
+                        "-- requires manual handling (INVISIBLE_INDEX): CREATE INDEX `idx_hidden_note` ON "
+                                + "`shop`.`orders` (`note`) INVISIBLE",
+                        "-- requires manual handling (EXPRESSION_DEFAULT): `shop`.`orders`.`created_at` "
+                                + "DEFAULT (uuid_to_bin(uuid()))",
                         "-- source: ALTER TABLE `shop`.`customers` ADD CONSTRAINT `fk_referrer` FOREIGN KEY "
                                 + "(`referrer_id`) REFERENCES `shop`.`customers` (`id`) ON UPDATE NO ACTION "
                                 + "ON DELETE SET NULL\n"
@@ -126,7 +130,9 @@ class SupplementalStatementsContractTest {
                         List.of(pruned(t, "legacy"))),
                 new DeferredStructure.Collation(t, APP_ORDERS, Optional.of(pruned(t, "legacy")), "utf8mb4_bin"),
                 new DeferredStructure.OnUpdate(t, APP_ORDERS, pruned(t, "legacy"), "CURRENT_TIMESTAMP"),
-                new DeferredStructure.ColumnDefault(t, APP_ORDERS, pruned(t, "legacy"), new SqlValue.Int64(5)),
+                new DeferredStructure.ColumnDefault(t, APP_ORDERS, pruned(t, "legacy"),
+                        constant(new SqlValue.Int64(5))),
+                new DeferredStructure.ColumnDefault(t, APP_ORDERS, pruned(t, "legacy"), expression("now()")),
                 foreignKey(t, APP_ORDERS, "fk", "legacy", CUSTOMERS, "id", List.of(pruned(t, "legacy")),
                         new ReferencedTable.InScope(APP_CUSTOMERS, List.of(approved(CUSTOMERS, "id", "id")))),
                 foreignKey(t, APP_ORDERS, "fk2", "customer_id", CUSTOMERS, "id",
@@ -197,6 +203,50 @@ class SupplementalStatementsContractTest {
     }
 
     @Test
+    void anOrdinaryInvisibleIndexIsCommentedOutAndAUniqueInvisibleOneStaysExecutable() {
+        SourceIndex.KeyPart code = columnPart(1, ORDERS, "code", Direction.ASCENDING);
+        List<MappedColumn> mapped = List.of(approved(ORDERS, "code", "code"));
+
+        List<String> sql = sql(PAIR.target().supplementalStatements(List.of(
+                index(ORDERS, APP_ORDERS, invisible("idx_hidden", false, code), mapped),
+                index(ORDERS, APP_ORDERS, invisible("uk_hidden", true, code), mapped))));
+
+        assertEquals(List.of(
+                        "-- requires manual handling (INVISIBLE_INDEX): CREATE INDEX `idx_hidden` ON "
+                                + "`shop`.`orders` (`code`) INVISIBLE",
+                        "-- source: CREATE UNIQUE INDEX `uk_hidden` ON `shop`.`orders` (`code`) INVISIBLE\n"
+                                + "ALTER TABLE \"app\".\"orders\" ADD UNIQUE (\"code\")"),
+                sql, "ADR-0026 as amended by #133: PostgreSQL has no invisible index, so building an ordinary one "
+                        + "live would change the query plans the source deliberately did not; a unique one is a "
+                        + "constraint MySQL still enforces, so dropping it would lose a guarantee the source holds");
+    }
+
+    @Test
+    void invisibilityIsTheLastReasonAnIndexIsCommentedOut() {
+        SourceIndex.KeyPart note = columnPart(1, ORDERS, "note", Direction.ASCENDING);
+        SourceIndex.KeyPart prefix = new SourceIndex.KeyPart(1, col(ORDERS, "note"), OptionalLong.of(10),
+                Direction.ASCENDING);
+        SourceIndex.KeyPart expression = new SourceIndex.KeyPart(1, new SourceIndex.Subject.Expression("lower(`c`)"),
+                OptionalLong.empty(), Direction.ASCENDING);
+        List<MappedColumn> mapped = List.of(approved(ORDERS, "note", "note"));
+
+        Map<SupplementalCommentReason, DeferredStructure> cases = new LinkedHashMap<>();
+        cases.put(SupplementalCommentReason.PRUNED_COLUMN,
+                index(ORDERS, APP_ORDERS, invisible("i", false, note), List.of(pruned(ORDERS, "note"))));
+        cases.put(SupplementalCommentReason.FULLTEXT_OR_SPATIAL_INDEX, index(ORDERS, APP_ORDERS,
+                new SourceIndex("i", false, false, IndexType.FULLTEXT, List.of(note)), mapped));
+        cases.put(SupplementalCommentReason.EXPRESSION_KEY_PART,
+                index(ORDERS, APP_ORDERS, invisible("i", false, expression), List.of()));
+        cases.put(SupplementalCommentReason.PREFIX_KEY_PART,
+                index(ORDERS, APP_ORDERS, invisible("i", false, prefix), mapped));
+
+        cases.forEach((reason, structure) -> assertEquals(Optional.of(reason),
+                PAIR.target().supplementalStatements(List.of(structure)).get(0).reason(),
+                "ADR-0026: a cause PostgreSQL cannot express at all outranks invisibility, which it merely chooses "
+                        + "not to reproduce: " + reason));
+    }
+
+    @Test
     void noSourceIndexOrForeignKeyNameAppearsOutsideAComment() {
         for (String hostile : HOSTILE) {
             String name = "src_" + hostile;
@@ -216,6 +266,38 @@ class SupplementalStatementsContractTest {
                 assertTrue(statement.sql().contains(("`" + name.replace("`", "``")).lines().findFirst().orElseThrow()),
                         "ADR-0026: the source name is kept in the preceding comment line: " + statement.sql());
             }
+        }
+    }
+
+    // --- Column defaults (ADR-0026 as amended by #133) -----------------------------------------------
+
+    @Test
+    void anExpressionDefaultIsCommentedOutVerbatimAndAConstantStaysExecutable() {
+        List<String> sql = sql(PAIR.target().supplementalStatements(List.of(
+                new DeferredStructure.ColumnDefault(ORDERS, APP_ORDERS, approved(ORDERS, "status", "status"),
+                        constant(new SqlValue.Text("new"))),
+                new DeferredStructure.ColumnDefault(ORDERS, APP_ORDERS, approved(ORDERS, "created_at", "created"),
+                        expression("uuid_to_bin(uuid())")))));
+
+        assertEquals(List.of(
+                        "ALTER TABLE \"app\".\"orders\" ALTER COLUMN \"status\" SET DEFAULT E'new'",
+                        "-- requires manual handling (EXPRESSION_DEFAULT): `shop`.`orders`.`created_at` "
+                                + "DEFAULT (uuid_to_bin(uuid()))"),
+                sql, "ADR-0026 as amended by #133: a constant is executable, where an expression is kept verbatim "
+                        + "in a comment, never translated: DBX cannot prove a translated MySQL expression means the "
+                        + "same thing in PostgreSQL");
+    }
+
+    @Test
+    void anExpressionDefaultIsNeverTranslatedIntoTheExecutableScript() {
+        for (String mysqlOnly : List.of("uuid()", "now()", "curdate()", "rand() * 100", "json_object('a', 1)")) {
+            Statement statement = PAIR.target().supplementalStatements(List.of(new DeferredStructure.ColumnDefault(
+                    ORDERS, APP_ORDERS, approved(ORDERS, "c", "c"), expression(mysqlOnly)))).get(0);
+
+            assertEquals("", executablePart(statement.sql()),
+                    "ADR-0026 as amended by #133: no part of an expression default executes: " + statement.sql());
+            assertTrue(statement.sql().endsWith("DEFAULT (" + mysqlOnly + ")"),
+                    "ADR-0026: the source expression is kept verbatim, not rewritten: " + statement.sql());
         }
     }
 
@@ -242,7 +324,9 @@ class SupplementalStatementsContractTest {
                 List.of(approved(ORDERS, "code", "code2")))));
         variants.put("comment text", s -> set(s, 3, new DeferredStructure.TableComment(ORDERS, APP_ORDERS, "other")));
         variants.put("default value", s -> set(s, 5, new DeferredStructure.ColumnDefault(ORDERS, APP_ORDERS,
-                approved(ORDERS, "status", "status"), new SqlValue.Text("old"))));
+                approved(ORDERS, "status", "status"), constant(new SqlValue.Text("old")))));
+        variants.put("default kind", s -> set(s, 5, new DeferredStructure.ColumnDefault(ORDERS, APP_ORDERS,
+                approved(ORDERS, "status", "status"), expression("'new'"))));
         variants.put("collation", s -> set(s, 6, new DeferredStructure.Collation(ORDERS, APP_ORDERS,
                 Optional.of(approved(ORDERS, "code", "code")), "utf8mb4_0900_ai_ci")));
         variants.put("table collation", s -> set(s, 6, new DeferredStructure.Collation(ORDERS, APP_ORDERS,
@@ -346,7 +430,9 @@ class SupplementalStatementsContractTest {
                 "customer_id", CUSTOMERS, "id", List.of(approved(ORDERS, "customer_id", "customer_id")),
                 new ReferencedTable.InScope(APP_CUSTOMERS, List.of(approved(CUSTOMERS, "email", "email")))));
         inconsistent.put("a NULL default", () -> new DeferredStructure.ColumnDefault(ORDERS, APP_ORDERS,
-                approved(ORDERS, "code", "code"), new SqlValue.Null(SqlValue.Type.TEXT)));
+                approved(ORDERS, "code", "code"), constant(new SqlValue.Null(SqlValue.Type.TEXT))));
+        inconsistent.put("an empty expression default", () -> new DeferredStructure.ColumnDefault(ORDERS, APP_ORDERS,
+                approved(ORDERS, "code", "code"), expression("")));
         inconsistent.put("an empty comment", () -> new DeferredStructure.TableComment(ORDERS, APP_ORDERS, ""));
         for (Map.Entry<String, Supplier<Object>> entry : inconsistent.entrySet()) {
             assertThrows(IllegalArgumentException.class, entry.getValue()::get,
@@ -400,7 +486,7 @@ class SupplementalStatementsContractTest {
                 new DeferredStructure.ColumnCommentText(ORDERS, APP_ORDERS, approved(ORDERS, "status", "status"),
                         "state\nline"),
                 new DeferredStructure.ColumnDefault(ORDERS, APP_ORDERS, approved(ORDERS, "status", "status"),
-                        new SqlValue.Text("new")),
+                        constant(new SqlValue.Text("new"))),
                 new DeferredStructure.Collation(ORDERS, APP_ORDERS, Optional.of(approved(ORDERS, "code", "code")),
                         "utf8mb4_bin"),
                 new DeferredStructure.OnUpdate(ORDERS, APP_ORDERS, approved(ORDERS, "updated_at", "updated_at"),
@@ -423,7 +509,12 @@ class SupplementalStatementsContractTest {
                 foreignKey(CUSTOMERS, APP_CUSTOMERS, "fk_referrer", "referrer_id", CUSTOMERS, "id",
                         List.of(approved(CUSTOMERS, "referrer_id", "referrer_id")),
                         new ReferencedTable.InScope(APP_CUSTOMERS, List.of(approved(CUSTOMERS, "id", "id"))),
-                        ReferentialAction.NO_ACTION, ReferentialAction.SET_NULL));
+                        ReferentialAction.NO_ACTION, ReferentialAction.SET_NULL),
+                index(ORDERS, APP_ORDERS, invisible("idx_hidden_note", false,
+                        columnPart(1, ORDERS, "note", Direction.ASCENDING)),
+                        List.of(approved(ORDERS, "note", "note"))),
+                new DeferredStructure.ColumnDefault(ORDERS, APP_ORDERS, approved(ORDERS, "created_at", "created"),
+                        expression("uuid_to_bin(uuid())")));
     }
 
     /** {@code h} in every source name, target name and value position, one structure of each rendering. */
@@ -442,7 +533,8 @@ class SupplementalStatementsContractTest {
                 new DeferredStructure.TableComment(source, tgt, "comment " + h),
                 new DeferredStructure.ColumnCommentText(source, tgt, c, "comment " + h),
                 new DeferredStructure.ColumnCommentText(source, tgt, pruned(source, "p" + h), "comment " + h),
-                new DeferredStructure.ColumnDefault(source, tgt, c, new SqlValue.Text(h)),
+                new DeferredStructure.ColumnDefault(source, tgt, c, constant(new SqlValue.Text(h))),
+                new DeferredStructure.ColumnDefault(source, tgt, c, expression("f(" + h + ")")),
                 new DeferredStructure.Collation(source, tgt, Optional.of(c), "coll" + h),
                 new DeferredStructure.OnUpdate(source, tgt, c, "CURRENT_TIMESTAMP " + h),
                 foreignKey(source, tgt, "fk" + h, "c" + h, referenced, "id" + h, List.of(c),
@@ -467,9 +559,21 @@ class SupplementalStatementsContractTest {
         return new SourceIndex(name, unique, true, type, List.of(parts));
     }
 
+    private static SourceIndex invisible(String name, boolean unique, SourceIndex.KeyPart... parts) {
+        return new SourceIndex(name, unique, false, IndexType.BTREE, List.of(parts));
+    }
+
     private static MappedColumn approved(TableCoordinate table, String source, String target) {
         return new MappedColumn.Approved(new ColumnCoordinate(table.database(), table.table(), source),
                 new TargetIdentifier(target));
+    }
+
+    private static DeferredStructure.ColumnDefault.Value constant(SqlValue value) {
+        return new DeferredStructure.ColumnDefault.Value.Constant(value);
+    }
+
+    private static DeferredStructure.ColumnDefault.Value expression(String expression) {
+        return new DeferredStructure.ColumnDefault.Value.Expression(expression);
     }
 
     private static MappedColumn pruned(TableCoordinate table, String source) {
